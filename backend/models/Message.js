@@ -1,0 +1,83 @@
+const mongoose = require('mongoose');
+
+const translationSchema = new mongoose.Schema({
+    language: { type: String, required: true },       // Mã ngôn ngữ đích (en, ja, ...)
+    content: { type: String, required: true },       // Nội dung đã dịch
+    translatedAt: { type: Date, default: Date.now },
+}, { _id: false });
+
+const messageSchema = new mongoose.Schema({
+    room: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Room',
+        required: true,
+        index: true,
+    },
+    sender: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true,
+    },
+
+    // ===== NỘI DUNG GỐC =====
+    type: {
+        type: String,
+        enum: ['text', 'image', 'video', 'file', 'system', 'ai-response'],
+        default: 'text',
+    },
+    content: {
+        type: String,
+        default: '',
+    },
+
+    // ===== METADATA FILE =====
+    file: {
+        url: { type: String },
+        name: { type: String },
+        size: { type: Number },
+        mimeType: { type: String },
+    },
+
+    // ===== AI / DỊCH THUẬT METADATA =====
+    originalLanguage: {
+        type: String,
+        default: null,            // Ngôn ngữ gốc (lấy từ sender.preferredLanguage)
+    },
+    translations: [translationSchema],
+
+    // AI Bot response metadata
+    aiMetadata: {
+        isAIResponse: { type: Boolean, default: false },
+        prompt: { type: String, default: null },
+        model: { type: String, default: null },
+    },
+
+    // Trạng thái đã đọc
+    readBy: [{
+        user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        readAt: { type: Date, default: Date.now },
+    }],
+
+    deleted: { type: Boolean, default: false },
+}, { timestamps: true });
+
+// ─── Indexes ──────────────────────────────────────────────────────────
+messageSchema.index({ room: 1, createdAt: -1 });
+messageSchema.index({ sender: 1 });
+
+// ─── Static: Lấy tin nhắn phân trang ─────────────────────────────────
+messageSchema.statics.getByRoom = async function (roomId, { page = 1, limit = 50 } = {}) {
+    const skip = (page - 1) * limit;
+    const messages = await this.find({ room: roomId, deleted: false })
+        .populate('sender', 'username avatar preferredLanguage')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean();
+
+    return messages.reverse(); // Trả về theo thứ tự cũ → mới
+};
+
+const Message = mongoose.model('Message', messageSchema);
+
+module.exports = Message;
