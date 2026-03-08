@@ -14,6 +14,7 @@ export default function CallModal() {
         callState,
         localStream,
         remoteStream,
+        callError,
         endCall,
         cancelCall,
         toggleAudio,
@@ -22,6 +23,7 @@ export default function CallModal() {
 
     const localVideoRef = useRef(null);
     const remoteVideoRef = useRef(null);
+    const remoteAudioRef = useRef(null);
     const [audioMuted, setAudioMuted] = useState(false);
     const [videoOff, setVideoOff] = useState(false);
     const [callDuration, setCallDuration] = useState(0);
@@ -39,7 +41,7 @@ export default function CallModal() {
         }
     }, [localStream]);
 
-    // ── Attach remote stream — this is the critical fix ─────────
+    // ── Attach remote stream to video element ────────────────────
     useEffect(() => {
         const el = remoteVideoRef.current;
         if (!el) return;
@@ -47,18 +49,30 @@ export default function CallModal() {
             console.log('[CallModal] Assigning remoteStream to <video>, tracks:',
                 remoteStream.getTracks().map(t => `${t.kind}:${t.readyState}`).join(', '));
             el.srcObject = remoteStream;
-            el.play().catch(() => { });
+            el.play().catch((e) => console.warn('[CallModal] video play blocked:', e.message));
         } else {
             el.srcObject = null;
         }
     }, [remoteStream]);
 
-    // ── Call timer ──────────────────────────────────────────────
+    // ── Attach remote stream to audio element (backup for voice calls) ────
     useEffect(() => {
-        if (!callState.active) return;
+        const el = remoteAudioRef.current;
+        if (!el) return;
+        if (remoteStream) {
+            el.srcObject = remoteStream;
+            el.play().catch((e) => console.warn('[CallModal] audio play blocked:', e.message));
+        } else {
+            el.srcObject = null;
+        }
+    }, [remoteStream]);
+
+    // ── Call timer — starts only when remote stream arrives ────
+    useEffect(() => {
+        if (!callState.active || !remoteStream) return;
         const interval = setInterval(() => setCallDuration((d) => d + 1), 1000);
         return () => { clearInterval(interval); setCallDuration(0); };
-    }, [callState.active]);
+    }, [callState.active, remoteStream]);
 
     // ── 10s connection timeout warning ──────────────────────────
     useEffect(() => {
@@ -92,22 +106,23 @@ export default function CallModal() {
     return (
         <div className="fixed inset-0 bg-black z-50 flex flex-col">
             <div className="flex-1 relative bg-gray-900">
-                {/* ─── Remote video: ALWAYS rendered, never unmounted ─── */}
-                {isVideoCall && (
-                    <video
-                        ref={remoteVideoRef}
-                        autoPlay
-                        playsInline
-                        className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${hasRemote ? 'opacity-100' : 'opacity-0'
-                            }`}
-                    />
-                )}
+                {/* ─── Hidden audio element: ALWAYS rendered to play remote audio ─── */}
+                <audio ref={remoteAudioRef} autoPlay playsInline />
+
+                {/* ─── Remote video: ALWAYS rendered so it can play audio too ─── */}
+                <video
+                    ref={remoteVideoRef}
+                    autoPlay
+                    playsInline
+                    className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${hasRemote && isVideoCall ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                        }`}
+                />
 
                 {/* ─── Overlay: avatar / "Đang gọi" / duration (shown when no remote stream) ─── */}
                 {(!hasRemote || !isVideoCall) && (
                     <div className="absolute inset-0 flex items-center justify-center">
                         <div className="text-center">
-                            <div className="w-24 h-24 rounded-full bg-[var(--color-primary)] flex items-center justify-center text-white text-4xl font-bold mx-auto mb-4">
+                            <div className="w-24 h-24 rounded-full bg-blue-500 flex items-center justify-center text-white text-4xl font-bold mx-auto mb-4">
                                 {displayName.charAt(0).toUpperCase()}
                             </div>
                             <h2 className="text-white text-xl font-semibold">{displayName}</h2>
@@ -152,6 +167,13 @@ export default function CallModal() {
                 {isVideoCall && callState.active && hasRemote && (
                     <div className="absolute top-4 left-4 bg-black/50 px-3 py-1 rounded-full text-white text-sm">
                         {formatDuration(callDuration)}
+                    </div>
+                )}
+
+                {/* Camera fallback warning */}
+                {callError && (
+                    <div className="absolute bottom-4 left-4 right-4 bg-yellow-500/90 text-white text-sm px-4 py-2 rounded-lg text-center">
+                        {callError}
                     </div>
                 )}
             </div>

@@ -1,8 +1,10 @@
 import { useCall } from '../../hooks/useCall';
-import { Phone, PhoneOff, Video } from 'lucide-react';
+import { Phone, PhoneOff, Video, Loader2 } from 'lucide-react';
+import { useState } from 'react';
 
 export default function IncomingCallModal() {
     const { callState, acceptCall, rejectCall } = useCall();
+    const [accepting, setAccepting] = useState(false);
 
     if (!callState.incoming) return null;
 
@@ -21,7 +23,7 @@ export default function IncomingCallModal() {
                         className="w-20 h-20 rounded-full mx-auto mb-4 object-cover ring-4 ring-green-400 animate-pulse"
                     />
                 ) : (
-                    <div className="w-20 h-20 rounded-full bg-[var(--color-primary)] flex items-center justify-center text-white text-3xl font-bold mx-auto mb-4 animate-pulse">
+                    <div className="w-20 h-20 rounded-full bg-blue-500 flex items-center justify-center text-white text-3xl font-bold mx-auto mb-4 animate-pulse">
                         {callerName.charAt(0).toUpperCase()}
                     </div>
                 )}
@@ -37,22 +39,32 @@ export default function IncomingCallModal() {
                 <div className="flex items-center justify-center gap-8">
                     <button
                         onClick={rejectCall}
+                        disabled={accepting}
                         className="flex flex-col items-center gap-2"
                     >
-                        <div className="w-14 h-14 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition">
+                        <div className={`w-14 h-14 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition ${accepting ? 'opacity-50 cursor-not-allowed' : ''}`}>
                             <PhoneOff size={24} className="text-white" />
                         </div>
                         <span className="text-xs text-gray-500">Từ chối</span>
                     </button>
 
                     <button
-                        onClick={acceptCall}
+                        onClick={() => {
+                            if (accepting) return;
+                            setAccepting(true);
+                            acceptCall();
+                        }}
+                        disabled={accepting}
                         className="flex flex-col items-center gap-2"
                     >
-                        <div className="w-14 h-14 bg-green-500 hover:bg-green-600 rounded-full flex items-center justify-center transition animate-bounce">
-                            <Phone size={24} className="text-white" />
+                        <div className={`w-14 h-14 bg-green-500 hover:bg-green-600 rounded-full flex items-center justify-center transition ${accepting ? 'opacity-75' : 'animate-bounce'}`}>
+                            {accepting ? (
+                                <Loader2 size={24} className="text-white animate-spin" />
+                            ) : (
+                                <Phone size={24} className="text-white" />
+                            )}
                         </div>
-                        <span className="text-xs text-gray-500">Chấp nhận</span>
+                        <span className="text-xs text-gray-500">{accepting ? 'Đang kết nối...' : 'Chấp nhận'}</span>
                     </button>
                 </div>
             </div>

@@ -14,6 +14,13 @@ const getSimplePeer = async () => {
     return SimplePeerClass;
 };
 
+// ── Default ICE servers (STUN only — always works) ───────────────
+const DEFAULT_ICE_SERVERS = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+];
+
 export function CallProvider({ children }) {
     const { on, off, emit } = useSocket();
     const { user } = useAuth();
@@ -35,12 +42,50 @@ export function CallProvider({ children }) {
     // Synchronous ref for target — never rely on React render cycle for signaling
     const targetUserIdRef = useRef(null);
     const notifRef = useRef(null);
+    const acceptingRef = useRef(false); // guard against double-click
     const [localStream, setLocalStream] = useState(null);
     const [remoteStream, setRemoteStream] = useState(null);
+    const [callError, setCallError] = useState(null);
+
+    // Pre-fetched ICE servers (STUN + TURN) — filled on mount
+    const iceServersRef = useRef(DEFAULT_ICE_SERVERS);
 
     // Preload SimplePeer on mount
     useEffect(() => {
         getSimplePeer().catch(() => { });
+    }, []);
+
+    // Pre-fetch ICE servers from backend on mount (non-blocking)
+    useEffect(() => {
+        const fetchIceServers = async () => {
+            try {
+                const apiBase = import.meta.env.VITE_API_URL || '/api';
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 5000);
+                const res = await fetch(`${apiBase}/ice-servers`, {
+                    signal: controller.signal,
+                });
+                clearTimeout(timeout);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.iceServers?.length > 0) {
+                        // Ensure STUN servers are always first
+                        const hasStun = data.iceServers.some(s => {
+                            const u = Array.isArray(s.urls) ? s.urls[0] : s.urls;
+                            return u?.startsWith('stun:');
+                        });
+                        if (!hasStun) {
+                            data.iceServers.unshift(...DEFAULT_ICE_SERVERS);
+                        }
+                        iceServersRef.current = data.iceServers;
+                        console.log('[Call] Pre-fetched ICE servers:', data.iceServers.length, 'entries');
+                    }
+                }
+            } catch (err) {
+                console.warn('[Call] ICE server fetch failed (using STUN-only):', err.message);
+            }
+        };
+        fetchIceServers();
     }, []);
 
     // ---- Helpers ----
@@ -62,8 +107,10 @@ export function CallProvider({ children }) {
         remoteStreamRef.current = null;
         pendingSignalsRef.current = [];
         targetUserIdRef.current = null;
+        acceptingRef.current = false;
         setLocalStream(null);
         setRemoteStream(null);
+        setCallError(null);
         setCallState({
             active: false,
             incoming: false,
@@ -95,19 +142,20 @@ export function CallProvider({ children }) {
         const SimplePeer = await getSimplePeer();
         console.log(`[Call] createPeer(initiator=${initiator}), target=${targetUserIdRef.current}`);
 
+        // Use pre-fetched ICE servers (already available — no network delay)
+        const iceServers = iceServersRef.current;
+
+        console.log('[Call] ICE servers:', iceServers.length, 'entries',
+            iceServers.filter(s => {
+                const u = Array.isArray(s.urls) ? s.urls[0] : s.urls;
+                return u?.startsWith('turn');
+            }).length, 'TURN');
+
         const peer = new SimplePeer({
             initiator,
             trickle: true,
             stream,
-            config: {
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' },
-                    { urls: 'stun:stun2.l.google.com:19302' },
-                    { urls: 'stun:stun3.l.google.com:19302' },
-                    { urls: 'stun:stun4.l.google.com:19302' },
-                ],
-            },
+            config: { iceServers },
         });
 
         peer.on('signal', (data) => {
@@ -141,17 +189,29 @@ export function CallProvider({ children }) {
 
         peer.on('error', (err) => {
             console.error('[Peer] Error:', err.message || err);
-            // Do NOT cleanup here — transient errors should not kill the call UI
         });
 
         peer.on('close', () => {
             console.log('[Peer] Connection closed');
-            // Only log — cleanup is handled by endCall/cancelCall actions
         });
+
+        // Monitor ICE connection state — use addEventListener to NOT override SimplePeer's internal handler
+        if (peer._pc) {
+            peer._pc.addEventListener('iceconnectionstatechange', () => {
+                const state = peer._pc.iceConnectionState;
+                console.log('[Peer] ICE state:', state);
+                if (state === 'failed') {
+                    console.error('[Peer] ICE connection failed — likely no TURN server available');
+                    setCallError('Không thể kết nối. Kiểm tra mạng hoặc cấu hình TURN server.');
+                } else if (state === 'disconnected') {
+                    console.warn('[Peer] ICE disconnected — attempting reconnect...');
+                }
+            });
+        }
 
         peerRef.current = peer;
         return peer;
-    }, [emit, cleanup]);
+    }, [emit]);
 
     // ---- Socket listeners ----
     useEffect(() => {
@@ -198,6 +258,10 @@ export function CallProvider({ children }) {
 
         const handleAccepted = async ({ userId: acceptedUserId }) => {
             console.log('[Call] Call accepted by', acceptedUserId, '| targetUserIdRef:', targetUserIdRef.current);
+            // Ensure targetUserIdRef points to the callee who accepted
+            if (acceptedUserId) {
+                targetUserIdRef.current = acceptedUserId;
+            }
             // Caller side: when callee accepts, create initiator peer
             try {
                 const stream = localStreamRef.current;
@@ -206,6 +270,7 @@ export function CallProvider({ children }) {
                     cleanup();
                     return;
                 }
+                setCallState((prev) => ({ ...prev, active: true }));
                 const peer = await createPeer(true, stream);
                 // Flush any buffered signals
                 while (pendingSignalsRef.current.length > 0) {
@@ -284,6 +349,8 @@ export function CallProvider({ children }) {
 
     // ---- Actions ----
     const initiateCall = useCallback(async (roomId, targetUserId, callType = 'video', targetUserName = '') => {
+        // Guard: prevent starting a second call while one is active/pending
+        if (callState.active || callState.outgoing || callState.incoming) return;
         try {
             console.log('[Call] initiateCall:', { roomId, targetUserId, callType, targetUserName });
             const stream = await getMediaStream(callType);
@@ -301,27 +368,49 @@ export function CallProvider({ children }) {
         } catch (err) {
             console.error('[Call] initiateCall failed:', err);
         }
-    }, [emit, user, getMediaStream]);
+    }, [emit, user, getMediaStream, callState.active, callState.outgoing, callState.incoming]);
 
     const acceptCall = useCallback(async () => {
+        // Guard against double-click
+        if (acceptingRef.current) return;
+        acceptingRef.current = true;
+
         const { roomId, caller, callType } = callState;
-        console.log('[Call] acceptCall, caller:', caller?._id);
+        console.log('[Call] acceptCall, caller:', caller?._id, 'callType:', callType);
         targetUserIdRef.current = caller?._id || null;
         // Stop ringtone + notification on accept
         stopRingtone();
         if (notifRef.current) { notifRef.current.close(); notifRef.current = null; }
+
+        // Immediately dismiss IncomingCallModal and show CallModal ("connecting" state)
+        setCallState((prev) => ({ ...prev, incoming: false, active: true }));
+        setCallError(null);
+
         try {
-            // Get media FIRST — if we emit before stream is ready,
-            // the offer arrives while localStreamRef is still null → call dies
+            // Get media — try video first, fall back to audio if camera fails
             if (!localStreamRef.current) {
-                await getMediaStream(callType);
+                if (callType === 'video') {
+                    try {
+                        await getMediaStream('video');
+                    } catch (videoErr) {
+                        console.warn('[Call] Camera failed, falling back to audio-only:', videoErr.message);
+                        setCallError('Không thể truy cập camera, chuyển sang gọi thoại');
+                        await getMediaStream('audio');
+                        // Update callType to audio since video is unavailable
+                        setCallState((prev) => ({ ...prev, callType: 'audio' }));
+                    }
+                } else {
+                    await getMediaStream(callType);
+                }
             }
             // Only AFTER stream is ready, tell the server we accepted
             emit('call:accept', { roomId, callerId: caller?._id });
-            setCallState((prev) => ({ ...prev, incoming: false, active: true }));
         } catch (err) {
             console.error('[Call] acceptCall failed:', err);
+            setCallError('Không thể truy cập microphone');
             cleanup();
+        } finally {
+            acceptingRef.current = false;
         }
     }, [emit, getMediaStream, cleanup, callState]);
 
@@ -361,6 +450,7 @@ export function CallProvider({ children }) {
                 callState,
                 localStream,
                 remoteStream,
+                callError,
                 initiateCall,
                 acceptCall,
                 rejectCall,
