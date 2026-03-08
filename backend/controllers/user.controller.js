@@ -1,22 +1,54 @@
 const { User, SUPPORTED_LANGUAGES, LANGUAGE_LABELS } = require('../models/User');
 
-// ─── Cập nhật profile ────────────────────────────────────────────────
+// ─── Cập nhật profile (hỗ trợ upload avatar + cover) ──────────────────
 exports.updateProfile = async (req, res, next) => {
     try {
-        const { username, avatar, preferredLanguage } = req.body;
+        const { username, preferredLanguage, bio, phoneNumber, address, education, hobbies } = req.body;
         const updates = {};
 
         if (username) updates.username = username;
-        if (avatar) updates.avatar = avatar;
+        if (bio !== undefined) updates.bio = bio;
+        if (phoneNumber !== undefined) updates.phoneNumber = phoneNumber;
+        if (address !== undefined) updates.address = address;
+        if (education !== undefined) updates.education = education;
+        if (hobbies !== undefined) {
+            updates.hobbies = typeof hobbies === 'string' ? JSON.parse(hobbies) : hobbies;
+        }
         if (preferredLanguage && SUPPORTED_LANGUAGES.includes(preferredLanguage)) {
             updates.preferredLanguage = preferredLanguage;
             updates.preferredLanguageLabel = LANGUAGE_LABELS[preferredLanguage];
+        }
+
+        const validThemes = ['blue', 'red', 'purple', 'yellow', 'brown', 'dark', 'light'];
+        if (req.body.preferredTheme && validThemes.includes(req.body.preferredTheme)) {
+            updates.preferredTheme = req.body.preferredTheme;
+        }
+
+        // Handle uploaded files (multer)
+        if (req.files) {
+            if (req.files.avatar?.[0]) {
+                updates.avatar = `/uploads/${req.files.avatar[0].filename}`;
+            }
+            if (req.files.coverPicture?.[0]) {
+                updates.coverPicture = `/uploads/${req.files.coverPicture[0].filename}`;
+            }
         }
 
         const user = await User.findByIdAndUpdate(req.user._id, updates, {
             new: true,
             runValidators: true,
         });
+
+        // Broadcast profile update via Socket.io
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('user:profile-updated', {
+                userId: user._id,
+                username: user.username,
+                avatar: user.avatar,
+                bio: user.bio,
+            });
+        }
 
         res.json({ message: 'Cập nhật thành công', user });
     } catch (error) {
@@ -57,11 +89,11 @@ exports.getSupportedLanguages = (req, res) => {
     res.json({ languages });
 };
 
-// ─── Lấy thông tin user theo ID ───────────────────────────────────────
+// ─── Lấy thông tin user theo ID (full profile) ───────────────────────
 exports.getUserById = async (req, res, next) => {
     try {
         const user = await User.findById(req.params.id)
-            .select('username email avatar status preferredLanguage preferredLanguageLabel lastSeen');
+            .select('username email avatar coverPicture bio phoneNumber address education hobbies status preferredLanguage preferredLanguageLabel lastSeen createdAt');
 
         if (!user) {
             return res.status(404).json({ error: 'User không tồn tại' });

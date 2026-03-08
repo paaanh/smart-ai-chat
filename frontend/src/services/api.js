@@ -41,14 +41,28 @@ api.interceptors.response.use(
 export const authAPI = {
     register: (data) => api.post('/auth/register', data),
     login: (data) => api.post('/auth/login', data),
+    googleLogin: (data) => api.post('/auth/google', data),
     getMe: () => api.get('/auth/me'),
+    forgotPassword: (data) => api.post('/auth/forgot-password', data),
+    verifyOTP: (data) => api.post('/auth/verify-otp', data),
+    resetPassword: (data) => api.post('/auth/reset-password', data),
+    sendRegisterOTP: (data) => api.post('/auth/send-register-otp', data),
 };
 
 // ── User endpoints ─────────────────────────────────────────────
 export const userAPI = {
     search: (q) => api.get(`/users/search?q=${encodeURIComponent(q)}`),
     getById: (id) => api.get(`/users/${id}`),
-    updateProfile: (data) => api.put('/users/profile', data),
+    updateProfile: (data) => {
+        // Support FormData (with files) or plain JSON
+        if (data instanceof FormData) {
+            return api.put('/users/profile', data, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+                timeout: 60000,
+            });
+        }
+        return api.put('/users/profile', data);
+    },
     getLanguages: () => api.get('/users/languages'),
 };
 
@@ -60,6 +74,23 @@ export const roomAPI = {
     getMessages: (id, page = 1) => api.get(`/rooms/${id}/messages?page=${page}`),
     addMember: (id, userId) => api.post(`/rooms/${id}/members`, { userId }),
     leave: (id) => api.delete(`/rooms/${id}/leave`),
+    // Chat Info Sidebar
+    setNickname: (id, targetUserId, nickname) =>
+        api.put(`/rooms/${id}/nickname`, { targetUserId, nickname }),
+    toggleMute: (id) => api.put(`/rooms/${id}/mute`),
+    requestJoin: (id, userId) => api.post(`/rooms/${id}/request-join`, { userId }),
+    approveMember: (id, userId) => api.put(`/rooms/${id}/approve`, { userId }),
+    rejectMember: (id, userId) => api.put(`/rooms/${id}/reject`, { userId }),
+    getPending: (id) => api.get(`/rooms/${id}/pending`),
+    updateGroupSettings: (id, data) => api.put(`/rooms/${id}/settings`, data),
+};
+
+// ── User Actions endpoints (block / report) ───────────────────
+export const userActionsAPI = {
+    block: (userId) => api.post(`/user-actions/block/${userId}`),
+    unblock: (userId) => api.delete(`/user-actions/block/${userId}`),
+    getBlocked: () => api.get('/user-actions/blocked'),
+    report: (data) => api.post('/user-actions/report', data),
 };
 
 // ── Friend endpoints ───────────────────────────────────────────
@@ -86,6 +117,16 @@ export const uploadAPI = {
             headers: { 'Content-Type': 'multipart/form-data' },
             timeout: 120000,
         }),
+};
+
+// ── Admin endpoints ────────────────────────────────────────────
+export const adminAPI = {
+    getUsers: (params) => api.get('/admin/users', { params }),
+    getStats: () => api.get('/admin/stats'),
+    getUserById: (id) => api.get(`/admin/users/${id}`),
+    updateUser: (id, data) => api.put(`/admin/users/${id}`, data),
+    deleteUser: (id) => api.delete(`/admin/users/${id}`),
+    toggleVerified: (id) => api.put(`/admin/users/${id}/toggle-verified`),
 };
 
 export default api;

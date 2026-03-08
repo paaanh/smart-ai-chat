@@ -58,15 +58,20 @@ module.exports = (io, socket) => {
             const isMember = room.members.some(m => m.user.toString() === userId);
             if (!isMember) return socket.emit('error', { message: 'Bạn không phải thành viên' });
 
-            io.to(roomId).emit('ai:thinking', { roomId });
+            socket.emit('ai:thinking', { roomId });
 
             const summary = await summarizeConversation(roomId, messageCount);
 
             if (summary) {
-                // Lưu summary dưới dạng AI message
-                const aiMessage = await Message.create({
+                // Tạo temporary message (KHÔNG lưu DB)
+                const tempSummary = {
+                    _id: `ai-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
                     room: roomId,
-                    sender: socket.user._id,
+                    sender: {
+                        _id: socket.user._id,
+                        username: socket.user.username,
+                        avatar: socket.user.avatar,
+                    },
                     type: 'ai-response',
                     content: `📋 **Tóm tắt cuộc trò chuyện**\n\n${summary}`,
                     aiMetadata: {
@@ -74,12 +79,10 @@ module.exports = (io, socket) => {
                         prompt: `summarize last ${messageCount} messages`,
                         model: 'gemini-2.5-flash',
                     },
-                });
+                    createdAt: new Date(),
+                };
 
-                const populated = await aiMessage.populate('sender', 'username avatar preferredLanguage');
-
-                io.to(roomId).emit('ai:response', { roomId, message: populated });
-                io.to(roomId).emit('message:received', { message: populated });
+                socket.emit('receive_ai_message', { roomId, message: tempSummary });
             } else {
                 socket.emit('ai:error', { roomId, error: 'Không thể tóm tắt cuộc trò chuyện' });
             }

@@ -32,12 +32,45 @@ const roomSchema = new mongoose.Schema({
         type: String,
         default: '',
     },
+    // ── Group profile fields ──
+    groupAvatar: {
+        type: String,
+        default: '',
+    },
+    groupBackground: {
+        type: String,
+        default: '',
+    },
+    description: {
+        type: String,
+        default: '',
+        maxlength: [500, 'Mô tả nhóm không được vượt quá 500 ký tự'],
+    },
     type: {
         type: String,
         enum: ['direct', 'group'],
         required: true,
     },
     members: [memberSchema],
+
+    // Danh sách chờ duyệt (chỉ group — admin duyệt trước khi vào members)
+    pendingMembers: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+    }],
+
+    // Biệt danh trong room: { "userId": "nickname" }
+    nicknames: {
+        type: Map,
+        of: String,
+        default: new Map(),
+    },
+
+    // Danh sách user đã tắt thông báo room này
+    mutedBy: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+    }],
 
     lastMessage: {
         type: mongoose.Schema.Types.ObjectId,
@@ -49,7 +82,7 @@ const roomSchema = new mongoose.Schema({
     settings: {
         aiTranslationEnabled: {
             type: Boolean,
-            default: true,     // Cho phép dịch thuật tự động
+            default: true,
         },
     },
 }, { timestamps: true });

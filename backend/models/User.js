@@ -37,13 +37,49 @@ const userSchema = new mongoose.Schema({
     },
     password: {
         type: String,
-        required: [true, 'Password is required'],
+        default: null,
         minlength: [6, 'Password must be at least 6 characters'],
         select: false,  // Không trả về password mặc định trong query
+    },
+
+    // ===== PHƯƠNG THỨC ĐĂNG NHẬP =====
+    provider: {
+        type: String,
+        enum: ['local', 'google'],
+        default: 'local',
+    },
+    googleId: {
+        type: String,
+        default: null,
     },
     avatar: {
         type: String,
         default: '',
+    },
+    coverPicture: {
+        type: String,
+        default: '',
+    },
+    bio: {
+        type: String,
+        default: '',
+        maxlength: [200, 'Bio cannot exceed 200 characters'],
+    },
+    phoneNumber: {
+        type: String,
+        default: '',
+    },
+    address: {
+        type: String,
+        default: '',
+    },
+    education: {
+        type: String,
+        default: '',
+    },
+    hobbies: {
+        type: [String],
+        default: [],
     },
 
     // ===== TÍNH NĂNG DỊCH THUẬT CÁ NHÂN HÓA =====
@@ -57,6 +93,13 @@ const userSchema = new mongoose.Schema({
         default: 'Tiếng Việt',
     },
 
+    // ===== THEME MÀU SẮC =====
+    preferredTheme: {
+        type: String,
+        default: 'blue',
+        enum: ['blue', 'red', 'purple', 'yellow', 'brown', 'dark', 'light'],
+    },
+
     status: {
         type: String,
         enum: ['online', 'offline', 'busy'],
@@ -67,27 +110,58 @@ const userSchema = new mongoose.Schema({
         default: Date.now,
     },
 
+    // Danh sách user bị chặn
+    blockedUsers: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+    }],
+
     // Socket ID hiện tại (cập nhật khi connect/disconnect)
     socketId: {
         type: String,
         default: null,
     },
+
+    // ===== RESET PASSWORD OTP =====
+    resetOTP: {
+        type: String,
+        default: null,
+    },
+    resetOTPExpire: {
+        type: Date,
+        default: null,
+    },
+
+    // ===== XÁC THỰC TÀI KHOẢN =====
+    isVerified: {
+        type: Boolean,
+        default: false,
+    },
+
+    // ===== PHÂN QUYỀN =====
+    role: {
+        type: String,
+        enum: ['user', 'admin'],
+        default: 'user',
+    },
 }, { timestamps: true });
 
 // ─── Pre-save: Hash password ─────────────────────────────────────────
 userSchema.pre('save', async function () {
-    if (!this.isModified('password')) return;
-    const salt = await bcrypt.genSalt(12);
-    this.password = await bcrypt.hash(this.password, salt);
-
     // Auto-set language label
     if (this.isModified('preferredLanguage')) {
         this.preferredLanguageLabel = LANGUAGE_LABELS[this.preferredLanguage] || this.preferredLanguage;
     }
+
+    // Chỉ hash password nếu có giá trị và đã thay đổi
+    if (!this.isModified('password') || !this.password) return;
+    const salt = await bcrypt.genSalt(12);
+    this.password = await bcrypt.hash(this.password, salt);
 });
 
 // ─── Method: So sánh password ────────────────────────────────────────
 userSchema.methods.comparePassword = async function (candidatePassword) {
+    if (!this.password) return false;
     return bcrypt.compare(candidatePassword, this.password);
 };
 

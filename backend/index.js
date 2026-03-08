@@ -46,12 +46,16 @@ const userRoutes = require('./routes/user.routes');
 const roomRoutes = require('./routes/room.routes');
 const uploadRoutes = require('./routes/upload.routes');
 const friendRoutes = require('./routes/friend.routes');
+const userActionsRoutes = require('./routes/user-actions.routes');
+const adminRoutes = require('./routes/admin.routes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/friends', friendRoutes);
+app.use('/api/user-actions', userActionsRoutes);
+app.use('/api/admin', adminRoutes);
 
 // ─── Health Check ─────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {

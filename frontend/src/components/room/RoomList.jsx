@@ -131,7 +131,7 @@ export default function RoomList({ activeRoomId, onSelectRoom }) {
                         className="p-2 hover:bg-gray-100 rounded-full transition"
                         title="Tạo cuộc trò chuyện"
                     >
-                        <Plus size={20} className="text-blue-600" />
+                        <Plus size={20} className="text-[var(--color-primary)]" />
                     </button>
                 </div>
 
@@ -143,7 +143,7 @@ export default function RoomList({ activeRoomId, onSelectRoom }) {
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         placeholder="Tìm kiếm..."
-                        className="w-full pl-9 pr-4 py-2 bg-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                        className="w-full pl-9 pr-4 py-2 bg-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-ring)] transition"
                     />
                 </div>
             </div>
@@ -152,7 +152,7 @@ export default function RoomList({ activeRoomId, onSelectRoom }) {
             <div className="flex-1 overflow-y-auto scrollbar-thin">
                 {loading && (
                     <div className="p-8 text-center text-gray-400">
-                        <div className="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full mx-auto" />
+                        <div className="animate-spin w-6 h-6 border-2 border-[var(--color-primary-ring)] border-t-transparent rounded-full mx-auto" />
                     </div>
                 )}
 
@@ -174,17 +174,19 @@ export default function RoomList({ activeRoomId, onSelectRoom }) {
                         <button
                             key={room._id}
                             onClick={() => onSelectRoom(room._id)}
-                            className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition text-left ${isActive ? 'bg-blue-50 border-r-2 border-blue-500' : ''
+                            className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition text-left ${isActive ? 'bg-[var(--color-primary-light)] border-r-2 border-[var(--color-primary-ring)]' : ''
                                 }`}
                         >
                             {/* Avatar */}
                             <div className="relative shrink-0">
                                 <div
-                                    className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold text-lg ${display.isGroup ? 'bg-purple-500' : 'bg-blue-500'
+                                    className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold text-lg overflow-hidden ${display.isGroup ? 'bg-purple-500' : 'bg-[var(--color-primary)]'
                                         }`}
                                 >
                                     {display.isGroup ? (
                                         <Users size={20} />
+                                    ) : display.avatar ? (
+                                        <img src={display.avatar} alt={display.name} className="w-full h-full object-cover" />
                                     ) : (
                                         display.name.charAt(0).toUpperCase()
                                     )}
@@ -208,7 +210,7 @@ export default function RoomList({ activeRoomId, onSelectRoom }) {
                                             </span>
                                         )}
                                         {unread > 0 && (
-                                            <span className="bg-blue-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                                            <span className="bg-[var(--color-primary)] text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
                                                 {unread > 99 ? '99+' : unread}
                                             </span>
                                         )}

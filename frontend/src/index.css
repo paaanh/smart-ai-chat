@@ -1,5 +1,104 @@
 @import "tailwindcss";
 
+/* ─── Theme CSS Custom Properties (defaults = Blue theme) ─── */
+:root {
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-light: #eff6ff;
+  --color-primary-medium: #dbeafe;
+  --color-primary-dark: #1e40af;
+  --color-primary-ring: #3b82f6;
+  --color-gradient-from: #6366f1;
+  --color-gradient-to: #8b5cf6;
+  --color-msg-sent: #2563eb;
+
+  --bg-main: #eff6ff;
+  --bg-card: #ffffff;
+  --bg-secondary: #dbeafe;
+  --bg-input: #ffffff;
+  --bg-hover: #dbeafe;
+  --text-primary: #111827;
+  --text-secondary: #374151;
+  --text-tertiary: #6b7280;
+  --border-color: #bfdbfe;
+  --border-input: #93c5fd;
+  --bg-error: #fef2f2;
+  --text-error: #dc2626;
+}
+
+/* ─── Global theme-aware overrides ─── */
+/* These override Tailwind atomic classes so backgrounds/borders/text follow the theme */
+html[data-theme] .bg-gray-50 {
+  background-color: var(--bg-main) !important;
+}
+html[data-theme] .bg-gray-100 {
+  background-color: var(--bg-secondary) !important;
+}
+html[data-theme] .bg-white {
+  background-color: var(--bg-card) !important;
+}
+
+html[data-theme] .border-gray-200 {
+  border-color: var(--border-color) !important;
+}
+html[data-theme] .border-gray-300 {
+  border-color: var(--border-input) !important;
+}
+
+html[data-theme] .text-gray-900 {
+  color: var(--text-primary) !important;
+}
+html[data-theme] .text-gray-800 {
+  color: var(--text-primary) !important;
+}
+html[data-theme] .text-gray-700 {
+  color: var(--text-secondary) !important;
+}
+html[data-theme] .text-gray-600 {
+  color: var(--text-secondary) !important;
+}
+html[data-theme] .text-gray-500 {
+  color: var(--text-tertiary) !important;
+}
+html[data-theme] .text-gray-400 {
+  color: var(--text-tertiary) !important;
+}
+
+html[data-theme] .hover\:bg-gray-50:hover {
+  background-color: var(--bg-hover) !important;
+}
+html[data-theme] .hover\:bg-gray-100:hover {
+  background-color: var(--bg-hover) !important;
+}
+
+html[data-theme] input,
+html[data-theme] select,
+html[data-theme] textarea {
+  background-color: var(--bg-input) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-input) !important;
+}
+
+/* ─── Dark theme extras ─── */
+html.theme-dark {
+  color-scheme: dark;
+}
+html.theme-dark .bg-red-50 {
+  background-color: rgba(239, 68, 68, 0.15) !important;
+}
+html.theme-dark .text-red-600 {
+  color: #f87171 !important;
+}
+html.theme-dark .hover\:bg-red-100:hover {
+  background-color: rgba(239, 68, 68, 0.2) !important;
+}
+html.theme-dark .shadow-sm {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+}
+html.theme-dark .shadow-lg {
+  box-shadow: 0 10px 15px rgba(0, 0, 0, 0.4) !important;
+}
+
 /* Custom scrollbar */
 .scrollbar-thin::-webkit-scrollbar {
   width: 6px;

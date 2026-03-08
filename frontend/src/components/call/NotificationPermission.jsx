@@ -32,8 +32,8 @@ export default function NotificationPermission() {
     return (
         <div className="fixed bottom-4 right-4 z-[100] bg-white rounded-xl shadow-2xl border border-gray-200 p-4 max-w-xs animate-slide-up">
             <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
-                    <Bell size={20} className="text-blue-600" />
+                <div className="w-10 h-10 rounded-full bg-[var(--color-primary-medium)] flex items-center justify-center shrink-0">
+                    <Bell size={20} className="text-[var(--color-primary)]" />
                 </div>
                 <div className="flex-1">
                     <p className="text-sm font-medium text-gray-900">Bật thông báo cuộc gọi</p>
@@ -43,7 +43,7 @@ export default function NotificationPermission() {
                     <div className="flex gap-2 mt-3">
                         <button
                             onClick={handleAllow}
-                            className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 transition"
+                            className="px-3 py-1.5 bg-[var(--color-primary)] text-white text-xs rounded-lg hover:bg-[var(--color-primary-hover)] transition"
                         >
                             Cho phép
                         </button>

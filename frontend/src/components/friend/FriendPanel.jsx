@@ -15,10 +15,12 @@ import {
     Check,
     Bell,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 export default function FriendPanel({ onSelectRoom }) {
     const { user } = useAuth();
     const { on, off, onlineUsers } = useSocket();
+    const navigate = useNavigate();
     const [tab, setTab] = useState('friends'); // friends | requests | search
     const [friends, setFriends] = useState([]);
     const [requests, setRequests] = useState([]);
@@ -195,7 +197,7 @@ export default function FriendPanel({ onSelectRoom }) {
                     <button
                         onClick={() => setTab('friends')}
                         className={`flex-1 py-1.5 text-xs font-medium rounded-md transition ${tab === 'friends'
-                            ? 'bg-white text-blue-600 shadow-sm'
+                            ? 'bg-white text-[var(--color-primary)] shadow-sm'
                             : 'text-gray-500 hover:text-gray-700'
                             }`}
                     >
@@ -205,7 +207,7 @@ export default function FriendPanel({ onSelectRoom }) {
                     <button
                         onClick={() => setTab('requests')}
                         className={`flex-1 py-1.5 text-xs font-medium rounded-md transition relative ${tab === 'requests'
-                            ? 'bg-white text-blue-600 shadow-sm'
+                            ? 'bg-white text-[var(--color-primary)] shadow-sm'
                             : 'text-gray-500 hover:text-gray-700'
                             }`}
                     >
@@ -220,7 +222,7 @@ export default function FriendPanel({ onSelectRoom }) {
                     <button
                         onClick={() => setTab('search')}
                         className={`flex-1 py-1.5 text-xs font-medium rounded-md transition ${tab === 'search'
-                            ? 'bg-white text-blue-600 shadow-sm'
+                            ? 'bg-white text-[var(--color-primary)] shadow-sm'
                             : 'text-gray-500 hover:text-gray-700'
                             }`}
                     >
@@ -247,7 +249,7 @@ export default function FriendPanel({ onSelectRoom }) {
                                 <p className="text-sm">Chưa có bạn bè</p>
                                 <button
                                     onClick={() => setTab('search')}
-                                    className="mt-2 text-sm text-blue-500 hover:text-blue-700"
+                                    className="mt-2 text-sm text-[var(--color-primary)] hover:text-[var(--color-primary-hover)]"
                                 >
                                     Tìm kiếm bạn bè
                                 </button>
@@ -261,8 +263,16 @@ export default function FriendPanel({ onSelectRoom }) {
                                         className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition"
                                     >
                                         <div className="relative shrink-0">
-                                            <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold">
-                                                {friend.username?.charAt(0).toUpperCase()}
+                                            <div
+                                                className="w-10 h-10 rounded-full bg-[var(--color-primary)] flex items-center justify-center text-white font-semibold cursor-pointer hover:ring-2 hover:ring-[var(--color-primary-ring)] transition overflow-hidden"
+                                                onClick={() => navigate(`/profile/${friend._id}`)}
+                                                title="Xem trang cá nhân"
+                                            >
+                                                {friend.avatar ? (
+                                                    <img src={friend.avatar} alt={friend.username} className="w-full h-full object-cover" />
+                                                ) : (
+                                                    friend.username?.charAt(0).toUpperCase()
+                                                )}
                                             </div>
                                             {isOnline && (
                                                 <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full" />
@@ -278,7 +288,7 @@ export default function FriendPanel({ onSelectRoom }) {
                                         </div>
                                         <button
                                             onClick={() => handleStartChat(friend._id)}
-                                            className="p-2 hover:bg-blue-50 rounded-full text-blue-500 transition"
+                                            className="p-2 hover:bg-[var(--color-primary-light)] rounded-full text-[var(--color-primary)] transition"
                                             title="Nhắn tin"
                                         >
                                             <MessageCircle size={18} />
@@ -390,13 +400,13 @@ export default function FriendPanel({ onSelectRoom }) {
                                 value={searchQuery}
                                 onChange={(e) => handleSearch(e.target.value)}
                                 placeholder="Tìm theo tên hoặc email..."
-                                className="w-full pl-9 pr-4 py-2 bg-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="w-full pl-9 pr-4 py-2 bg-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-ring)]"
                             />
                         </div>
 
                         {searching && (
                             <div className="text-center py-4">
-                                <Loader2 size={20} className="animate-spin mx-auto text-blue-500" />
+                                <Loader2 size={20} className="animate-spin mx-auto text-[var(--color-primary)]" />
                             </div>
                         )}
 
@@ -405,7 +415,7 @@ export default function FriendPanel({ onSelectRoom }) {
                                 key={u._id}
                                 className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-50"
                             >
-                                <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-medium shrink-0">
+                                <div className="w-10 h-10 rounded-full bg-[var(--color-primary)] flex items-center justify-center text-white font-medium shrink-0">
                                     {u.username.charAt(0).toUpperCase()}
                                 </div>
                                 <div className="flex-1 min-w-0">
@@ -430,7 +440,7 @@ export default function FriendPanel({ onSelectRoom }) {
                                     <button
                                         onClick={() => handleSendRequest(u._id)}
                                         disabled={actionLoading === u._id}
-                                        className="inline-flex items-center gap-1 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-full transition disabled:opacity-50"
+                                        className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)] bg-[var(--color-primary-light)] hover:bg-[var(--color-primary-medium)] px-2.5 py-1.5 rounded-full transition disabled:opacity-50"
                                     >
                                         {actionLoading === u._id ? (
                                             <Loader2 size={12} className="animate-spin" />

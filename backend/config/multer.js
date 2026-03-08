@@ -25,6 +25,8 @@ const fileFilter = (req, file, cb) => {
         'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
         // Videos
         'video/mp4', 'video/webm', 'video/quicktime',
+        // Audio
+        'audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-m4a',
         // Documents
         'application/pdf',
         'application/msword',

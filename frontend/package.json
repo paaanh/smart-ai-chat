@@ -16,6 +16,7 @@
     "events": "^3.3.0",
     "lucide-react": "^0.577.0",
     "process": "^0.11.10",
+    "@react-oauth/google": "^0.12.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.13.1",

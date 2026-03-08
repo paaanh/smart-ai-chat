@@ -14,6 +14,9 @@ module.exports = (io, socket) => {
             if (type === 'text' && (!content || content.trim() === '')) {
                 return socket.emit('error', { message: 'Nội dung tin nhắn không được trống' });
             }
+            if (type === 'location' && (!file?.lat || !file?.lng)) {
+                return socket.emit('error', { message: 'Thiếu tọa độ vị trí' });
+            }
 
             const room = await Room.findById(roomId);
             if (!room) return socket.emit('error', { message: 'Room không tồn tại' });
@@ -30,7 +33,13 @@ module.exports = (io, socket) => {
                 originalLanguage: socket.user.preferredLanguage || 'vi',
             };
 
-            if (file) {
+            if (type === 'location' && file) {
+                messageData.location = {
+                    lat: file.lat,
+                    lng: file.lng,
+                    address: file.address || '',
+                };
+            } else if (file) {
                 messageData.file = {
                     url: file.url,
                     name: file.name,
@@ -136,6 +145,43 @@ module.exports = (io, socket) => {
         }
     });
 
+    // ─── message:react ────────────────────────────────────────────────
+    socket.on('message:react', async ({ messageId, roomId, emoji }) => {
+        try {
+            if (!messageId || !roomId || !emoji) return;
+
+            const message = await Message.findById(messageId);
+            if (!message) return socket.emit('error', { message: 'Tin nhắn không tồn tại' });
+
+            const existingIdx = message.reactions.findIndex(
+                (r) => r.user.toString() === userId.toString()
+            );
+
+            if (existingIdx !== -1) {
+                if (message.reactions[existingIdx].emoji === emoji) {
+                    // Same emoji → remove (toggle off)
+                    message.reactions.splice(existingIdx, 1);
+                } else {
+                    // Different emoji → update
+                    message.reactions[existingIdx].emoji = emoji;
+                }
+            } else {
+                // New reaction
+                message.reactions.push({ user: userId, emoji });
+            }
+
+            await message.save();
+
+            // Broadcast updated reactions to room
+            io.to(roomId).emit('message:reacted', {
+                messageId,
+                reactions: message.reactions,
+            });
+        } catch (error) {
+            console.error('message:react error:', error.message);
+        }
+    });
+
     // ─── message:get-translation ────────────────────────────────────────
     // Client request bản dịch cho 1 message cụ thể (khi load history)
     socket.on('message:get-translation', async ({ messageId }) => {
@@ -159,20 +205,25 @@ module.exports = (io, socket) => {
 // ─── Helper: Xử lý AI Bot response ───────────────────────────────────
 async function handleAIBotResponse(io, socket, roomId, userMessage, triggeredByUserId) {
     try {
-        // Emit "AI đang suy nghĩ..." cho room
-        io.to(roomId).emit('ai:thinking', { roomId });
+        // Chỉ gửi trạng thái "đang suy nghĩ" cho người hỏi
+        socket.emit('ai:thinking', { roomId });
 
         const aiResponse = await generateAIResponse(userMessage, roomId);
 
         if (!aiResponse) {
-            io.to(roomId).emit('ai:thinking-done', { roomId });
+            socket.emit('ai:thinking-done', { roomId });
             return;
         }
 
-        // Tạo AI message
-        const aiMessage = await Message.create({
+        // Tạo temporary message (KHÔNG lưu DB)
+        const tempAIMessage = {
+            _id: `ai-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
             room: roomId,
-            sender: triggeredByUserId,
+            sender: {
+                _id: triggeredByUserId,
+                username: socket.user.username,
+                avatar: socket.user.avatar,
+            },
             type: 'ai-response',
             content: aiResponse,
             aiMetadata: {
@@ -180,26 +231,20 @@ async function handleAIBotResponse(io, socket, roomId, userMessage, triggeredByU
                 prompt: userMessage.substring(0, 200),
                 model: 'gemini-2.5-flash',
             },
-        });
+            createdAt: new Date(),
+        };
 
-        const populatedAI = await aiMessage.populate('sender', 'username avatar preferredLanguage');
-
-        // Broadcast AI response
-        io.to(roomId).emit('ai:response', {
+        // Chỉ gửi cho người hỏi (private emit)
+        socket.emit('receive_ai_message', {
             roomId,
-            message: populatedAI,
+            message: tempAIMessage,
         });
 
-        // Cũng gửi như message thường để lưu trong chat
-        io.to(roomId).emit('message:received', {
-            message: populatedAI,
-        });
-
-        console.log(`🤖 AI responded in room ${roomId}: ${aiResponse.substring(0, 60)}...`);
+        console.log(`🤖 AI responded privately in room ${roomId}: ${aiResponse.substring(0, 60)}...`);
 
     } catch (error) {
         console.error('handleAIBotResponse error:', error.message);
-        io.to(roomId).emit('ai:error', {
+        socket.emit('ai:error', {
             roomId,
             error: 'AI không thể phản hồi. Vui lòng thử lại.',
         });

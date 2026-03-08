@@ -1,12 +1,16 @@
 const router = require('express').Router();
 const userController = require('../controllers/user.controller');
 const { authMiddleware } = require('../middlewares/auth.middleware');
+const { upload } = require('../config/multer');
 
 // Tất cả routes cần xác thực
 router.use(authMiddleware);
 
-// PUT /api/users/profile
-router.put('/profile', userController.updateProfile);
+// PUT /api/users/profile (hỗ trợ upload avatar + coverPicture)
+router.put('/profile', upload.fields([
+    { name: 'avatar', maxCount: 1 },
+    { name: 'coverPicture', maxCount: 1 },
+]), userController.updateProfile);
 
 // GET /api/users/search?q=keyword
 router.get('/search', userController.searchUsers);

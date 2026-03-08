@@ -8,6 +8,8 @@ exports.uploadFile = async (req, res, next) => {
         }
 
         const file = req.file;
+        // Fix Vietnamese filename encoding (multer returns latin1)
+        file.originalname = Buffer.from(file.originalname, 'latin1').toString('utf8');
         const fileUrl = `/uploads/${file.filename}`;
 
         res.json({
@@ -31,12 +33,16 @@ exports.uploadFiles = async (req, res, next) => {
             return res.status(400).json({ error: 'Không có file nào được upload' });
         }
 
-        const files = req.files.map(file => ({
-            url: `/uploads/${file.filename}`,
-            name: file.originalname,
-            size: file.size,
-            mimeType: file.mimetype,
-        }));
+        const files = req.files.map(file => {
+            // Fix Vietnamese filename encoding (multer returns latin1)
+            file.originalname = Buffer.from(file.originalname, 'latin1').toString('utf8');
+            return {
+                url: `/uploads/${file.filename}`,
+                name: file.originalname,
+                size: file.size,
+                mimeType: file.mimetype,
+            };
+        });
 
         res.json({
             message: `Upload thành công ${files.length} file`,

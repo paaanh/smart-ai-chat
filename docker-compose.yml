@@ -4,7 +4,7 @@ services:
     image: mongo:7
     container_name: smart-ai-mongo
     ports:
-      - "27017:27017"
+      - "27018:27017"
     volumes:
       - mongo-data:/data/db
     restart: unless-stopped
@@ -22,6 +22,9 @@ services:
       - JWT_SECRET=${JWT_SECRET:-smart-ai-jwt-secret-key-2026}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - CORS_ORIGINS=http://localhost:80,http://localhost
+      - MAIL_USER=${MAIL_USER:-}
+      - MAIL_APP_PASSWORD=${MAIL_APP_PASSWORD:-}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
     volumes:
       - backend-uploads:/app/uploads
     depends_on:
@@ -30,7 +33,10 @@ services:
 
   # ─── Frontend ─────────────────────────────────────────────────────────
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        - VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID:-}
     container_name: smart-ai-frontend
     ports:
       - "80:80"

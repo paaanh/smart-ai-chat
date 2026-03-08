@@ -79,7 +79,7 @@ export default function CreateRoomModal({ onClose, onCreated }) {
                     <button
                         onClick={() => { setTab('direct'); setSelectedUsers([]); }}
                         className={`flex-1 py-2.5 text-sm font-medium transition ${tab === 'direct'
-                            ? 'text-blue-600 border-b-2 border-blue-600'
+                            ? 'text-[var(--color-primary)] border-b-2 border-[var(--color-primary)]'
                             : 'text-gray-500 hover:text-gray-700'
                             }`}
                     >
@@ -89,7 +89,7 @@ export default function CreateRoomModal({ onClose, onCreated }) {
                     <button
                         onClick={() => { setTab('group'); setSelectedUsers([]); }}
                         className={`flex-1 py-2.5 text-sm font-medium transition ${tab === 'group'
-                            ? 'text-blue-600 border-b-2 border-blue-600'
+                            ? 'text-[var(--color-primary)] border-b-2 border-[var(--color-primary)]'
                             : 'text-gray-500 hover:text-gray-700'
                             }`}
                     >
@@ -111,7 +111,7 @@ export default function CreateRoomModal({ onClose, onCreated }) {
                             value={groupName}
                             onChange={(e) => setGroupName(e.target.value)}
                             placeholder="Tên nhóm (tùy chọn)"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[var(--color-primary-ring)] focus:border-[var(--color-primary-ring)] outline-none"
                         />
                     )}
 
@@ -121,7 +121,7 @@ export default function CreateRoomModal({ onClose, onCreated }) {
                             {selectedUsers.map((u) => (
                                 <span
                                     key={u._id}
-                                    className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full text-sm"
+                                    className="inline-flex items-center gap-1 bg-[var(--color-primary-medium)] text-[var(--color-primary-dark)] px-2.5 py-1 rounded-full text-sm"
                                 >
                                     {u.username}
                                     <button onClick={() => toggleUser(u)} className="hover:text-blue-900">
@@ -140,14 +140,14 @@ export default function CreateRoomModal({ onClose, onCreated }) {
                             value={searchQuery}
                             onChange={(e) => handleSearch(e.target.value)}
                             placeholder="Tìm người dùng..."
-                            className="w-full pl-9 pr-4 py-2 bg-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full pl-9 pr-4 py-2 bg-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-ring)]"
                         />
                     </div>
 
                     {/* Results */}
                     {searching && (
                         <div className="text-center py-4">
-                            <Loader2 size={20} className="animate-spin mx-auto text-blue-500" />
+                            <Loader2 size={20} className="animate-spin mx-auto text-[var(--color-primary)]" />
                         </div>
                     )}
 
@@ -157,10 +157,10 @@ export default function CreateRoomModal({ onClose, onCreated }) {
                             <button
                                 key={u._id}
                                 onClick={() => toggleUser(u)}
-                                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition text-left ${selected ? 'bg-blue-50 ring-1 ring-blue-200' : 'hover:bg-gray-50'
+                                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition text-left ${selected ? 'bg-[var(--color-primary-light)] ring-1 ring-[var(--color-primary-medium)]' : 'hover:bg-gray-50'
                                     }`}
                             >
-                                <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-medium">
+                                <div className="w-10 h-10 rounded-full bg-[var(--color-primary)] flex items-center justify-center text-white font-medium">
                                     {u.username.charAt(0).toUpperCase()}
                                 </div>
                                 <div className="flex-1 min-w-0">
@@ -168,7 +168,7 @@ export default function CreateRoomModal({ onClose, onCreated }) {
                                     <p className="text-xs text-gray-500">{u.preferredLanguageLabel || u.preferredLanguage}</p>
                                 </div>
                                 {selected && (
-                                    <div className="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center">
+                                    <div className="w-5 h-5 bg-[var(--color-primary)] rounded-full flex items-center justify-center">
                                         <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                                         </svg>
@@ -184,7 +184,7 @@ export default function CreateRoomModal({ onClose, onCreated }) {
                     <button
                         onClick={handleCreate}
                         disabled={creating || selectedUsers.length === 0}
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition disabled:opacity-50 flex items-center justify-center gap-2"
+                        className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-medium py-2.5 rounded-lg transition disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                         {creating && <Loader2 size={16} className="animate-spin" />}
                         {tab === 'direct' ? 'Bắt đầu trò chuyện' : 'Tạo nhóm'}

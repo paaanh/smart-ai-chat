@@ -107,7 +107,7 @@ export default function CallModal() {
                 {(!hasRemote || !isVideoCall) && (
                     <div className="absolute inset-0 flex items-center justify-center">
                         <div className="text-center">
-                            <div className="w-24 h-24 rounded-full bg-blue-500 flex items-center justify-center text-white text-4xl font-bold mx-auto mb-4">
+                            <div className="w-24 h-24 rounded-full bg-[var(--color-primary)] flex items-center justify-center text-white text-4xl font-bold mx-auto mb-4">
                                 {displayName.charAt(0).toUpperCase()}
                             </div>
                             <h2 className="text-white text-xl font-semibold">{displayName}</h2>

@@ -51,7 +51,7 @@ export default class ErrorBoundary extends Component {
                             </button>
                             <button
                                 onClick={this.handleReload}
-                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm transition"
+                                className="px-4 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded-lg font-medium text-sm transition"
                             >
                                 Tải lại trang
                             </button>

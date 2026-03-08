@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import RoomList from '../components/room/RoomList';
 import ChatWindow from '../components/chat/ChatWindow';
+import ChatInfoSidebar from '../components/chat/ChatInfoSidebar';
 import FriendPanel from '../components/friend/FriendPanel';
 // CallModal + IncomingCallModal are now rendered globally in App.jsx
 import { LogOut, Settings, MessageCircle, Users } from 'lucide-react';
@@ -13,10 +14,12 @@ export default function ChatPage() {
     const [activeRoomId, setActiveRoomId] = useState(null);
     const [showSidebar, setShowSidebar] = useState(true);
     const [sidebarTab, setSidebarTab] = useState('chats'); // 'chats' | 'friends'
+    const [infoRoom, setInfoRoom] = useState(null); // room object for ChatInfoSidebar
 
     const handleSelectRoom = (roomId) => {
         setActiveRoomId(roomId);
         setSidebarTab('chats');
+        setInfoRoom(null);
         // On mobile, hide sidebar when room selected
         if (window.innerWidth < 1024) {
             setShowSidebar(false);
@@ -26,6 +29,11 @@ export default function ChatPage() {
     const handleBack = () => {
         setShowSidebar(true);
         setActiveRoomId(null);
+        setInfoRoom(null);
+    };
+
+    const handleToggleInfo = (room) => {
+        setInfoRoom((prev) => (prev ? null : room));
     };
 
     return (
@@ -37,8 +45,16 @@ export default function ChatPage() {
             >
                 {/* User bar */}
                 <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold text-sm">
-                        {user?.username?.charAt(0).toUpperCase()}
+                    <div
+                        className="w-9 h-9 rounded-full bg-[var(--color-primary)] flex items-center justify-center text-white font-semibold text-sm cursor-pointer hover:ring-2 hover:ring-[var(--color-primary-ring)] transition overflow-hidden shrink-0"
+                        onClick={() => navigate(`/profile/${user?._id}`)}
+                        title="Trang cá nhân"
+                    >
+                        {user?.avatar ? (
+                            <img src={user.avatar} alt={user.username} className="w-full h-full object-cover" />
+                        ) : (
+                            user?.username?.charAt(0).toUpperCase()
+                        )}
                     </div>
                     <div className="flex-1 min-w-0">
                         <p className="font-medium text-gray-900 text-sm truncate">{user?.username}</p>
@@ -65,7 +81,7 @@ export default function ChatPage() {
                     <button
                         onClick={() => setSidebarTab('chats')}
                         className={`flex-1 py-2.5 text-sm font-medium transition flex items-center justify-center gap-1.5 ${sidebarTab === 'chats'
-                            ? 'text-blue-600 border-b-2 border-blue-600'
+                            ? 'text-[var(--color-primary)] border-b-2 border-[var(--color-primary)]'
                             : 'text-gray-500 hover:text-gray-700'
                             }`}
                     >
@@ -75,7 +91,7 @@ export default function ChatPage() {
                     <button
                         onClick={() => setSidebarTab('friends')}
                         className={`flex-1 py-2.5 text-sm font-medium transition flex items-center justify-center gap-1.5 ${sidebarTab === 'friends'
-                            ? 'text-blue-600 border-b-2 border-blue-600'
+                            ? 'text-[var(--color-primary)] border-b-2 border-[var(--color-primary)]'
                             : 'text-gray-500 hover:text-gray-700'
                             }`}
                     >
@@ -99,7 +115,23 @@ export default function ChatPage() {
                 className={`${!showSidebar ? 'flex' : 'hidden'
                     } lg:flex flex-1 min-w-0`}
             >
-                <ChatWindow roomId={activeRoomId} onBack={handleBack} />
+                <ChatWindow roomId={activeRoomId} onBack={handleBack} onToggleInfo={handleToggleInfo} />
+
+                {/* Chat Info Sidebar */}
+                {infoRoom && (
+                    <ChatInfoSidebar
+                        room={infoRoom}
+                        onClose={() => setInfoRoom(null)}
+                        onRoomUpdate={(updatedRoom) => {
+                            if (updatedRoom === null) {
+                                setActiveRoomId(null);
+                                setInfoRoom(null);
+                            } else {
+                                setInfoRoom(updatedRoom);
+                            }
+                        }}
+                    />
+                )}
             </div>
 
         </div>

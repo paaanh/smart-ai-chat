@@ -15,13 +15,14 @@ import {
     Users,
     Loader2,
     ChevronUp,
+    Info,
 } from 'lucide-react';
 
-export default function ChatWindow({ roomId, onBack }) {
+export default function ChatWindow({ roomId, onBack, onToggleInfo }) {
     const { user } = useAuth();
-    const { onlineUsers } = useSocket();
+    const { onlineUsers, on, off } = useSocket();
     const { initiateCall } = useCall();
-    const { messages, loading, hasMore, typingUsers, sendMessage, deleteMessage, loadMore, startTyping } = useChat(roomId);
+    const { messages, loading, hasMore, typingUsers, sendMessage, sendLocation, deleteMessage, loadMore, startTyping, reactToMessage } = useChat(roomId);
     const { toggleBot, summarize } = useAI(roomId);
 
     const [room, setRoom] = useState(null);
@@ -48,6 +49,28 @@ export default function ChatWindow({ roomId, onBack }) {
         };
         loadRoom();
     }, [roomId, user]);
+
+    // Listen for real-time group settings updates
+    useEffect(() => {
+        if (!roomId) return;
+        const handleSettingsUpdate = (payload) => {
+            if (payload.roomId === roomId) {
+                setRoom((prev) =>
+                    prev
+                        ? {
+                            ...prev,
+                            name: payload.name ?? prev.name,
+                            groupAvatar: payload.groupAvatar ?? prev.groupAvatar,
+                            groupBackground: payload.groupBackground ?? prev.groupBackground,
+                            description: payload.description ?? prev.description,
+                        }
+                        : prev
+                );
+            }
+        };
+        on('room:settings-updated', handleSettingsUpdate);
+        return () => off('room:settings-updated', handleSettingsUpdate);
+    }, [roomId, on, off]);
 
     // Auto-scroll
     useEffect(() => {
@@ -132,11 +155,15 @@ export default function ChatWindow({ roomId, onBack }) {
                 {/* Avatar */}
                 <div className="relative">
                     <div
-                        className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold ${display.isGroup ? 'bg-purple-500' : 'bg-blue-500'
+                        className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold overflow-hidden ${display.isGroup ? 'bg-purple-500' : 'bg-[var(--color-primary)]'
                             }`}
                     >
                         {display.isGroup ? (
-                            <Users size={18} />
+                            room?.groupAvatar ? (
+                                <img src={room.groupAvatar} alt={display.name} className="w-full h-full object-cover" />
+                            ) : (
+                                <Users size={18} />
+                            )
                         ) : (
                             display.name.charAt(0).toUpperCase()
                         )}
@@ -182,6 +209,14 @@ export default function ChatWindow({ roomId, onBack }) {
                             </button>
                         </>
                     )}
+
+                    <button
+                        onClick={() => onToggleInfo?.(room)}
+                        className="p-2 hover:bg-gray-100 rounded-full transition text-gray-600"
+                        title="Thông tin"
+                    >
+                        <Info size={18} />
+                    </button>
                 </div>
             </div>
 
@@ -197,7 +232,7 @@ export default function ChatWindow({ roomId, onBack }) {
                         <button
                             onClick={loadMore}
                             disabled={loading}
-                            className="inline-flex items-center gap-1 text-sm text-blue-500 hover:text-blue-700 disabled:opacity-50"
+                            className="inline-flex items-center gap-1 text-sm text-[var(--color-primary)] hover:text-[var(--color-primary-hover)] disabled:opacity-50"
                         >
                             {loading ? (
                                 <Loader2 size={14} className="animate-spin" />
@@ -220,6 +255,7 @@ export default function ChatWindow({ roomId, onBack }) {
                             !msg.aiMetadata?.isAIResponse
                         }
                         onDelete={deleteMessage}
+                        onReact={reactToMessage}
                     />
                 ))}
 
@@ -242,6 +278,7 @@ export default function ChatWindow({ roomId, onBack }) {
             {/* Input */}
             <MessageInput
                 onSend={sendMessage}
+                onSendLocation={sendLocation}
                 onTyping={startTyping}
                 disabled={!room}
             />

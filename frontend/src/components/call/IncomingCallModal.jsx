@@ -21,7 +21,7 @@ export default function IncomingCallModal() {
                         className="w-20 h-20 rounded-full mx-auto mb-4 object-cover ring-4 ring-green-400 animate-pulse"
                     />
                 ) : (
-                    <div className="w-20 h-20 rounded-full bg-blue-500 flex items-center justify-center text-white text-3xl font-bold mx-auto mb-4 animate-pulse">
+                    <div className="w-20 h-20 rounded-full bg-[var(--color-primary)] flex items-center justify-center text-white text-3xl font-bold mx-auto mb-4 animate-pulse">
                         {callerName.charAt(0).toUpperCase()}
                     </div>
                 )}

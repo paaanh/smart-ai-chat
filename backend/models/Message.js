@@ -22,7 +22,7 @@ const messageSchema = new mongoose.Schema({
     // ===== NỘI DUNG GỐC =====
     type: {
         type: String,
-        enum: ['text', 'image', 'video', 'file', 'system', 'ai-response'],
+        enum: ['text', 'image', 'video', 'file', 'location', 'system', 'ai-response'],
         default: 'text',
     },
     content: {
@@ -38,6 +38,13 @@ const messageSchema = new mongoose.Schema({
         mimeType: { type: String },
     },
 
+    // ===== METADATA VỊ TRÍ =====
+    location: {
+        lat: { type: Number },
+        lng: { type: Number },
+        address: { type: String, default: '' },
+    },
+
     // ===== AI / DỊCH THUẬT METADATA =====
     originalLanguage: {
         type: String,
@@ -51,6 +58,12 @@ const messageSchema = new mongoose.Schema({
         prompt: { type: String, default: null },
         model: { type: String, default: null },
     },
+
+    // Reactions (emoji)
+    reactions: [{
+        user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        emoji: { type: String, required: true },
+    }],
 
     // Trạng thái đã đọc
     readBy: [{
