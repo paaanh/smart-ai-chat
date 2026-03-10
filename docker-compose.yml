@@ -25,6 +25,9 @@ services:
       - MAIL_USER=${MAIL_USER:-}
       - MAIL_APP_PASSWORD=${MAIL_APP_PASSWORD:-}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - METERED_API_KEY=${METERED_API_KEY:-}
+      - METERED_DOMAIN=${METERED_DOMAIN:-}
     volumes:
       - backend-uploads:/app/uploads
     depends_on:
