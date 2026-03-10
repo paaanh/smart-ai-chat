@@ -22,7 +22,7 @@ module.exports = (io, socket) => {
 
             // Lấy members info
             const populatedRoom = await Room.findById(roomId)
-                .populate('members.user', 'username avatar status preferredLanguage preferredLanguageLabel socketId');
+                .populate('members.user', 'username avatar googlePicture status preferredLanguage preferredLanguageLabel socketId');
 
             socket.emit('room:joined', {
                 roomId,
@@ -50,7 +50,7 @@ module.exports = (io, socket) => {
             if (type === 'direct' && memberIds.length === 1) {
                 const existingRoom = await Room.findDirectRoom(userId, memberIds[0]);
                 if (existingRoom) {
-                    const populated = await existingRoom.populate('members.user', 'username avatar status preferredLanguage preferredLanguageLabel');
+                    const populated = await existingRoom.populate('members.user', 'username avatar googlePicture status preferredLanguage preferredLanguageLabel');
                     socket.emit('room:created', { room: populated, existing: true });
                     return;
                 }
@@ -67,7 +67,7 @@ module.exports = (io, socket) => {
                 members,
             });
 
-            const populated = await room.populate('members.user', 'username avatar status preferredLanguage preferredLanguageLabel socketId');
+            const populated = await room.populate('members.user', 'username avatar googlePicture status preferredLanguage preferredLanguageLabel socketId');
 
             // Thông báo cho tất cả members online
             for (const member of populated.members) {

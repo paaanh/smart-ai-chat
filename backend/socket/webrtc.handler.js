@@ -1,8 +1,9 @@
 const { User } = require('../models/User');
 const Message = require('../models/Message');
+const Room = require('../models/Room');
 
 // ─── Active Calls Tracker (in-memory) ─────────────────────────────────
-const activeCalls = new Map(); // roomId → { callType, callerId, participants[], startTime }
+const activeCalls = new Map(); // roomId → { callType, callerId, participants[], startTime, isGroup, roomName }
 
 module.exports = (io, socket) => {
     const userId = socket.user._id.toString();
@@ -33,6 +34,10 @@ module.exports = (io, socket) => {
                 });
             }
 
+            // Check if this is a group call
+            const room = await Room.findById(roomId).lean();
+            const isGroup = room?.type === 'group';
+
             // Tạo call record
             activeCalls.set(roomId, {
                 callType,
@@ -40,16 +45,20 @@ module.exports = (io, socket) => {
                 participants: [userId],
                 targetUserIds: targets,
                 startTime: Date.now(),
+                isGroup,
+                roomName: room?.name || '',
             });
 
-            // Timeout: tự hủy nếu không ai nhận sau 30s
-            setTimeout(() => {
-                const call = activeCalls.get(roomId);
-                if (call && call.participants.length <= 1) {
-                    activeCalls.delete(roomId);
-                    io.to(socket.id).emit('call:timeout', { roomId });
-                }
-            }, 30000);
+            // Timeout: tự hủy nếu không ai nhận sau 30s (only for 1-1)
+            if (!isGroup) {
+                setTimeout(() => {
+                    const call = activeCalls.get(roomId);
+                    if (call && call.participants.length <= 1) {
+                        activeCalls.delete(roomId);
+                        io.to(socket.id).emit('call:timeout', { roomId });
+                    }
+                }, 30000);
+            }
 
             // Gửi thông báo cuộc gọi đến cho từng target
             const caller = {
@@ -64,16 +73,20 @@ module.exports = (io, socket) => {
                         roomId,
                         callType,
                         caller,
+                        isGroup,
+                        roomName: room?.name || '',
                     });
                 }
             }
 
             // Tạo system message
+            const callLabel = callType === 'video' ? 'video' : 'thoại';
+            const prefix = isGroup ? `nhóm ${callLabel}` : callLabel;
             await Message.create({
                 room: roomId,
                 sender: socket.user._id,
                 type: 'system',
-                content: `📞 ${socket.user.username} đã bắt đầu cuộc gọi ${callType === 'video' ? 'video' : 'thoại'}`,
+                content: `📞 ${socket.user.username} đã bắt đầu cuộc gọi ${prefix}`,
             });
 
         } catch (error) {
@@ -91,19 +104,44 @@ module.exports = (io, socket) => {
             if (!call) {
                 return socket.emit('call:error', { roomId, error: 'Cuộc gọi đã kết thúc hoặc không tồn tại' });
             }
-            
+
+            // Get existing participants BEFORE adding the new one
+            const existingParticipants = [...call.participants];
+
             if (!call.participants.includes(userId)) {
                 call.participants.push(userId);
             }
 
-            const callerSocketId = await getSocketId(callerId);
-            if (callerSocketId) {
-                io.to(callerSocketId).emit('call:accepted', {
+            if (call.isGroup) {
+                // Group call: notify ALL existing participants that a new person joined
+                for (const pid of existingParticipants) {
+                    const pSocketId = await getSocketId(pid);
+                    if (pSocketId) {
+                        io.to(pSocketId).emit('call:participant-joined', {
+                            roomId,
+                            userId,
+                            username: socket.user.username,
+                            avatar: socket.user.avatar || socket.user.googlePicture || '',
+                            existingParticipants: call.participants,
+                        });
+                    }
+                }
+                // Notify the new joiner about existing participants
+                socket.emit('call:existing-participants', {
                     roomId,
-                    userId,
-                    acceptorId: userId, // Alias rõ ràng cho frontend dễ dùng
-                    username: socket.user.username,
+                    participants: existingParticipants,
                 });
+            } else {
+                // 1-1 call: notify only the caller
+                const callerSocketId = await getSocketId(callerId);
+                if (callerSocketId) {
+                    io.to(callerSocketId).emit('call:accepted', {
+                        roomId,
+                        userId,
+                        acceptorId: userId,
+                        username: socket.user.username,
+                    });
+                }
             }
         } catch (error) {
             console.error('call:accept error:', error.message);
@@ -124,9 +162,9 @@ module.exports = (io, socket) => {
                 });
             }
 
-            // Nếu tất cả reject, xóa call
+            // Nếu tất cả reject, xóa call (only for 1-1)
             const call = activeCalls.get(roomId);
-            if (call) {
+            if (call && !call.isGroup) {
                 call.targetUserIds = call.targetUserIds.filter(id => id !== userId);
                 if (call.targetUserIds.length === 0 && call.participants.length <= 1) {
                     activeCalls.delete(roomId);
@@ -160,13 +198,31 @@ module.exports = (io, socket) => {
             const call = activeCalls.get(roomId);
             const duration = call ? Math.round((Date.now() - call.startTime) / 1000) : 0;
             const callType = call?.callType || 'audio';
+            const isGroup = call?.isGroup || false;
 
+            // Group call: participant leaving, not ending entire call
+            if (isGroup && call && call.participants.length > 2) {
+                call.participants = call.participants.filter(id => id !== userId);
+                for (const pid of call.participants) {
+                    const pSocketId = await getSocketId(pid);
+                    if (pSocketId) {
+                        io.to(pSocketId).emit('call:participant-left', {
+                            roomId,
+                            userId,
+                            username: socket.user.username,
+                        });
+                    }
+                }
+                return;
+            }
+
+            // 1-1 call or last person in group → end the entire call
             activeCalls.delete(roomId);
 
             // Emit to each participant's socketId directly
             const participants = call?.participants || [];
             for (const pid of participants) {
-                if (pid === userId) continue; // don't notify self
+                if (pid === userId) continue;
                 const pSocketId = await getSocketId(pid);
                 if (pSocketId) {
                     io.to(pSocketId).emit('call:ended', { roomId, userId, duration });
@@ -191,6 +247,62 @@ module.exports = (io, socket) => {
         }
     });
 
+    // ─── call:invite-member (Group only: invite additional members) ────
+    socket.on('call:invite-member', async ({ roomId, targetUserId }) => {
+        try {
+            const call = activeCalls.get(roomId);
+            if (!call) return socket.emit('call:error', { roomId, error: 'Cuộc gọi không tồn tại' });
+
+            if (call.participants.includes(targetUserId)) {
+                return socket.emit('call:error', { roomId, error: 'Người này đã trong cuộc gọi' });
+            }
+
+            console.log(`📞 ${socket.user.username} inviting ${targetUserId} to group call in ${roomId}`);
+
+            const caller = {
+                _id: userId,
+                username: socket.user.username,
+                avatar: socket.user.avatar || '',
+            };
+
+            const targetSocketId = await getSocketId(targetUserId);
+            if (targetSocketId) {
+                io.to(targetSocketId).emit('call:incoming', {
+                    roomId,
+                    callType: call.callType,
+                    caller,
+                    isGroup: true,
+                    roomName: call.roomName || '',
+                });
+            }
+
+            if (!call.targetUserIds.includes(targetUserId)) {
+                call.targetUserIds.push(targetUserId);
+            }
+        } catch (error) {
+            console.error('call:invite-member error:', error.message);
+        }
+    });
+
+    // ─── call:get-participants (Get current participants list) ─────────
+    socket.on('call:get-participants', async ({ roomId }) => {
+        const call = activeCalls.get(roomId);
+        if (!call) return;
+
+        const participantDetails = [];
+        for (const pid of call.participants) {
+            const u = await User.findById(pid).select('username avatar googlePicture').lean();
+            if (u) {
+                participantDetails.push({
+                    _id: pid,
+                    username: u.username,
+                    avatar: u.avatar || u.googlePicture || '',
+                });
+            }
+        }
+        socket.emit('call:participants-list', { roomId, participants: participantDetails });
+    });
+
     // ═══════════════════════════════════════════════════════════════════
     // ─── WebRTC Signaling (P2P) ───────────────────────────────────────
     // Server chỉ làm trung gian relay SDP và ICE candidates
@@ -202,7 +314,7 @@ module.exports = (io, socket) => {
         if (!targetUserId || !sdp) return;
 
         const targetSocketId = await getSocketId(targetUserId);
-        
+
         if (targetSocketId) {
             io.to(targetSocketId).emit('webrtc:offer', {
                 fromUserId: userId,
@@ -221,7 +333,7 @@ module.exports = (io, socket) => {
         if (!targetUserId || !sdp) return;
 
         const targetSocketId = await getSocketId(targetUserId);
-        
+
         if (targetSocketId) {
             io.to(targetSocketId).emit('webrtc:answer', {
                 fromUserId: userId,
@@ -251,16 +363,55 @@ module.exports = (io, socket) => {
         }
     });
 
+    // ─── screen-share:status ─────────────────────────────────────────
+    socket.on('screen-share:status', async ({ targetUserId, sharing, roomId }) => {
+        if (roomId) {
+            // Group call: broadcast to all participants
+            const call = activeCalls.get(roomId);
+            if (call) {
+                for (const pid of call.participants) {
+                    if (pid === userId) continue;
+                    const pSocketId = await getSocketId(pid);
+                    if (pSocketId) {
+                        io.to(pSocketId).emit('screen-share:status', {
+                            fromUserId: userId,
+                            sharing,
+                        });
+                    }
+                }
+            }
+        } else if (targetUserId) {
+            const targetSocketId = await getSocketId(targetUserId);
+            if (targetSocketId) {
+                io.to(targetSocketId).emit('screen-share:status', {
+                    fromUserId: userId,
+                    sharing,
+                });
+            }
+        }
+    });
+
     // ─── Cleanup khi disconnect ────────────────────────────────────────
     socket.on('disconnect', async () => {
-        // Tìm và cleanup calls mà user đang tham gia
         for (const [roomId, call] of activeCalls.entries()) {
             if (call.participants.includes(userId)) {
                 call.participants = call.participants.filter(id => id !== userId);
                 if (call.participants.length === 0) {
                     activeCalls.delete(roomId);
+                } else if (call.isGroup) {
+                    // Group: notify remaining, keep call alive
+                    for (const pid of call.participants) {
+                        const pSocketId = await getSocketId(pid);
+                        if (pSocketId) {
+                            io.to(pSocketId).emit('call:participant-left', {
+                                roomId,
+                                userId,
+                                username: socket.user.username,
+                            });
+                        }
+                    }
                 } else {
-                    // Notify remaining participants via their socketId
+                    // 1-1: end the call
                     for (const pid of call.participants) {
                         const pSocketId = await getSocketId(pid);
                         if (pSocketId) {

@@ -141,8 +141,8 @@ export default function ProfilePage() {
                     {/* Avatar */}
                     <div className="absolute -bottom-16 left-6">
                         <div className="w-32 h-32 rounded-full border-4 border-white bg-[var(--color-primary)] flex items-center justify-center text-white text-5xl font-bold overflow-hidden shadow-lg">
-                            {profile.avatar ? (
-                                <img src={profile.avatar} alt={profile.username} className="w-full h-full object-cover" />
+                            {(profile.avatar || profile.googlePicture) ? (
+                                <img src={profile.avatar || profile.googlePicture} alt={profile.username} className="w-full h-full object-cover" />
                             ) : (
                                 initial
                             )}

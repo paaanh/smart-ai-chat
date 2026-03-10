@@ -62,6 +62,7 @@ export function AuthProvider({ children }) {
         setUser(null);
         localStorage.removeItem('token');
         localStorage.removeItem('user');
+        localStorage.removeItem('preferredLanguage');
     }, []);
 
     // Listen for forced logout from API 401 interceptor

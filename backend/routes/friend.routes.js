@@ -25,6 +25,9 @@ router.put('/:id/accept', friendController.acceptRequest);
 // PUT /api/friends/:id/reject   (từ chối lời mời)
 router.put('/:id/reject', friendController.rejectRequest);
 
+// DELETE /api/friends/request/:id (hủy lời mời kết bạn pending)
+router.delete('/request/:id', friendController.cancelRequest);
+
 // DELETE /api/friends/:id       (hủy kết bạn / hủy lời mời)
 router.delete('/:id', friendController.removeFriend);
 

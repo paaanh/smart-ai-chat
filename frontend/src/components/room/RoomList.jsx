@@ -52,6 +52,19 @@ export default function RoomList({ activeRoomId, onSelectRoom }) {
         return () => off('room:updated', handleRoomUpdate);
     }, [on, off]);
 
+    // Listen for nickname updates to reflect in sidebar
+    useEffect(() => {
+        const handleNicknameUpdated = ({ roomId, nicknames }) => {
+            setRooms((prev) =>
+                prev.map((r) =>
+                    r._id === roomId ? { ...r, nicknames } : r
+                )
+            );
+        };
+        on('room:nickname-updated', handleNicknameUpdated);
+        return () => off('room:nickname-updated', handleNicknameUpdated);
+    }, [on, off]);
+
     // Listen for new messages (sidebar update + unread badge)
     useEffect(() => {
         const handleNewMessage = ({ roomId: msgRoomId, lastMessage, senderId }) => {
@@ -94,15 +107,16 @@ export default function RoomList({ activeRoomId, onSelectRoom }) {
         if (room.type === 'group') {
             return { name: room.name, avatar: null, isGroup: true };
         }
-        // Direct: show the other person's name
+        // Direct: show nickname if set, otherwise the other person's name
         const other = room.members?.find((m) => {
             const uid = m.user?._id || m.user;
             return uid !== user?._id;
         });
         const otherUser = other?.user;
+        const otherNickname = otherUser?._id && room.nicknames?.[otherUser._id];
         return {
-            name: otherUser?.username || 'Unknown',
-            avatar: otherUser?.avatar,
+            name: otherNickname || otherUser?.username || 'Unknown',
+            avatar: otherUser?.avatar || otherUser?.googlePicture,
             isGroup: false,
             otherUserId: otherUser?._id,
         };

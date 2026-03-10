@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-export default function FriendPanel({ onSelectRoom }) {
+export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
     const { user } = useAuth();
     const { on, off, onlineUsers } = useSocket();
     const navigate = useNavigate();
@@ -54,6 +54,11 @@ export default function FriendPanel({ onSelectRoom }) {
         loadData();
     }, [loadData]);
 
+    // Notify parent of request count changes
+    useEffect(() => {
+        onRequestCountChange?.(requests.length);
+    }, [requests.length, onRequestCountChange]);
+
     // Real-time friend events
     useEffect(() => {
         const handleRequestReceived = ({ friendship }) => {
@@ -82,14 +87,28 @@ export default function FriendPanel({ onSelectRoom }) {
             setRequests((prev) => prev.filter((r) => r._id !== friendshipId));
         };
 
+        const handleRequestCancelled = ({ friendshipId }) => {
+            setRequests((prev) => prev.filter((r) => r._id !== friendshipId));
+            setSentRequests((prev) => prev.filter((r) => r._id !== friendshipId));
+            setSearchResults((prev) =>
+                prev.map((u) =>
+                    u.friendshipId === friendshipId
+                        ? { ...u, friendStatus: 'none', friendshipId: null }
+                        : u
+                )
+            );
+        };
+
         on('friend:request-received', handleRequestReceived);
         on('friend:accepted', handleAccepted);
         on('friend:rejected', handleRejected);
+        on('friend:request-cancelled', handleRequestCancelled);
 
         return () => {
             off('friend:request-received', handleRequestReceived);
             off('friend:accepted', handleAccepted);
             off('friend:rejected', handleRejected);
+            off('friend:request-cancelled', handleRequestCancelled);
         };
     }, [on, off, user]);
 
@@ -166,6 +185,27 @@ export default function FriendPanel({ onSelectRoom }) {
             setRequests((prev) => prev.filter((r) => r._id !== friendshipId));
         } catch (err) {
             console.error('Reject error:', err);
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    // Cancel / delete a pending friend request
+    const handleCancelRequest = async (friendshipId) => {
+        setActionLoading(friendshipId);
+        try {
+            await friendAPI.cancelRequest(friendshipId);
+            setSentRequests((prev) => prev.filter((r) => r._id !== friendshipId));
+            setRequests((prev) => prev.filter((r) => r._id !== friendshipId));
+            setSearchResults((prev) =>
+                prev.map((u) =>
+                    u.friendshipId === friendshipId
+                        ? { ...u, friendStatus: 'none', friendshipId: null }
+                        : u
+                )
+            );
+        } catch (err) {
+            console.error('Cancel request error:', err);
         } finally {
             setActionLoading(null);
         }
@@ -344,6 +384,14 @@ export default function FriendPanel({ onSelectRoom }) {
                                             >
                                                 <X size={14} />
                                             </button>
+                                            <button
+                                                onClick={() => handleCancelRequest(req._id)}
+                                                disabled={actionLoading === req._id}
+                                                className="p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full transition disabled:opacity-50"
+                                                title="Xóa lời mời"
+                                            >
+                                                <X size={14} />
+                                            </button>
                                         </div>
                                     </div>
                                 ))}
@@ -373,6 +421,18 @@ export default function FriendPanel({ onSelectRoom }) {
                                                 <span>Đang chờ</span>
                                             </div>
                                         </div>
+                                        <button
+                                            onClick={() => handleCancelRequest(req._id)}
+                                            disabled={actionLoading === req._id}
+                                            className="p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full transition disabled:opacity-50"
+                                            title="Hủy lời mời"
+                                        >
+                                            {actionLoading === req._id ? (
+                                                <Loader2 size={14} className="animate-spin" />
+                                            ) : (
+                                                <X size={14} />
+                                            )}
+                                        </button>
                                     </div>
                                 ))}
                             </div>
@@ -432,10 +492,26 @@ export default function FriendPanel({ onSelectRoom }) {
                                         Bạn bè
                                     </span>
                                 ) : u.friendStatus === 'pending' ? (
-                                    <span className="inline-flex items-center gap-1 text-xs text-yellow-600 bg-yellow-50 px-2 py-1 rounded-full">
-                                        <Clock size={12} />
-                                        {u.isRequester ? 'Đã gửi' : 'Chờ bạn'}
-                                    </span>
+                                    u.isRequester ? (
+                                        <button
+                                            onClick={() => handleCancelRequest(u.friendshipId)}
+                                            disabled={actionLoading === u.friendshipId}
+                                            className="inline-flex items-center gap-1 text-xs text-red-600 bg-red-50 hover:bg-red-100 px-2.5 py-1.5 rounded-full transition disabled:opacity-50"
+                                            title="Hủy lời mời"
+                                        >
+                                            {actionLoading === u.friendshipId ? (
+                                                <Loader2 size={12} className="animate-spin" />
+                                            ) : (
+                                                <X size={12} />
+                                            )}
+                                            Hủy
+                                        </button>
+                                    ) : (
+                                        <span className="inline-flex items-center gap-1 text-xs text-yellow-600 bg-yellow-50 px-2 py-1 rounded-full">
+                                            <Clock size={12} />
+                                            Chờ bạn
+                                        </span>
+                                    )
                                 ) : (
                                     <button
                                         onClick={() => handleSendRequest(u._id)}

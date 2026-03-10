@@ -53,13 +53,6 @@ export function useChat(roomId) {
             }
         };
 
-        // AI response riêng tư — chỉ người hỏi mới nhận được
-        const handleAIMessage = ({ roomId: aiRoomId, message: aiMsg }) => {
-            if (aiRoomId === roomId) {
-                setMessages((prev) => [...prev, aiMsg]);
-            }
-        };
-
         const handleDeleted = ({ messageId }) => {
             setMessages((prev) => prev.map((m) => (m._id === messageId ? { ...m, deleted: true } : m)));
         };
@@ -106,7 +99,6 @@ export function useChat(roomId) {
         on('room:typing', handleTyping);
         on('room:stop-typing', handleStopTyping);
         on('message:translated', handleTranslation);
-        on('receive_ai_message', handleAIMessage);
         on('message:reacted', handleReacted);
 
         // Join room
@@ -118,7 +110,6 @@ export function useChat(roomId) {
             off('room:typing', handleTyping);
             off('room:stop-typing', handleStopTyping);
             off('message:translated', handleTranslation);
-            off('receive_ai_message', handleAIMessage);
             off('message:reacted', handleReacted);
             emit('room:leave', { roomId });
         };

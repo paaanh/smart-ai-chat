@@ -27,11 +27,27 @@ export default function SettingsPage() {
     const [form, setForm] = useState({
         username: user?.username || '',
         phoneNumber: user?.phoneNumber || '',
-        preferredLanguage: user?.preferredLanguage || 'vi',
+        preferredLanguage: localStorage.getItem('preferredLanguage') || user?.preferredLanguage || 'vi',
     });
     const [loading, setLoading] = useState(false);
     const [saved, setSaved] = useState(false);
     const [error, setError] = useState('');
+
+    const handleLanguageChange = async (langCode) => {
+        setForm({ ...form, preferredLanguage: langCode });
+        localStorage.setItem('preferredLanguage', langCode);
+        // Persist to backend immediately so translation service uses correct language
+        const langObj = LANGUAGES.find((l) => l.code === langCode);
+        try {
+            const { data } = await userAPI.updateProfile({
+                preferredLanguage: langCode,
+                preferredLanguageLabel: langObj?.label,
+            });
+            updateUser(data.user);
+        } catch (err) {
+            console.error('Language update error:', err);
+        }
+    };
 
     const handleSave = async () => {
         setError('');
@@ -46,6 +62,7 @@ export default function SettingsPage() {
                 preferredTheme: themeId,
             });
             updateUser(data.user);
+            localStorage.setItem('preferredLanguage', form.preferredLanguage);
             setSaved(true);
             setTimeout(() => setSaved(false), 2000);
         } catch (err) {
@@ -123,7 +140,7 @@ export default function SettingsPage() {
                         </p>
                         <select
                             value={form.preferredLanguage}
-                            onChange={(e) => setForm({ ...form, preferredLanguage: e.target.value })}
+                            onChange={(e) => handleLanguageChange(e.target.value)}
                             className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary-ring)] focus:border-[var(--color-primary-ring)] outline-none transition bg-white"
                         >
                             {LANGUAGES.map((l) => (

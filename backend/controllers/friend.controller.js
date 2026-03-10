@@ -49,7 +49,7 @@ exports.sendRequest = async (req, res, next) => {
             existing.recipient = recipientId;
             existing.status = 'pending';
             await existing.save();
-            const populated = await existing.populate('requester recipient', 'username avatar status preferredLanguage preferredLanguageLabel');
+            const populated = await existing.populate('requester recipient', 'username avatar googlePicture status preferredLanguage preferredLanguageLabel');
 
             // Notify recipient in real-time
             const io = req.app.get('io');
@@ -65,7 +65,7 @@ exports.sendRequest = async (req, res, next) => {
             recipient: recipientId,
         });
 
-        const populated2 = await friendship.populate('requester recipient', 'username avatar status preferredLanguage preferredLanguageLabel');
+        const populated2 = await friendship.populate('requester recipient', 'username avatar googlePicture status preferredLanguage preferredLanguageLabel');
 
         // Notify recipient in real-time
         const io = req.app.get('io');
@@ -102,7 +102,7 @@ exports.acceptRequest = async (req, res, next) => {
         friendship.status = 'accepted';
         await friendship.save();
 
-        const populated = await friendship.populate('requester recipient', 'username avatar status preferredLanguage preferredLanguageLabel');
+        const populated = await friendship.populate('requester recipient', 'username avatar googlePicture status preferredLanguage preferredLanguageLabel');
 
         // Notify both users in real-time
         const io = req.app.get('io');
@@ -138,6 +138,46 @@ exports.rejectRequest = async (req, res, next) => {
     }
 };
 
+// DELETE /api/friends/request/:id — Cancel a pending friend request
+exports.cancelRequest = async (req, res, next) => {
+    try {
+        const friendship = await Friendship.findById(req.params.id);
+        if (!friendship) {
+            return res.status(404).json({ error: 'Lời mời không tồn tại' });
+        }
+
+        if (friendship.status !== 'pending') {
+            return res.status(400).json({ error: 'Chỉ có thể hủy lời mời đang chờ' });
+        }
+
+        const userId = req.user._id.toString();
+        const isRequester = friendship.requester.toString() === userId;
+        const isRecipient = friendship.recipient.toString() === userId;
+
+        if (!isRequester && !isRecipient) {
+            return res.status(403).json({ error: 'Không có quyền' });
+        }
+
+        const otherUserId = isRequester
+            ? friendship.recipient
+            : friendship.requester;
+
+        await Friendship.findByIdAndDelete(req.params.id);
+
+        // Notify the other party in real-time
+        const io = req.app.get('io');
+        if (io) {
+            await emitToUser(io, otherUserId, 'friend:request-cancelled', {
+                friendshipId: friendship._id,
+            });
+        }
+
+        res.json({ message: 'Đã hủy lời mời kết bạn' });
+    } catch (error) {
+        next(error);
+    }
+};
+
 // DELETE /api/friends/:id — Unfriend / cancel request
 exports.removeFriend = async (req, res, next) => {
     try {
@@ -151,7 +191,20 @@ exports.removeFriend = async (req, res, next) => {
             return res.status(403).json({ error: 'Không có quyền' });
         }
 
+        const otherUserId = friendship.requester.toString() === userId
+            ? friendship.recipient
+            : friendship.requester;
+
         await Friendship.findByIdAndDelete(req.params.id);
+
+        // Notify the other party in real-time
+        const io = req.app.get('io');
+        if (io) {
+            await emitToUser(io, otherUserId, 'friend:removed', {
+                friendshipId: friendship._id,
+            });
+        }
+
         res.json({ message: 'Đã hủy kết bạn' });
     } catch (error) {
         next(error);

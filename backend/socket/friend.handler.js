@@ -36,7 +36,7 @@ module.exports = (io, socket) => {
 
             const populated = await friendship.populate(
                 'requester recipient',
-                'username avatar status preferredLanguage preferredLanguageLabel'
+                'username avatar googlePicture status preferredLanguage preferredLanguageLabel'
             );
 
             // Notify recipient in real-time
@@ -65,7 +65,7 @@ module.exports = (io, socket) => {
 
             const populated = await friendship.populate(
                 'requester recipient',
-                'username avatar status preferredLanguage preferredLanguageLabel'
+                'username avatar googlePicture status preferredLanguage preferredLanguageLabel'
             );
 
             // Notify both users
@@ -94,6 +94,36 @@ module.exports = (io, socket) => {
             socket.emit('friend:rejected', { friendshipId });
         } catch (error) {
             console.error('friend:reject error:', error.message);
+        }
+    });
+
+    // ─── friend:cancel-request — Cancel a pending friend request ───────
+    socket.on('friend:cancel-request', async ({ friendshipId }) => {
+        try {
+            const friendship = await Friendship.findById(friendshipId);
+            if (!friendship || friendship.status !== 'pending') return;
+
+            const isRequester = friendship.requester.toString() === userId.toString();
+            const isRecipient = friendship.recipient.toString() === userId.toString();
+            if (!isRequester && !isRecipient) return;
+
+            const otherUserId = isRequester
+                ? friendship.recipient
+                : friendship.requester;
+
+            await Friendship.findByIdAndDelete(friendshipId);
+
+            // Notify the other party
+            const otherUser = await User.findById(otherUserId);
+            if (otherUser?.socketId) {
+                io.to(otherUser.socketId).emit('friend:request-cancelled', {
+                    friendshipId,
+                });
+            }
+
+            socket.emit('friend:request-cancelled', { friendshipId });
+        } catch (error) {
+            console.error('friend:cancel-request error:', error.message);
         }
     });
 };

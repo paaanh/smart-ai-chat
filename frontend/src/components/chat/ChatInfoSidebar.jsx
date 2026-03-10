@@ -55,6 +55,43 @@ export default function ChatInfoSidebar({ room, onClose, onRoomUpdate }) {
         }).catch(() => { });
     }, [isGroup, otherUser]);
 
+    // Listen for realtime block/unblock events from the other user
+    useEffect(() => {
+        if (isGroup || !otherUser?._id) return;
+        const handleBlockUpdated = (payload) => {
+            if (payload.blockedBy === otherUser._id) {
+                // The other user blocked/unblocked us — no change to our "blocked" toggle
+                // but we could reflect it in UI if needed
+            }
+        };
+        on('user:block-updated', handleBlockUpdated);
+        return () => off('user:block-updated', handleBlockUpdated);
+    }, [isGroup, otherUser, on, off]);
+
+    // Listen for realtime nickname updates
+    useEffect(() => {
+        if (!room?._id) return;
+        const handleNicknameUpdated = (payload) => {
+            if (payload.roomId === room._id) {
+                onRoomUpdate?.({ ...room, nicknames: payload.nicknames });
+            }
+        };
+        on('room:nickname-updated', handleNicknameUpdated);
+        return () => off('room:nickname-updated', handleNicknameUpdated);
+    }, [room, on, off, onRoomUpdate]);
+
+    // Listen for realtime member-added updates
+    useEffect(() => {
+        if (!isGroup || !room?._id) return;
+        const handleMemberAdded = (payload) => {
+            if (payload.roomId === room._id && payload.room) {
+                onRoomUpdate?.(payload.room);
+            }
+        };
+        on('room:member-added', handleMemberAdded);
+        return () => off('room:member-added', handleMemberAdded);
+    }, [isGroup, room, on, off, onRoomUpdate]);
+
     // Load pending members for admin
     useEffect(() => {
         if (!isGroup || !isAdmin || !room?._id) return;
@@ -181,8 +218,8 @@ export default function ChatInfoSidebar({ room, onClose, onRoomUpdate }) {
                                 ) : (
                                     <Users size={32} />
                                 )
-                            ) : otherUser?.avatar ? (
-                                <img src={otherUser.avatar} alt={displayName} className="w-full h-full object-cover" />
+                            ) : (otherUser?.avatar || otherUser?.googlePicture) ? (
+                                <img src={otherUser.avatar || otherUser.googlePicture} alt={displayName} className="w-full h-full object-cover" />
                             ) : (
                                 initial
                             )}
@@ -403,7 +440,12 @@ export default function ChatInfoSidebar({ room, onClose, onRoomUpdate }) {
                     roomId={room._id}
                     existingMemberIds={existingMemberIds}
                     onClose={() => setShowAddMember(false)}
-                    onAdded={() => { }}
+                    onAdded={(updatedRoom) => {
+                        if (updatedRoom) {
+                            onRoomUpdate?.(updatedRoom);
+                        }
+                        setShowAddMember(false);
+                    }}
                 />
             )}
         </>

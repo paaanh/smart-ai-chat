@@ -275,7 +275,7 @@ exports.googleLogin = async (req, res, next) => {
             return res.status(401).json({ error: 'Token Google không hợp lệ hoặc đã hết hạn' });
         }
 
-        const { sub: googleId, email, name, picture: avatar } = await googleRes.json();
+        const { sub: googleId, email, name, picture: googlePicture } = await googleRes.json();
 
         if (!googleId || !email) {
             return res.status(400).json({ error: 'Không thể lấy thông tin từ Google' });
@@ -293,9 +293,13 @@ exports.googleLogin = async (req, res, next) => {
             if (!user.googleId) {
                 user.googleId = googleId;
             }
+            // Luôn cập nhật googlePicture từ Google
+            if (googlePicture) {
+                user.googlePicture = googlePicture;
+            }
             // Cập nhật avatar nếu chưa có
-            if (!user.avatar && avatar) {
-                user.avatar = avatar;
+            if (!user.avatar && googlePicture) {
+                user.avatar = googlePicture;
             }
             user.isVerified = true;
             await user.save({ validateModifiedOnly: true });
@@ -306,7 +310,8 @@ exports.googleLogin = async (req, res, next) => {
                 email: normalizedEmail,
                 googleId,
                 provider: 'google',
-                avatar: avatar || '',
+                avatar: googlePicture || '',
+                googlePicture: googlePicture || '',
                 isVerified: true,
             });
         }

@@ -1,5 +1,6 @@
 const Room = require('../models/Room');
 const Message = require('../models/Message');
+const { User } = require('../models/User');
 
 // ─── Tạo room mới ────────────────────────────────────────────────────
 exports.createRoom = async (req, res, next) => {
@@ -18,7 +19,7 @@ exports.createRoom = async (req, res, next) => {
             // Kiểm tra đã có direct room chưa
             const existingRoom = await Room.findDirectRoom(currentUserId, targetUserId);
             if (existingRoom) {
-                const populated = await existingRoom.populate('members.user', 'username avatar status preferredLanguage preferredLanguageLabel');
+                const populated = await existingRoom.populate('members.user', 'username avatar googlePicture status preferredLanguage preferredLanguageLabel');
                 return res.json({ room: populated, existing: true });
             }
 
@@ -30,7 +31,7 @@ exports.createRoom = async (req, res, next) => {
                 ],
             });
 
-            const populated = await room.populate('members.user', 'username avatar status preferredLanguage preferredLanguageLabel');
+            const populated = await room.populate('members.user', 'username avatar googlePicture status preferredLanguage preferredLanguageLabel');
             return res.status(201).json({ room: populated });
         }
 
@@ -54,7 +55,7 @@ exports.createRoom = async (req, res, next) => {
                 members,
             });
 
-            const populated = await room.populate('members.user', 'username avatar status preferredLanguage preferredLanguageLabel');
+            const populated = await room.populate('members.user', 'username avatar googlePicture status preferredLanguage preferredLanguageLabel');
             return res.status(201).json({ room: populated });
         }
 
@@ -78,7 +79,7 @@ exports.getUserRooms = async (req, res, next) => {
 exports.getRoomById = async (req, res, next) => {
     try {
         const room = await Room.findById(req.params.id)
-            .populate('members.user', 'username avatar status preferredLanguage preferredLanguageLabel')
+            .populate('members.user', 'username avatar googlePicture status preferredLanguage preferredLanguageLabel')
             .populate('lastMessage');
 
         if (!room) {
@@ -133,10 +134,10 @@ exports.addMember = async (req, res, next) => {
             return res.status(404).json({ error: 'Group không tồn tại' });
         }
 
-        // Chỉ admin mới thêm được thành viên
+        // Bất kỳ thành viên nào cũng có thể thêm người mới
         const currentMember = room.members.find(m => m.user.toString() === req.user._id.toString());
-        if (!currentMember || currentMember.role !== 'admin') {
-            return res.status(403).json({ error: 'Chỉ admin mới có quyền thêm thành viên' });
+        if (!currentMember) {
+            return res.status(403).json({ error: 'Bạn không phải thành viên của nhóm' });
         }
 
         // Kiểm tra đã là member chưa
@@ -148,8 +149,23 @@ exports.addMember = async (req, res, next) => {
         room.members.push({ user: userId, role: 'member' });
         await room.save();
 
-        const populated = await room.populate('members.user', 'username avatar status preferredLanguage preferredLanguageLabel');
-        res.json({ room: populated });
+        const populated = await room.populate('members.user', 'username avatar googlePicture status preferredLanguage preferredLanguageLabel');
+
+        // Emit realtime event cho tất cả thành viên trong room
+        const io = req.app.get('io');
+        if (io) {
+            for (const member of populated.members) {
+                const memberDoc = await User.findById(member.user._id).select('socketId').lean();
+                if (memberDoc?.socketId) {
+                    io.to(memberDoc.socketId).emit('room:member-added', {
+                        roomId: id,
+                        room: populated,
+                    });
+                }
+            }
+        }
+
+        res.status(200).json({ room: populated });
     } catch (error) {
         next(error);
     }
@@ -222,7 +238,21 @@ exports.setNickname = async (req, res, next) => {
         }
 
         await room.save();
-        res.json({ nicknames: Object.fromEntries(room.nicknames) });
+
+        // Emit realtime nickname update to all room members
+        const io = req.app.get('io');
+        const updatedNicknames = Object.fromEntries(room.nicknames);
+        for (const member of room.members) {
+            const memberDoc = await User.findById(member.user).select('socketId').lean();
+            if (memberDoc?.socketId) {
+                io.to(memberDoc.socketId).emit('room:nickname-updated', {
+                    roomId: id,
+                    nicknames: updatedNicknames,
+                });
+            }
+        }
+
+        res.json({ nicknames: updatedNicknames });
     } catch (error) {
         next(error);
     }
@@ -339,7 +369,7 @@ exports.approveMember = async (req, res, next) => {
         room.members.push({ user: userId, role: 'member' });
         await room.save();
 
-        const populated = await room.populate('members.user', 'username avatar status preferredLanguage preferredLanguageLabel');
+        const populated = await room.populate('members.user', 'username avatar googlePicture status preferredLanguage preferredLanguageLabel');
 
         // Thông báo realtime
         const io = req.app.get('io');
@@ -388,7 +418,7 @@ exports.getPendingMembers = async (req, res, next) => {
     try {
         const { id } = req.params;
 
-        const room = await Room.findById(id).populate('pendingMembers', 'username avatar');
+        const room = await Room.findById(id).populate('pendingMembers', 'username avatar googlePicture');
         if (!room || room.type !== 'group') {
             return res.status(404).json({ error: 'Nhóm không tồn tại' });
         }
@@ -429,7 +459,7 @@ exports.updateGroupSettings = async (req, res, next) => {
 
         await room.save();
 
-        const populated = await room.populate('members.user', 'username avatar status preferredLanguage preferredLanguageLabel');
+        const populated = await room.populate('members.user', 'username avatar googlePicture status preferredLanguage preferredLanguageLabel');
 
         // Broadcast cập nhật realtime cho tất cả thành viên đang online
         const io = req.app.get('io');

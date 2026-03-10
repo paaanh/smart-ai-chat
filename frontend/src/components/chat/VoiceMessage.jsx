@@ -71,7 +71,7 @@ export default function VoiceMessage({ url, isOwn }) {
                 className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition
                     ${isOwn
                         ? 'bg-white/25 hover:bg-white/35 text-white'
-                        : 'bg-[var(--color-primary)] bg-opacity-15 hover:bg-opacity-25 text-[var(--color-primary)]'
+                        : 'bg-[var(--color-primary-light)] hover:bg-[var(--color-primary-medium)] text-[var(--color-primary)]'
                     }`}
             >
                 {playing ? <Pause size={16} /> : <Play size={16} className="ml-0.5" />}

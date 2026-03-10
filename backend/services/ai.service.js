@@ -50,17 +50,23 @@ const rateLimiter = {
 
 // ─── Init AI ──────────────────────────────────────────────────────────
 const initAI = () => {
-    if (!process.env.GEMINI_API_KEY) {
-        console.warn('⚠️ GEMINI_API_KEY chưa được cấu hình. AI features sẽ bị vô hiệu hóa.');
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+        console.error('❌ [AI Init] GEMINI_API_KEY is MISSING. AI features will be disabled.');
+        console.error('❌ [AI Init] Set GEMINI_API_KEY in Render Environment Variables.');
         return;
     }
 
-    genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    // Log key prefix để verify đúng key (không log toàn bộ)
+    console.log(`🔑 [AI Init] GEMINI_API_KEY found (starts with: ${apiKey.substring(0, 8)}..., length: ${apiKey.length})`);
 
-    // Model cho chat/bot responses
-    chatModel = genAI.getGenerativeModel({
-        model: 'gemini-2.5-flash',
-        systemInstruction: `Bạn là "Smart AI Assistant" - trợ lý thông minh trong nhóm chat. Quy tắc:
+    try {
+        genAI = new GoogleGenerativeAI(apiKey);
+
+        // Model cho chat/bot responses
+        chatModel = genAI.getGenerativeModel({
+            model: 'gemini-2.5-flash',
+            systemInstruction: `Bạn là "Smart AI Assistant" - trợ lý thông minh trong nhóm chat. Quy tắc:
 
 1. TRẢ LỜI ngắn gọn, lịch sự, đúng trọng tâm theo ngữ cảnh cuộc trò chuyện.
 2. TÓM TẮT: Khi được yêu cầu "tóm tắt" / "summary", tổng hợp lịch sử chat thành gạch đầu dòng.
@@ -68,14 +74,20 @@ const initAI = () => {
 4. NGÔN NGỮ: Trả lời bằng ngôn ngữ mà người dùng sử dụng.
 5. KHÔNG bịa đặt thông tin, nếu không biết hãy nói rõ.
 6. Format tin nhắn dễ đọc, dùng emoji khi phù hợp.`,
-    });
+        });
 
-    // Model riêng cho translation (lightweight, không cần system instruction nặng)
-    translationModel = genAI.getGenerativeModel({
-        model: 'gemini-2.5-flash',
-    });
+        // Model riêng cho translation (lightweight, không cần system instruction nặng)
+        translationModel = genAI.getGenerativeModel({
+            model: 'gemini-2.5-flash',
+        });
 
-    console.log('✅ Gemini AI initialized (model: gemini-2.5-flash)');
+        console.log('✅ [AI Init] Gemini AI initialized successfully (model: gemini-2.5-flash)');
+    } catch (error) {
+        console.error('❌ [AI Init] Failed to initialize Gemini AI:', error.message);
+        console.error('❌ [AI Init] Stack:', error.stack);
+        chatModel = null;
+        translationModel = null;
+    }
 };
 
 // ─── Cache helpers ────────────────────────────────────────────────────
@@ -259,9 +271,20 @@ No markdown, no code blocks, no explanations.`;
 
 // ─── AI Bot: Trả lời câu hỏi dựa trên context ───────────────────────
 const generateAIResponse = async (userMessage, roomId) => {
-    if (!chatModel) return null;
+    if (!chatModel) {
+        console.error('❌ [AI Chat] chatModel is null — GEMINI_API_KEY missing or initAI() failed');
+        return '⚠️ AI chưa được khởi tạo. Vui lòng kiểm tra cấu hình server.';
+    }
+
+    if (!rateLimiter.canMakeRequest()) {
+        const waitSeconds = Math.ceil(rateLimiter.getWaitTime() / 1000);
+        console.warn(`⏳ [AI Chat] Rate limit reached. Wait ~${waitSeconds}s`);
+        return `⚠️ AI đang bận, thử lại sau ${waitSeconds} giây nhé!`;
+    }
 
     try {
+        console.log(`🤖 [AI Chat] Generating response for room ${roomId}, prompt: "${userMessage.substring(0, 60)}..."`);
+
         // Lấy 20 tin nhắn gần nhất làm context
         const recentMessages = await Message.find({
             room: roomId,
@@ -295,20 +318,37 @@ Hãy phản hồi hữu ích, ngắn gọn (tối đa 150 từ). Nếu tin nhắ
             return res.response.text().trim();
         });
 
+        console.log(`✅ [AI Chat] Response generated (${result.length} chars)`);
         return result;
     } catch (error) {
-        console.error('AI response error:', error.message);
+        console.error('❌ [AI Chat] Error:', error.message);
+        console.error('❌ [AI Chat] Status:', error.status || 'N/A');
+        console.error('❌ [AI Chat] Stack:', error.stack);
 
-        if (error.message?.includes('Rate limit')) {
-            return '⚠️ AI đang bận, vui lòng thử lại sau ít phút.';
+        if (error.status === 429 || error.message?.includes('429') || error.message?.includes('Rate limit') || error.message?.includes('quota')) {
+            return '⚠️ AI đang bận, thử lại sau nhé!';
         }
-        return null;
+        if (error.status === 403 || error.message?.includes('403') || error.message?.includes('API key')) {
+            return '⚠️ API key không hợp lệ hoặc đã bị vô hiệu hóa. Liên hệ admin.';
+        }
+        if (error.message?.includes('SAFETY')) {
+            return '⚠️ Nội dung bị chặn bởi bộ lọc an toàn. Hãy thử câu hỏi khác.';
+        }
+        return '⚠️ AI gặp lỗi, vui lòng thử lại sau.';
     }
 };
 
 // ─── AI Bot: Tóm tắt cuộc trò chuyện ─────────────────────────────────
 const summarizeConversation = async (roomId, messageCount = 50) => {
-    if (!chatModel) return null;
+    if (!chatModel) {
+        console.error('❌ [AI Summarize] chatModel is null — GEMINI_API_KEY missing or initAI() failed');
+        return '⚠️ AI chưa được khởi tạo. Vui lòng kiểm tra cấu hình server.';
+    }
+
+    if (!rateLimiter.canMakeRequest()) {
+        console.warn('⏳ [AI Summarize] Rate limit reached');
+        return '⚠️ AI đang bận, thử lại sau nhé!';
+    }
 
     try {
         const messages = await Message.find({
@@ -341,8 +381,14 @@ Tóm tắt:`;
 
         return result;
     } catch (error) {
-        console.error('Summarize error:', error.message);
-        return null;
+        console.error('❌ [AI Summarize] Error:', error.message);
+        console.error('❌ [AI Summarize] Status:', error.status || 'N/A');
+        console.error('❌ [AI Summarize] Stack:', error.stack);
+
+        if (error.status === 429 || error.message?.includes('429') || error.message?.includes('quota')) {
+            return '⚠️ AI đang bận, thử lại sau nhé!';
+        }
+        return '⚠️ AI gặp lỗi khi tóm tắt. Vui lòng thử lại.';
     }
 };
 
@@ -358,11 +404,102 @@ const getAIStats = () => ({
     },
 });
 
+// ─── AI: Tóm tắt cuộc gọi từ audio ──────────────────────────────────
+const summarizeCallAudio = async (audioBase64, mimeType = 'audio/webm') => {
+    if (!chatModel) {
+        console.error('❌ [AI Call] chatModel is null');
+        return '⚠️ AI chưa được khởi tạo.';
+    }
+
+    if (!rateLimiter.canMakeRequest()) {
+        return '⚠️ AI đang bận, thử lại sau nhé!';
+    }
+
+    try {
+        console.log(`🎙️ [AI Call] Summarizing call audio (${Math.round(audioBase64.length / 1024)}KB)`);
+
+        const result = await callWithRetry(async () => {
+            const res = await chatModel.generateContent([
+                {
+                    inlineData: {
+                        data: audioBase64,
+                        mimeType,
+                    },
+                },
+                {
+                    text: `Đây là bản ghi âm một cuộc gọi giữa hai người. Hãy:
+1. Tóm tắt nội dung chính của cuộc gọi thành các gạch đầu dòng ngắn gọn.
+2. Ghi nhận các quyết định hoặc hành động được thống nhất (nếu có).
+3. Trả lời bằng ngôn ngữ mà người nói sử dụng trong cuộc gọi.
+Nếu không nghe rõ hoặc audio quá ngắn, hãy ghi chú rõ ràng.`,
+                },
+            ]);
+            return res.response.text().trim();
+        });
+
+        console.log(`✅ [AI Call] Summary generated (${result.length} chars)`);
+        return result;
+    } catch (error) {
+        console.error('❌ [AI Call] Error:', error.message);
+        if (error.status === 429 || error.message?.includes('429')) {
+            return '⚠️ AI đang bận, thử lại sau nhé!';
+        }
+        return null;
+    }
+};
+
+// ─── AI: Phân tích ảnh chụp màn hình ──────────────────────────────────────────
+const analyzeScreenImage = async (imageBase64) => {
+    if (!chatModel) {
+        console.error('❌ [AI Screen] chatModel is null');
+        return '⚠️ AI chưa được khởi tạo.';
+    }
+
+    if (!rateLimiter.canMakeRequest()) {
+        return '⚠️ AI đang bận, thử lại sau nhé!';
+    }
+
+    try {
+        console.log(`💻 [AI Screen] Analyzing screen image (${Math.round(imageBase64.length / 1024)}KB)`);
+
+        const result = await callWithRetry(async () => {
+            const res = await chatModel.generateContent([
+                {
+                    inlineData: {
+                        data: imageBase64,
+                        mimeType: 'image/jpeg',
+                    },
+                },
+                {
+                    text: `Đây là ảnh chụp màn hình đang được chia sẻ trong cuộc gọi video. Hãy:
+1. Mô tả ngắn gọn nội dung hiển thị trên màn hình.
+2. Nếu có văn bản, hãy trích xuất và tóm tắt các điểm chính.
+3. Nếu có code, hãy nhận diện ngôn ngữ và mô tả chức năng.
+4. Nếu có bảng biểu/đồ thị, hãy tóm tắt dữ liệu chính.
+5. Trả lời bằng ngôn ngữ Việt Nam, dễ hiểu, ngắn gọn.`,
+                },
+            ]);
+            return res.response.text().trim();
+        });
+
+        console.log(`✅ [AI Screen] Analysis done (${result.length} chars)`);
+        return result;
+    } catch (error) {
+        console.error('❌ [AI Screen] Error:', error.message);
+        if (error.status === 429 || error.message?.includes('429')) {
+            return '⚠️ AI đang bận, thử lại sau nhé!';
+        }
+        return null;
+    }
+};
+
 module.exports = {
     initAI,
     translateText,
     translateBatch,
     generateAIResponse,
     summarizeConversation,
+    summarizeCallAudio,
+    analyzeScreenImage,
     getAIStats,
 };

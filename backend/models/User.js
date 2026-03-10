@@ -56,6 +56,10 @@ const userSchema = new mongoose.Schema({
         type: String,
         default: '',
     },
+    googlePicture: {
+        type: String,
+        default: '',
+    },
     coverPicture: {
         type: String,
         default: '',

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { roomAPI } from '../../services/api';
+import { roomAPI, userActionsAPI } from '../../services/api';
 import { useAuth } from '../../hooks/useAuth';
 import { useSocket } from '../../hooks/useSocket';
 import { useCall } from '../../hooks/useCall';
@@ -16,20 +16,24 @@ import {
     Loader2,
     ChevronUp,
     Info,
+    Ban,
 } from 'lucide-react';
 
-export default function ChatWindow({ roomId, onBack, onToggleInfo }) {
+export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled, onAIToggle, autoTranslate }) {
     const { user } = useAuth();
-    const { onlineUsers, on, off } = useSocket();
+    const { onlineUsers, on, off, emit } = useSocket();
     const { initiateCall } = useCall();
     const { messages, loading, hasMore, typingUsers, sendMessage, sendLocation, deleteMessage, loadMore, startTyping, reactToMessage } = useChat(roomId);
     const { toggleBot, summarize } = useAI(roomId);
 
     const [room, setRoom] = useState(null);
-    const [aiBotEnabled, setAiBotEnabled] = useState(false);
+    const [iBlockedThem, setIBlockedThem] = useState(false);
+    const [theyBlockedMe, setTheyBlockedMe] = useState(false);
+    const [localTranslations, setLocalTranslations] = useState({});
     const messagesEndRef = useRef(null);
     const containerRef = useRef(null);
     const [autoScroll, setAutoScroll] = useState(true);
+    const translatedIdsRef = useRef(new Set());
 
     // Load room info
     useEffect(() => {
@@ -42,13 +46,26 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo }) {
                 const myMember = data.room.members?.find(
                     (m) => (m.user?._id || m.user) === user?._id
                 );
-                setAiBotEnabled(myMember?.aiBotEnabled || false);
+                onAIToggle?.(myMember?.aiBotEnabled || false);
+
+                // Check block status for direct chats
+                if (data.room.type !== 'group') {
+                    const other = data.room.members?.find(
+                        (m) => (m.user?._id || m.user) !== user?._id
+                    );
+                    const otherId = other?.user?._id || other?.user;
+                    if (otherId) {
+                        const { data: blockData } = await userActionsAPI.getBlocked();
+                        const blockedIds = (blockData.blockedUsers || []).map((u) => u._id || u);
+                        setIBlockedThem(blockedIds.includes(otherId));
+                    }
+                }
             } catch (err) {
                 console.error('Load room error:', err);
             }
         };
         loadRoom();
-    }, [roomId, user]);
+    }, [roomId, user, onAIToggle]);
 
     // Listen for real-time group settings updates
     useEffect(() => {
@@ -72,12 +89,92 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo }) {
         return () => off('room:settings-updated', handleSettingsUpdate);
     }, [roomId, on, off]);
 
+    // Listen for realtime nickname updates
+    useEffect(() => {
+        if (!roomId) return;
+        const handleNicknameUpdated = (payload) => {
+            if (payload.roomId === roomId) {
+                setRoom((prev) =>
+                    prev ? { ...prev, nicknames: payload.nicknames } : prev
+                );
+            }
+        };
+        on('room:nickname-updated', handleNicknameUpdated);
+        return () => off('room:nickname-updated', handleNicknameUpdated);
+    }, [roomId, on, off]);
+
+    // Listen for realtime block/unblock updates
+    useEffect(() => {
+        if (!room || room.type === 'group') return;
+        const other = room.members?.find((m) => (m.user?._id || m.user) !== user?._id);
+        const otherId = other?.user?._id || other?.user;
+        if (!otherId) return;
+
+        const handleBlockUpdated = (payload) => {
+            // The other user blocked/unblocked me
+            if (payload.blockedBy === otherId) {
+                setTheyBlockedMe(payload.action === 'block');
+            }
+        };
+        on('user:block-updated', handleBlockUpdated);
+        return () => off('user:block-updated', handleBlockUpdated);
+    }, [room, user, on, off]);
+
     // Auto-scroll
     useEffect(() => {
         if (autoScroll) {
             messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         }
     }, [messages, autoScroll]);
+
+    // Clear local translations when switching rooms
+    useEffect(() => {
+        setLocalTranslations({});
+        translatedIdsRef.current = new Set();
+    }, [roomId]);
+
+    // Auto-translate incoming messages (LOCAL ONLY — never stored in DB)
+    useEffect(() => {
+        if (!autoTranslate || !roomId) return;
+
+        const handleLocalTranslation = ({ messageId, translation }) => {
+            if (translation) {
+                setLocalTranslations((prev) => ({ ...prev, [messageId]: translation }));
+            }
+        };
+
+        on('ai:translate-result', handleLocalTranslation);
+        return () => off('ai:translate-result', handleLocalTranslation);
+    }, [autoTranslate, roomId, on, off]);
+
+    // Request translation for new messages when autoTranslate is ON
+    useEffect(() => {
+        if (!autoTranslate || !messages.length) return;
+
+        const myLang = user?.preferredLanguage || localStorage.getItem('preferredLanguage') || 'vi';
+
+        for (const msg of messages) {
+            const senderId = msg.sender?._id || msg.sender;
+            if (senderId === user?._id) continue; // Skip own messages
+            if (msg.type !== 'text' && msg.type !== undefined) continue; // Only text
+            if (!msg.content || msg.content.trim().length < 2) continue;
+            if (msg.deleted) continue;
+            if (msg.aiMetadata?.isAIResponse) continue;
+            if (translatedIdsRef.current.has(msg._id)) continue;
+            if (localTranslations[msg._id]) continue;
+            // Check if server already has a translation in my language
+            const hasServerTranslation = msg.translations?.some((t) => t.language === myLang);
+            if (hasServerTranslation) continue;
+
+            translatedIdsRef.current.add(msg._id);
+            emit('ai:translate', {
+                messageId: msg._id,
+                content: msg.content,
+                targetLanguage: myLang,
+                sourceLanguage: msg.originalLanguage,
+            });
+        }
+    }, [autoTranslate, messages, user, emit, localTranslations]);
 
     // Detect scroll position
     const handleScroll = useCallback(() => {
@@ -106,24 +203,37 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo }) {
         const other = room.members?.find((m) => (m.user?._id || m.user) !== user?._id);
         const otherUser = other?.user;
         const isOnline = otherUser?._id && onlineUsers.includes(otherUser._id);
+        // Hiển thị nickname nếu có, fallback về username
+        const otherNickname = otherUser?._id && room.nicknames?.[otherUser._id];
         return {
-            name: otherUser?.username || 'Unknown',
+            name: otherNickname || otherUser?.username || 'Unknown',
             subtitle: isOnline ? 'Đang hoạt động' : 'Offline',
             isOnline,
             isGroup: false,
             otherUserId: otherUser?._id,
+            avatar: otherUser?.avatar || otherUser?.googlePicture,
         };
     };
 
     const display = getRoomDisplay();
 
     const handleToggleAI = (enabled) => {
-        setAiBotEnabled(enabled);
+        onAIToggle?.(enabled);
         toggleBot(enabled);
     };
 
     const handleCall = (type) => {
-        if (display.otherUserId) {
+        if (display.isGroup) {
+            // Group call: pass all member IDs except self
+            const memberIds = (room?.members || [])
+                .map(m => m.user?._id || m.user)
+                .filter(id => id && id !== user?._id);
+            initiateCall(roomId, null, type, '', {
+                isGroup: true,
+                targetUserIds: memberIds,
+                roomName: display.name,
+            });
+        } else if (display.otherUserId) {
             initiateCall(roomId, display.otherUserId, type, display.name);
         }
     };
@@ -164,6 +274,8 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo }) {
                             ) : (
                                 <Users size={18} />
                             )
+                        ) : display.avatar ? (
+                            <img src={display.avatar} alt={display.name} className="w-full h-full object-cover" />
                         ) : (
                             display.name.charAt(0).toUpperCase()
                         )}
@@ -191,24 +303,21 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo }) {
                         onSummarize={() => summarize(20)}
                     />
 
-                    {!display.isGroup && (
-                        <>
-                            <button
-                                onClick={() => handleCall('audio')}
-                                className="p-2 hover:bg-gray-100 rounded-full transition text-gray-600"
-                                title="Gọi thoại"
-                            >
-                                <Phone size={18} />
-                            </button>
-                            <button
-                                onClick={() => handleCall('video')}
-                                className="p-2 hover:bg-gray-100 rounded-full transition text-gray-600"
-                                title="Gọi video"
-                            >
-                                <Video size={18} />
-                            </button>
-                        </>
-                    )}
+                    {/* Call buttons - available for both 1-1 and group */}
+                    <button
+                        onClick={() => handleCall('audio')}
+                        className="p-2 hover:bg-gray-100 rounded-full transition text-gray-600"
+                        title="Gọi thoại"
+                    >
+                        <Phone size={18} />
+                    </button>
+                    <button
+                        onClick={() => handleCall('video')}
+                        className="p-2 hover:bg-gray-100 rounded-full transition text-gray-600"
+                        title="Gọi video"
+                    >
+                        <Video size={18} />
+                    </button>
 
                     <button
                         onClick={() => onToggleInfo?.(room)}
@@ -226,38 +335,78 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo }) {
                 onScroll={handleScroll}
                 className="flex-1 overflow-y-auto px-4 py-3 scrollbar-thin bg-gray-50"
             >
-                {/* Load more */}
-                {hasMore && (
-                    <div className="text-center mb-4">
-                        <button
-                            onClick={loadMore}
-                            disabled={loading}
-                            className="inline-flex items-center gap-1 text-sm text-[var(--color-primary)] hover:text-[var(--color-primary-hover)] disabled:opacity-50"
+                {/* Empty conversation — Profile Header */}
+                {!loading && messages.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full animate-[fadeIn_0.5s_ease]">
+                        {/* Avatar */}
+                        <div
+                            className="w-24 h-24 rounded-full flex items-center justify-center text-white text-3xl font-bold overflow-hidden border-4 border-[var(--color-primary-medium)] shadow-lg mb-4"
+                            style={{ backgroundColor: display.isGroup ? '#8b5cf6' : 'var(--color-primary)' }}
                         >
-                            {loading ? (
-                                <Loader2 size={14} className="animate-spin" />
+                            {display.isGroup ? (
+                                room?.groupAvatar ? (
+                                    <img src={room.groupAvatar} alt={display.name} className="w-full h-full object-cover" />
+                                ) : (
+                                    <Users size={40} />
+                                )
+                            ) : display.avatar ? (
+                                <img src={display.avatar} alt={display.name} className="w-full h-full object-cover" />
                             ) : (
-                                <ChevronUp size={14} />
+                                display.name?.charAt(0).toUpperCase()
                             )}
-                            Tải tin nhắn cũ hơn
-                        </button>
-                    </div>
-                )}
+                        </div>
 
-                {/* Messages list */}
-                {messages.map((msg) => (
-                    <MessageBubble
-                        key={msg._id}
-                        message={msg}
-                        isOwn={
-                            (msg.sender?._id || msg.sender) === user?._id &&
-                            msg.type !== 'system' &&
-                            !msg.aiMetadata?.isAIResponse
-                        }
-                        onDelete={deleteMessage}
-                        onReact={reactToMessage}
-                    />
-                ))}
+                        {/* Name */}
+                        <h2 className="text-xl font-bold text-gray-900 mb-1">{display.name}</h2>
+
+                        {/* Subtitle */}
+                        <p className="text-sm text-gray-500 text-center max-w-xs leading-relaxed">
+                            {display.isGroup
+                                ? `Chào mừng mọi người đến với nhóm ${display.name}! 🎉\n${room?.members?.length || 0} thành viên`
+                                : 'Các bạn giờ đã là bạn bè trên SmartAI 🎉\nHãy bắt đầu trò chuyện ngay!'}
+                        </p>
+
+                        {/* Wave emoji hint */}
+                        <div className="mt-6 text-4xl animate-bounce">👋</div>
+                    </div>
+                ) : (
+                    <>
+                        {/* Load more */}
+                        {hasMore && (
+                            <div className="text-center mb-4">
+                                <button
+                                    onClick={loadMore}
+                                    disabled={loading}
+                                    className="inline-flex items-center gap-1 text-sm text-[var(--color-primary)] hover:text-[var(--color-primary-hover)] disabled:opacity-50"
+                                >
+                                    {loading ? (
+                                        <Loader2 size={14} className="animate-spin" />
+                                    ) : (
+                                        <ChevronUp size={14} />
+                                    )}
+                                    Tải tin nhắn cũ hơn
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Messages list */}
+                        {messages.map((msg) => (
+                            <MessageBubble
+                                key={msg._id}
+                                message={msg}
+                                nicknames={room?.nicknames}
+                                isOwn={
+                                    (msg.sender?._id || msg.sender) === user?._id &&
+                                    msg.type !== 'system' &&
+                                    !msg.aiMetadata?.isAIResponse
+                                }
+                                localTranslation={localTranslations[msg._id]}
+                                onDelete={deleteMessage}
+                                onReact={reactToMessage}
+                            />
+                        ))}
+                    </>
+                )}
 
                 {/* Typing indicator */}
                 {typingUsers.length > 0 && (
@@ -275,13 +424,39 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo }) {
                 <div ref={messagesEndRef} />
             </div>
 
-            {/* Input */}
-            <MessageInput
-                onSend={sendMessage}
-                onSendLocation={sendLocation}
-                onTyping={startTyping}
-                disabled={!room}
-            />
+            {/* Input or Block notice */}
+            {iBlockedThem ? (
+                <div className="px-4 py-4 border-t border-gray-200 bg-gray-50 text-center">
+                    <div className="flex items-center justify-center gap-2 text-gray-500 mb-2">
+                        <Ban size={16} />
+                        <span className="text-sm">Bạn đã chặn người dùng này</span>
+                    </div>
+                    <button
+                        onClick={async () => {
+                            const other = room?.members?.find((m) => (m.user?._id || m.user) !== user?._id);
+                            const otherId = other?.user?._id || other?.user;
+                            if (otherId) {
+                                await userActionsAPI.unblock(otherId);
+                                setIBlockedThem(false);
+                            }
+                        }}
+                        className="text-sm text-[var(--color-primary)] hover:underline font-medium"
+                    >
+                        Bỏ chặn
+                    </button>
+                </div>
+            ) : theyBlockedMe ? (
+                <div className="px-4 py-4 border-t border-gray-200 bg-gray-50 text-center">
+                    <p className="text-sm text-gray-500">Bạn không thể gửi tin nhắn cho người này</p>
+                </div>
+            ) : (
+                <MessageInput
+                    onSend={sendMessage}
+                    onSendLocation={sendLocation}
+                    onTyping={startTyping}
+                    disabled={!room}
+                />
+            )}
         </div>
     );
 }

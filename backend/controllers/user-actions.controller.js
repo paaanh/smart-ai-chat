@@ -28,6 +28,15 @@ exports.blockUser = async (req, res, next) => {
         currentUser.blockedUsers.push(userId);
         await currentUser.save();
 
+        // Emit realtime block notification to the blocked user
+        const io = req.app.get('io');
+        if (targetUser.socketId) {
+            io.to(targetUser.socketId).emit('user:block-updated', {
+                blockedBy: currentUserId.toString(),
+                action: 'block',
+            });
+        }
+
         res.json({ message: 'Đã chặn user', blockedUsers: currentUser.blockedUsers });
     } catch (error) {
         next(error);
@@ -54,6 +63,16 @@ exports.unblockUser = async (req, res, next) => {
         );
         await currentUser.save();
 
+        // Emit realtime unblock notification to the unblocked user
+        const io = req.app.get('io');
+        const targetUser = await User.findById(userId).select('socketId').lean();
+        if (targetUser?.socketId) {
+            io.to(targetUser.socketId).emit('user:block-updated', {
+                blockedBy: currentUserId.toString(),
+                action: 'unblock',
+            });
+        }
+
         res.json({ message: 'Đã bỏ chặn', blockedUsers: currentUser.blockedUsers });
     } catch (error) {
         next(error);
@@ -64,7 +83,7 @@ exports.unblockUser = async (req, res, next) => {
 exports.getBlockedUsers = async (req, res, next) => {
     try {
         const currentUser = await User.findById(req.user._id)
-            .populate('blockedUsers', 'username avatar');
+            .populate('blockedUsers', 'username avatar googlePicture');
 
         res.json({ blockedUsers: currentUser.blockedUsers });
     } catch (error) {

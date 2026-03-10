@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
+import { useAI } from '../hooks/useAI';
 import RoomList from '../components/room/RoomList';
 import ChatWindow from '../components/chat/ChatWindow';
 import ChatInfoSidebar from '../components/chat/ChatInfoSidebar';
 import FriendPanel from '../components/friend/FriendPanel';
+import MiniAIChatBox from '../components/chat/MiniAIChatBox';
 // CallModal + IncomingCallModal are now rendered globally in App.jsx
 import { LogOut, Settings, MessageCircle, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -14,7 +16,12 @@ export default function ChatPage() {
     const [activeRoomId, setActiveRoomId] = useState(null);
     const [showSidebar, setShowSidebar] = useState(true);
     const [sidebarTab, setSidebarTab] = useState('chats'); // 'chats' | 'friends'
+    const [pendingRequestCount, setPendingRequestCount] = useState(0);
+    const handleRequestCountChange = useCallback((count) => setPendingRequestCount(count), []);
     const [infoRoom, setInfoRoom] = useState(null); // room object for ChatInfoSidebar
+    const [aiBotEnabled, setAiBotEnabled] = useState(false);
+    const [autoTranslate, setAutoTranslate] = useState(false);
+    const { toggleBot } = useAI(activeRoomId);
 
     const handleSelectRoom = (roomId) => {
         setActiveRoomId(roomId);
@@ -90,23 +97,42 @@ export default function ChatPage() {
                     </button>
                     <button
                         onClick={() => setSidebarTab('friends')}
-                        className={`flex-1 py-2.5 text-sm font-medium transition flex items-center justify-center gap-1.5 ${sidebarTab === 'friends'
+                        className={`flex-1 py-2.5 text-sm font-medium transition flex items-center justify-center gap-1.5 relative ${sidebarTab === 'friends'
                             ? 'text-[var(--color-primary)] border-b-2 border-[var(--color-primary)]'
                             : 'text-gray-500 hover:text-gray-700'
                             }`}
                     >
                         <Users size={16} />
                         Bạn bè
+                        {pendingRequestCount > 0 && (
+                            <span className="absolute -top-0.5 right-2 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                                {pendingRequestCount > 99 ? '99+' : pendingRequestCount}
+                            </span>
+                        )}
                     </button>
                 </div>
 
-                {/* Room list or Friend panel */}
+                {/* Mini AI ChatBox — shows when AI bot is enabled */}
+                {aiBotEnabled && activeRoomId && (
+                    <MiniAIChatBox
+                        roomId={activeRoomId}
+                        onClose={() => {
+                            setAiBotEnabled(false);
+                            setAutoTranslate(false);
+                            toggleBot(false);
+                        }}
+                        onAutoTranslateChange={setAutoTranslate}
+                    />
+                )}
+
+                {/* Room list or Friend panel — both always mounted for socket listeners */}
                 <div className="flex-1 overflow-hidden">
-                    {sidebarTab === 'chats' ? (
+                    <div className={sidebarTab === 'chats' ? 'h-full' : 'hidden'}>
                         <RoomList activeRoomId={activeRoomId} onSelectRoom={handleSelectRoom} />
-                    ) : (
-                        <FriendPanel onSelectRoom={handleSelectRoom} />
-                    )}
+                    </div>
+                    <div className={sidebarTab === 'friends' ? 'h-full' : 'hidden'}>
+                        <FriendPanel onSelectRoom={handleSelectRoom} onRequestCountChange={handleRequestCountChange} />
+                    </div>
                 </div>
             </div>
 
@@ -115,7 +141,7 @@ export default function ChatPage() {
                 className={`${!showSidebar ? 'flex' : 'hidden'
                     } lg:flex flex-1 min-w-0`}
             >
-                <ChatWindow roomId={activeRoomId} onBack={handleBack} onToggleInfo={handleToggleInfo} />
+                <ChatWindow roomId={activeRoomId} onBack={handleBack} onToggleInfo={handleToggleInfo} aiBotEnabled={aiBotEnabled} onAIToggle={setAiBotEnabled} autoTranslate={autoTranslate} />
 
                 {/* Chat Info Sidebar */}
                 {infoRoom && (

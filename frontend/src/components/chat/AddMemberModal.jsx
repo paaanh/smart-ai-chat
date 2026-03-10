@@ -24,11 +24,12 @@ export default function AddMemberModal({ roomId, existingMemberIds, onClose, onA
     }, []);
 
     const handleAdd = async (userId) => {
+        console.log('Adding member:', userId);
         setAddingId(userId);
         try {
-            await roomAPI.requestJoin(roomId, userId);
+            const { data } = await roomAPI.addMember(roomId, userId);
             setAddedIds((prev) => new Set(prev).add(userId));
-            onAdded?.(userId);
+            onAdded?.(data.room);
         } catch (err) {
             console.error('Add member error:', err);
         } finally {

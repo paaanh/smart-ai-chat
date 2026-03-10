@@ -104,7 +104,7 @@ roomSchema.statics.findDirectRoom = async function (userId1, userId2) {
 // ─── Static: Lấy tất cả room của 1 user ─────────────────────────────
 roomSchema.statics.getUserRooms = async function (userId) {
     return this.find({ 'members.user': userId })
-        .populate('members.user', 'username avatar status preferredLanguage preferredLanguageLabel')
+        .populate('members.user', 'username avatar googlePicture status preferredLanguage preferredLanguageLabel')
         .populate('lastMessage')
         .sort({ updatedAt: -1 });
 };

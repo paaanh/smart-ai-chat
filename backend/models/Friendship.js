@@ -31,8 +31,8 @@ friendshipSchema.statics.getFriends = async function (userId) {
             { recipient: userId, status: 'accepted' },
         ],
     })
-        .populate('requester', 'username avatar status preferredLanguage preferredLanguageLabel')
-        .populate('recipient', 'username avatar status preferredLanguage preferredLanguageLabel')
+        .populate('requester', 'username avatar googlePicture status preferredLanguage preferredLanguageLabel')
+        .populate('recipient', 'username avatar googlePicture status preferredLanguage preferredLanguageLabel')
         .lean();
 
     return friendships.map((f) => {
@@ -46,7 +46,7 @@ friendshipSchema.statics.getFriends = async function (userId) {
 // Get pending requests received by user
 friendshipSchema.statics.getPendingRequests = async function (userId) {
     return this.find({ recipient: userId, status: 'pending' })
-        .populate('requester', 'username avatar status preferredLanguage preferredLanguageLabel')
+        .populate('requester', 'username avatar googlePicture status preferredLanguage preferredLanguageLabel')
         .sort({ createdAt: -1 })
         .lean();
 };
@@ -54,7 +54,7 @@ friendshipSchema.statics.getPendingRequests = async function (userId) {
 // Get sent requests by a user
 friendshipSchema.statics.getSentRequests = async function (userId) {
     return this.find({ requester: userId, status: 'pending' })
-        .populate('recipient', 'username avatar status preferredLanguage preferredLanguageLabel')
+        .populate('recipient', 'username avatar googlePicture status preferredLanguage preferredLanguageLabel')
         .sort({ createdAt: -1 })
         .lean();
 };

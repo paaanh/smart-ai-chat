@@ -2,7 +2,6 @@ const Room = require('../models/Room');
 const Message = require('../models/Message');
 const { User } = require('../models/User');
 const { translateForRoom, getTranslationForUser } = require('../services/translation.service');
-const { generateAIResponse } = require('../services/ai.service');
 
 module.exports = (io, socket) => {
     const userId = socket.user._id;
@@ -24,13 +23,33 @@ module.exports = (io, socket) => {
             const isMember = room.members.some(m => m.user.toString() === userId.toString());
             if (!isMember) return socket.emit('error', { message: 'Bạn không phải thành viên' });
 
+            // ── Kiểm tra block: nếu bất kỳ thành viên nào đã chặn sender → từ chối ──
+            if (room.type === 'direct') {
+                const otherMember = room.members.find(m => m.user.toString() !== userId.toString());
+                if (otherMember) {
+                    const otherUser = await User.findById(otherMember.user).select('blockedUsers').lean();
+                    if (otherUser?.blockedUsers?.some(id => id.toString() === userId.toString())) {
+                        return socket.emit('error', { message: 'Không thể gửi tin nhắn. Người dùng đã chặn bạn.' });
+                    }
+                    // Cũng kiểm tra: sender đã chặn receiver → không cho gửi
+                    const senderDoc = await User.findById(userId).select('blockedUsers').lean();
+                    if (senderDoc?.blockedUsers?.some(id => id.toString() === otherMember.user.toString())) {
+                        return socket.emit('error', { message: 'Bạn đã chặn người này. Bỏ chặn để gửi tin nhắn.' });
+                    }
+                }
+            }
+
+            // ── Lấy preferredLanguage MỚI NHẤT từ DB (socket.user có thể stale) ──
+            const senderFresh = await User.findById(userId).select('preferredLanguage').lean();
+            const senderLanguage = senderFresh?.preferredLanguage || socket.user.preferredLanguage || 'vi';
+
             // ── Tạo message ──
             const messageData = {
                 room: roomId,
                 sender: userId,
                 type,
                 content: content || '',
-                originalLanguage: socket.user.preferredLanguage || 'vi',
+                originalLanguage: senderLanguage,
             };
 
             if (type === 'location' && file) {
@@ -51,7 +70,7 @@ module.exports = (io, socket) => {
             const message = await Message.create(messageData);
 
             const populatedMessage = await Message.findById(message._id)
-                .populate('sender', 'username avatar preferredLanguage');
+                .populate('sender', 'username avatar googlePicture preferredLanguage');
 
             // Cập nhật lastMessage
             await Room.findByIdAndUpdate(roomId, { lastMessage: message._id });
@@ -84,22 +103,14 @@ module.exports = (io, socket) => {
             // BƯỚC 2: Dịch thuật ASYNC (fire-and-forget, không block UX)
             // ═════════════════════════════════════════════════════════════════
             if (type === 'text' && content && content.trim().length >= 2) {
-                translateForRoom(io, roomId, message._id, content, socket.user.preferredLanguage)
+                translateForRoom(io, roomId, message._id, content, senderLanguage)
                     .catch(err => console.error('Translation error:', err.message));
             }
 
             // ═════════════════════════════════════════════════════════════════
-            // BƯỚC 3: AI Bot response (nếu có member bật bot trong room)
+            // BƯỚC 3: (AI Bot response đã chuyển sang Mini AI ChatBox riêng)
+            // AI chỉ phản hồi khi user gõ trực tiếp trong Mini AI Box
             // ═════════════════════════════════════════════════════════════════
-            if (type === 'text') {
-                const botEnabledMembers = room.members.filter(m => m.aiBotEnabled);
-
-                if (botEnabledMembers.length > 0) {
-                    // Fire-and-forget: không block message flow
-                    handleAIBotResponse(io, socket, roomId, content, userId)
-                        .catch(err => console.error('AI Bot error:', err.message));
-                }
-            }
 
         } catch (error) {
             console.error('message:send error:', error.message);
@@ -202,51 +213,3 @@ module.exports = (io, socket) => {
     });
 };
 
-// ─── Helper: Xử lý AI Bot response ───────────────────────────────────
-async function handleAIBotResponse(io, socket, roomId, userMessage, triggeredByUserId) {
-    try {
-        // Chỉ gửi trạng thái "đang suy nghĩ" cho người hỏi
-        socket.emit('ai:thinking', { roomId });
-
-        const aiResponse = await generateAIResponse(userMessage, roomId);
-
-        if (!aiResponse) {
-            socket.emit('ai:thinking-done', { roomId });
-            return;
-        }
-
-        // Tạo temporary message (KHÔNG lưu DB)
-        const tempAIMessage = {
-            _id: `ai-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-            room: roomId,
-            sender: {
-                _id: triggeredByUserId,
-                username: socket.user.username,
-                avatar: socket.user.avatar,
-            },
-            type: 'ai-response',
-            content: aiResponse,
-            aiMetadata: {
-                isAIResponse: true,
-                prompt: userMessage.substring(0, 200),
-                model: 'gemini-2.5-flash',
-            },
-            createdAt: new Date(),
-        };
-
-        // Chỉ gửi cho người hỏi (private emit)
-        socket.emit('receive_ai_message', {
-            roomId,
-            message: tempAIMessage,
-        });
-
-        console.log(`🤖 AI responded privately in room ${roomId}: ${aiResponse.substring(0, 60)}...`);
-
-    } catch (error) {
-        console.error('handleAIBotResponse error:', error.message);
-        socket.emit('ai:error', {
-            roomId,
-            error: 'AI không thể phản hồi. Vui lòng thử lại.',
-        });
-    }
-}

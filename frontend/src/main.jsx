@@ -31,7 +31,6 @@ import './index.css';
 import App from './App.jsx';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
-import { CallProvider } from './contexts/CallContext';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
@@ -40,11 +39,9 @@ createRoot(document.getElementById('root')).render(
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID || ''}>
       <ThemeProvider>
         <AuthProvider>
-          <CallProvider>
-            <BrowserRouter>
-              <App />
-            </BrowserRouter>
-          </CallProvider>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
         </AuthProvider>
       </ThemeProvider>
     </GoogleOAuthProvider>

@@ -21,8 +21,8 @@ export default function EditProfileModal({ profile, onClose, onSaved }) {
 
     const avatarPreview = useMemo(() => {
         if (avatarFile) return URL.createObjectURL(avatarFile);
-        return profile.avatar || null;
-    }, [avatarFile, profile.avatar]);
+        return profile.avatar || profile.googlePicture || null;
+    }, [avatarFile, profile.avatar, profile.googlePicture]);
 
     const coverPreview = useMemo(() => {
         if (coverFile) return URL.createObjectURL(coverFile);

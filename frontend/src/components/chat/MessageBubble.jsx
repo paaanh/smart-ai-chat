@@ -18,10 +18,10 @@ function getAvatarColor(id) {
     return avatarColors[Math.abs(hash) % avatarColors.length];
 }
 
-export default function MessageBubble({ message, isOwn, onDelete, onReact }) {
+export default function MessageBubble({ message, isOwn, onDelete, onReact, nicknames, localTranslation }) {
     const { user } = useAuth();
     const navigate = useNavigate();
-    const [showTranslation, setShowTranslation] = useState(true);
+    const [showTranslation, setShowTranslation] = useState(false);
     const [showActions, setShowActions] = useState(false);
     const [lightbox, setLightbox] = useState(null);
     const [imgError, setImgError] = useState(false);
@@ -68,9 +68,16 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact }) {
     const isAI = message.type === 'ai-response' || message.aiMetadata?.isAIResponse;
 
     // Find translation for current user's language
-    const myLang = user?.preferredLanguage;
+    const myLang = user?.preferredLanguage || localStorage.getItem('preferredLanguage') || 'vi';
     const translation = message.translations?.find((t) => t.language === myLang);
-    const senderName = message.sender?.username || 'Unknown';
+
+    // Prioritize translation for non-own messages
+    const hasTranslation = !!(translation && !isOwn && message.originalLanguage && message.originalLanguage !== myLang);
+    const displayText = hasTranslation ? translation.content : message.content;
+
+    const senderId = message.sender?._id;
+    const senderNickname = senderId && nicknames?.[senderId];
+    const senderName = senderNickname || message.sender?.username || 'Unknown';
 
     // Format file size
     const formatSize = (bytes) => {
@@ -135,7 +142,7 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact }) {
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0
                     ${isOwn
                         ? 'bg-white/20'
-                        : 'bg-[var(--color-primary)] bg-opacity-15'
+                        : 'bg-[var(--color-primary-light)]'
                     }`}
                 >
                     <IconComponent size={20} className={isOwn ? 'text-white' : 'text-[var(--color-primary)]'} />
@@ -181,9 +188,9 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact }) {
                             onClick={() => message.sender?._id && navigate(`/profile/${message.sender._id}`)}
                             title={senderName}
                         >
-                            {message.sender?.avatar && !imgError ? (
+                            {(message.sender?.avatar || message.sender?.googlePicture) && !imgError ? (
                                 <img
-                                    src={message.sender.avatar}
+                                    src={message.sender.avatar || message.sender.googlePicture}
                                     alt={senderName}
                                     className="w-full h-full object-cover"
                                     onError={() => setImgError(true)}
@@ -211,8 +218,8 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact }) {
                                         : 'bg-gray-100 text-gray-900'
                                 }`}
                         >
-                            {message.content && message.type !== 'location' && (
-                                <p className="text-sm whitespace-pre-wrap wrap-break-word">{message.content}</p>
+                            {displayText && message.type !== 'location' && (
+                                <p className="text-sm whitespace-pre-wrap wrap-break-word">{displayText}</p>
                             )}
                             {message.type === 'location' && message.location && (
                                 <LocationMessage location={message.location} isOwn={isOwn} />
@@ -232,22 +239,35 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact }) {
                             </p>
                         </div>
 
-                        {/* Translation */}
-                        {translation && !isOwn && (
+                        {/* Show original text when translation is being displayed */}
+                        {hasTranslation && (
                             <div className="mt-1">
                                 <button
                                     onClick={() => setShowTranslation(!showTranslation)}
                                     className="flex items-center gap-1 text-xs text-[var(--color-primary)] hover:text-[var(--color-primary-hover)] ml-3 mb-0.5"
                                 >
                                     <Globe size={11} />
-                                    <span>Bản dịch</span>
+                                    <span>Bản gốc</span>
                                     {showTranslation ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
                                 </button>
                                 {showTranslation && (
                                     <div className="bg-[var(--color-primary-light)] border border-[var(--color-primary-medium)] px-3 py-2 rounded-xl text-sm text-[var(--color-primary-dark)] ml-2">
-                                        {translation.content}
+                                        {message.content}
                                     </div>
                                 )}
+                            </div>
+                        )}
+
+                        {/* Local auto-translate (private, not stored in DB) */}
+                        {localTranslation && !isOwn && !hasTranslation && (
+                            <div className="mt-1 ml-2">
+                                <div className="flex items-center gap-1 text-[10px] text-purple-500 mb-0.5">
+                                    <Globe size={10} />
+                                    <span>Dịch tự động</span>
+                                </div>
+                                <div className="bg-purple-50 border border-purple-100 px-3 py-1.5 rounded-xl text-sm text-purple-800">
+                                    {localTranslation}
+                                </div>
                             </div>
                         )}
 

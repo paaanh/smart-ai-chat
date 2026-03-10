@@ -82,7 +82,7 @@ messageSchema.index({ sender: 1 });
 messageSchema.statics.getByRoom = async function (roomId, { page = 1, limit = 50 } = {}) {
     const skip = (page - 1) * limit;
     const messages = await this.find({ room: roomId, deleted: false })
-        .populate('sender', 'username avatar preferredLanguage')
+        .populate('sender', 'username avatar googlePicture preferredLanguage')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
