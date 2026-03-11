@@ -1,12 +1,46 @@
+const dns = require('dns');
 const nodemailer = require('nodemailer');
 
+if (typeof dns.setDefaultResultOrder === 'function') {
+    dns.setDefaultResultOrder('ipv4first');
+}
+
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
     auth: {
         user: process.env.MAIL_USER,
         pass: process.env.MAIL_APP_PASSWORD,
     },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
+    tls: {
+        servername: 'smtp.gmail.com',
+    },
 });
+
+const ensureMailConfig = () => {
+    if (!process.env.MAIL_USER || !process.env.MAIL_APP_PASSWORD) {
+        const error = new Error('Dịch vụ email chưa được cấu hình. Thiếu MAIL_USER hoặc MAIL_APP_PASSWORD.');
+        error.statusCode = 500;
+        throw error;
+    }
+};
+
+const sendMail = async (mailOptions) => {
+    ensureMailConfig();
+
+    try {
+        return await transporter.sendMail(mailOptions);
+    } catch (error) {
+        console.error('❌ Mail send failed:', error.message);
+        const mailError = new Error('Không thể gửi mã OTP qua email. Vui lòng thử lại sau.');
+        mailError.statusCode = 500;
+        throw mailError;
+    }
+};
 
 /**
  * Gửi email OTP reset password
@@ -39,7 +73,7 @@ async function sendOTPEmail(toEmail, otp) {
         `,
     };
 
-    await transporter.sendMail(mailOptions);
+    await sendMail(mailOptions);
 }
 
 /**
@@ -73,7 +107,7 @@ async function sendRegistrationOTPEmail(toEmail, otp) {
         `,
     };
 
-    await transporter.sendMail(mailOptions);
+    await sendMail(mailOptions);
 }
 
 /**
@@ -86,4 +120,4 @@ async function sendSMSOTP(phoneNumber, otp) {
     return { success: true, message: `OTP đã gửi đến ${phoneNumber} (giả lập)` };
 }
 
-module.exports = { transporter, sendOTPEmail, sendRegistrationOTPEmail, sendSMSOTP };
+module.exports = { transporter, sendOTPEmail, sendRegistrationOTPEmail, sendSMSOTP, ensureMailConfig };

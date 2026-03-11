@@ -39,7 +39,12 @@ exports.sendRegisterOTP = async (req, res, next) => {
         });
 
         // Gửi email
-        await sendRegistrationOTPEmail(normalizedEmail, otp);
+        try {
+            await sendRegistrationOTPEmail(normalizedEmail, otp);
+        } catch (error) {
+            registerOTPStore.delete(normalizedEmail);
+            throw error;
+        }
 
         res.json({ message: 'Mã OTP đã được gửi đến email của bạn' });
     } catch (error) {
