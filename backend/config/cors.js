@@ -1,21 +1,47 @@
-const DEFAULT_ORIGINS = 'http://localhost:5173,http://localhost:80,http://localhost';
+const DEFAULT_ORIGINS = [
+    'http://localhost:5173',
+    'http://localhost:80',
+    'http://localhost',
+    'https://p-chater-q.vercel.app',
+].join(',');
+const DEFAULT_ORIGIN_PATTERNS = 'https://*.vercel.app';
 
-const normalizeOrigin = (origin) => origin.replace(/\/+$/, '');
+const normalizeOrigin = (origin) => String(origin || '').replace(/\/+$/, '');
 
-const allowedOrigins = (process.env.CORS_ORIGINS || DEFAULT_ORIGINS)
+const parseCsv = (value) => String(value || '')
     .split(',')
-    .map(origin => origin.trim())
-    .filter(Boolean)
+    .map(item => item.trim())
+    .filter(Boolean);
+
+const escapeRegex = (value) => value.replace(/[|\\{}()[\]^$+?.]/g, '\\$&');
+
+const patternToRegex = (pattern) => new RegExp(
+    `^${escapeRegex(normalizeOrigin(pattern)).replace(/\*/g, '.*')}$`,
+    'i'
+);
+
+const allowedOrigins = parseCsv(process.env.CORS_ORIGINS || DEFAULT_ORIGINS)
     .map(normalizeOrigin);
+
+const allowedOriginPatterns = parseCsv(process.env.CORS_ORIGIN_PATTERNS || DEFAULT_ORIGIN_PATTERNS)
+    .map(patternToRegex);
+
+const isOriginAllowed = (origin) => {
+    const normalizedOrigin = normalizeOrigin(origin);
+
+    if (allowedOrigins.includes(normalizedOrigin)) {
+        return true;
+    }
+
+    return allowedOriginPatterns.some(pattern => pattern.test(normalizedOrigin));
+};
 
 const corsOptions = {
     origin: function (origin, callback) {
         // Cho phép requests không có origin (mobile apps, curl, Postman...)
         if (!origin) return callback(null, true);
 
-        const normalizedOrigin = normalizeOrigin(origin);
-
-        if (allowedOrigins.includes(normalizedOrigin)) {
+        if (isOriginAllowed(origin)) {
             callback(null, true);
         } else {
             console.warn(`⚠️ CORS blocked origin: ${origin}`);
@@ -28,4 +54,4 @@ const corsOptions = {
     optionsSuccessStatus: 204,
 };
 
-module.exports = { corsOptions, allowedOrigins };
+module.exports = { corsOptions, allowedOrigins, allowedOriginPatterns, isOriginAllowed };
