@@ -41,7 +41,7 @@ module.exports = (io, socket) => {
             }
 
             // ── Lấy preferredLanguage MỚI NHẤT từ DB (socket.user có thể stale) ──
-            const senderFresh = await User.findById(userId).select('preferredLanguage isMuted muteExpires accountStatus').lean();
+            const senderFresh = await User.findById(userId).select('preferredLanguage accountStatus').lean();
 
             // ── Check account status ──
             if (senderFresh?.accountStatus === 'banned') {
@@ -49,15 +49,6 @@ module.exports = (io, socket) => {
             }
             if (senderFresh?.accountStatus === 'locked' && senderFresh?.lockUntil && new Date(senderFresh.lockUntil) > new Date()) {
                 return socket.emit('error', { message: 'Tài khoản đang bị khóa tạm thời.' });
-            }
-
-            // ── Check mute status ──
-            if (senderFresh?.isMuted) {
-                if (!senderFresh.muteExpires || new Date(senderFresh.muteExpires) > new Date()) {
-                    return socket.emit('error', { message: 'Bạn đang bị cấm gửi tin nhắn.' });
-                }
-                // Mute expired — auto-unmute
-                await User.findByIdAndUpdate(userId, { isMuted: false, muteExpires: null });
             }
 
             const senderLanguage = senderFresh?.preferredLanguage || socket.user.preferredLanguage || 'vi';
@@ -235,6 +226,95 @@ module.exports = (io, socket) => {
             }
         } catch (error) {
             console.error('message:get-translation error:', error.message);
+        }
+    });
+
+    // ─── poll:vote ──────────────────────────────────────────────────────
+    socket.on('poll:vote', async ({ messageId, roomId, optionIndex }) => {
+        try {
+            const message = await Message.findById(messageId);
+            if (!message || !message.poll) return;
+
+            const option = message.poll.options[optionIndex];
+            if (!option) return;
+
+            // Remove previous vote from all options
+            for (const opt of message.poll.options) {
+                opt.votes = opt.votes.filter(v => v.toString() !== userId.toString());
+            }
+
+            // Add vote to selected option
+            option.votes.push(userId);
+            await message.save();
+
+            io.to(roomId).emit('poll:updated', {
+                messageId,
+                poll: message.poll,
+            });
+        } catch (error) {
+            console.error('poll:vote error:', error.message);
+        }
+    });
+
+    // ─── message:send-poll ──────────────────────────────────────────────
+    socket.on('message:send-poll', async ({ roomId, question, options }) => {
+        try {
+            if (!roomId || !question || !options || options.length < 2) {
+                return socket.emit('error', { message: 'Poll cần ít nhất 2 lựa chọn' });
+            }
+
+            const room = await Room.findById(roomId);
+            if (!room) return socket.emit('error', { message: 'Room không tồn tại' });
+
+            const message = await Message.create({
+                room: roomId,
+                sender: userId,
+                type: 'poll',
+                content: question,
+                poll: {
+                    question,
+                    options: options.map(text => ({ text, votes: [] })),
+                },
+            });
+
+            const populated = await Message.findById(message._id)
+                .populate('sender', 'username avatar googlePicture preferredLanguage');
+
+            await Room.findByIdAndUpdate(roomId, { lastMessage: message._id });
+            io.to(roomId).emit('message:received', { message: populated });
+        } catch (error) {
+            console.error('message:send-poll error:', error.message);
+        }
+    });
+
+    // ─── message:send-contact-card ──────────────────────────────────────
+    socket.on('message:send-contact-card', async ({ roomId, contactUserId }) => {
+        try {
+            if (!roomId || !contactUserId) return;
+
+            const contactUser = await User.findById(contactUserId).select('username avatar bio').lean();
+            if (!contactUser) return socket.emit('error', { message: 'User không tồn tại' });
+
+            const message = await Message.create({
+                room: roomId,
+                sender: userId,
+                type: 'contact-card',
+                content: `Đã chia sẻ liên hệ: ${contactUser.username}`,
+                contactCard: {
+                    userId: contactUserId,
+                    username: contactUser.username,
+                    avatar: contactUser.avatar || '',
+                    bio: contactUser.bio || '',
+                },
+            });
+
+            const populated = await Message.findById(message._id)
+                .populate('sender', 'username avatar googlePicture preferredLanguage');
+
+            await Room.findByIdAndUpdate(roomId, { lastMessage: message._id });
+            io.to(roomId).emit('message:received', { message: populated });
+        } catch (error) {
+            console.error('message:send-contact-card error:', error.message);
         }
     });
 };

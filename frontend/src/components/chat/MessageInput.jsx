@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { Send, Paperclip, Smile, X, Loader2, MapPin, Mic, Square } from 'lucide-react';
+import { Send, Paperclip, Smile, X, Loader2, MapPin, Mic, Square, ThumbsUp } from 'lucide-react';
 import { uploadAPI } from '../../services/api';
 
 export default function MessageInput({ onSend, onSendLocation, onTyping, disabled }) {
@@ -305,18 +305,30 @@ export default function MessageInput({ onSend, onSendLocation, onTyping, disable
                         />
                     </div>
 
-                    {/* Send button */}
-                    <button
-                        type="submit"
-                        disabled={disabled || uploading || (!text.trim() && !file)}
-                        className="p-2.5 bg-[var(--color-primary)] text-white rounded-full hover:bg-[var(--color-primary-hover)] transition disabled:opacity-50 disabled:hover:bg-[var(--color-primary)] shrink-0"
-                    >
-                        {uploading ? (
-                            <Loader2 size={18} className="animate-spin" />
-                        ) : (
-                            <Send size={18} />
-                        )}
-                    </button>
+                    {/* Send or Like button */}
+                    {text.trim() || file ? (
+                        <button
+                            type="submit"
+                            disabled={disabled || uploading}
+                            className="p-2.5 bg-[var(--color-primary)] text-white rounded-full hover:bg-[var(--color-primary-hover)] transition disabled:opacity-50 disabled:hover:bg-[var(--color-primary)] shrink-0"
+                        >
+                            {uploading ? (
+                                <Loader2 size={18} className="animate-spin" />
+                            ) : (
+                                <Send size={18} />
+                            )}
+                        </button>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={() => onSend('👍', 'text')}
+                            disabled={disabled}
+                            className="p-2.5 text-[var(--color-primary)] hover:bg-gray-100 rounded-full transition disabled:opacity-50 shrink-0"
+                            title="Gửi like"
+                        >
+                            <ThumbsUp size={22} />
+                        </button>
+                    )}
                 </form>
             )}
         </div>

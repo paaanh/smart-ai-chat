@@ -49,6 +49,20 @@ const socketAuthMiddleware = async (socket, next) => {
             return next(new Error('Authentication error: User not found'));
         }
 
+        // Check account status
+        if (user.accountStatus === 'banned') {
+            return next(new Error('Account banned'));
+        }
+        if (user.accountStatus === 'locked' && user.lockUntil && new Date(user.lockUntil) > new Date()) {
+            return next(new Error('Account locked'));
+        }
+        // Auto-unlock expired lock
+        if (user.accountStatus === 'locked' && user.lockUntil && new Date(user.lockUntil) <= new Date()) {
+            user.accountStatus = 'active';
+            user.lockUntil = null;
+            await user.save({ validateModifiedOnly: true });
+        }
+
         // Gắn user vào socket để dùng trong handlers
         socket.user = user;
         next();

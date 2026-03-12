@@ -79,31 +79,7 @@ const getStats = async (req, res) => {
     }
 };
 
-// ─── Analytics: messages per day (last 30 days) + user growth ────────
-const getAnalytics = async (req, res) => {
-    try {
-        const days = parseInt(req.query.days) || 30;
-        const startDate = new Date();
-        startDate.setDate(startDate.getDate() - days);
-
-        const [messagesPerDay, userGrowth] = await Promise.all([
-            Message.aggregate([
-                { $match: { createdAt: { $gte: startDate } } },
-                { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } },
-                { $sort: { _id: 1 } },
-            ]),
-            User.aggregate([
-                { $match: { createdAt: { $gte: startDate } } },
-                { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } },
-                { $sort: { _id: 1 } },
-            ]),
-        ]);
-
-        res.json({ messagesPerDay, userGrowth });
-    } catch (error) {
-        res.status(500).json({ error: 'Lỗi khi lấy analytics' });
-    }
-};
+// ─── Analytics đã bị xóa ──────────────────────────────────────────────
 
 // ─── Lấy chi tiết 1 user ─────────────────────────────────────────────
 const getUserById = async (req, res) => {
@@ -123,8 +99,13 @@ const updateUser = async (req, res) => {
         const user = await User.findById(req.params.id);
         if (!user) return res.status(404).json({ error: 'Không tìm thấy user' });
 
-        if (req.params.id === req.user._id.toString() && role && role !== 'admin') {
-            return res.status(400).json({ error: 'Không thể tự hạ quyền admin của chính mình' });
+        if (req.params.id === req.user._id.toString() && role && role !== req.user.role) {
+            return res.status(400).json({ error: 'Không thể tự thay đổi quyền của chính mình' });
+        }
+
+        // Sub-admin cannot change roles
+        if (req.user.role === 'sub_admin' && role !== undefined) {
+            return res.status(403).json({ error: 'Sub Admin không có quyền thay đổi vai trò' });
         }
 
         if (username !== undefined) user.username = username;
@@ -271,53 +252,7 @@ const resetPassword = async (req, res) => {
     }
 };
 
-// ─── Mute user ────────────────────────────────────────────────────────
-const muteUser = async (req, res) => {
-    try {
-        const { duration } = req.body; // minutes, 0 = permanent
-        const user = await User.findById(req.params.id);
-        if (!user) return res.status(404).json({ error: 'Không tìm thấy user' });
-
-        user.isMuted = true;
-        user.muteExpires = duration ? new Date(Date.now() + duration * 60000) : null;
-        await user.save();
-
-        const io = req.app.get('io');
-        if (user.socketId && io) {
-            io.to(user.socketId).emit('account:muted', {
-                message: duration ? `Bạn bị cấm gửi tin nhắn trong ${duration} phút` : 'Bạn đã bị cấm gửi tin nhắn',
-                muteExpires: user.muteExpires,
-            });
-        }
-
-        await logAction(req.user._id, 'mute_user', user._id, `Muted ${user.username} ${duration ? `for ${duration} min` : 'permanently'}`, req.ip);
-        res.json({ message: `Đã mute ${user.username}`, user });
-    } catch (error) {
-        res.status(500).json({ error: 'Lỗi khi mute user' });
-    }
-};
-
-// ─── Unmute user ──────────────────────────────────────────────────────
-const unmuteUser = async (req, res) => {
-    try {
-        const user = await User.findById(req.params.id);
-        if (!user) return res.status(404).json({ error: 'Không tìm thấy user' });
-
-        user.isMuted = false;
-        user.muteExpires = null;
-        await user.save();
-
-        const io = req.app.get('io');
-        if (user.socketId && io) {
-            io.to(user.socketId).emit('account:unmuted', { message: 'Bạn đã được gỡ cấm gửi tin nhắn' });
-        }
-
-        await logAction(req.user._id, 'unmute_user', user._id, `Unmuted ${user.username}`, req.ip);
-        res.json({ message: `Đã unmute ${user.username}`, user });
-    } catch (error) {
-        res.status(500).json({ error: 'Lỗi khi unmute user' });
-    }
-};
+// ─── Mute / Unmute đã bị xóa ────────────────────────────────────────
 
 // ═══════════════════════════════════════════════════════════════════
 // ─── Reports ──────────────────────────────────────────────────────
@@ -461,6 +396,20 @@ const updateSystemConfig = async (req, res) => {
             );
         }
 
+        // If maintenance mode is being turned ON, force disconnect all non-admin users
+        if (updates.maintenanceMode === true) {
+            const io = req.app.get('io');
+            if (io) {
+                const sockets = await io.fetchSockets();
+                for (const s of sockets) {
+                    if (s.user && !['sub_admin', 'super_admin'].includes(s.user.role)) {
+                        s.emit('system:maintenance', { message: 'Hệ thống đang bảo trì. Bạn sẽ bị đăng xuất.' });
+                        s.disconnect(true);
+                    }
+                }
+            }
+        }
+
         await logAction(req.user._id, 'update_config', null, `Updated config: ${Object.keys(updates).join(', ')}`, req.ip);
         res.json({ message: 'Đã cập nhật config' });
     } catch (error) {
@@ -495,9 +444,8 @@ const getAdminLogs = async (req, res) => {
 };
 
 module.exports = {
-    getUsers, getStats, getAnalytics, getUserById, updateUser, deleteUser, toggleVerified,
+    getUsers, getStats, getUserById, updateUser, deleteUser, toggleVerified,
     banUser, unbanUser, lockUser, resetPassword,
-    muteUser, unmuteUser,
     getReports, resolveReport,
     getBadWords, addBadWord, removeBadWord,
     getSystemConfig, updateSystemConfig,

@@ -56,6 +56,7 @@ const uploadRoutes = require('./routes/upload.routes');
 const friendRoutes = require('./routes/friend.routes');
 const userActionsRoutes = require('./routes/user-actions.routes');
 const adminRoutes = require('./routes/admin.routes');
+const noteRoutes = require('./routes/note.routes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -64,6 +65,7 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/friends', friendRoutes);
 app.use('/api/user-actions', userActionsRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/notes', noteRoutes);
 
 // ─── Health Check ─────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {

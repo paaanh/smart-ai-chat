@@ -6,9 +6,9 @@ import {
     Users, Shield, ShieldCheck, MessageSquare, Home, Search,
     Trash2, Edit3, CheckCircle, XCircle, ChevronLeft, ChevronRight,
     Loader2, ArrowLeft, X, BarChart3, UserCheck, Wifi,
-    Ban, Lock, Unlock, Key, VolumeX, Volume2,
+    Ban, Lock, Unlock, Key,
     Flag, AlertTriangle, Eye, FileText, Settings,
-    TrendingUp, Activity, MessageCircle,
+    Activity, MessageCircle,
     Plus, Minus, ToggleLeft, ToggleRight,
     ClipboardList, Filter,
 } from 'lucide-react';
@@ -59,7 +59,6 @@ const TABS = [
     { id: 'dashboard', label: 'Tổng quan', icon: BarChart3 },
     { id: 'users', label: 'Quản lý Users', icon: Users },
     { id: 'reports', label: 'Báo cáo vi phạm', icon: Flag },
-    { id: 'analytics', label: 'Thống kê', icon: TrendingUp },
     { id: 'badwords', label: 'Lọc từ ngữ', icon: AlertTriangle },
     { id: 'config', label: 'Cấu hình hệ thống', icon: Settings },
     { id: 'logs', label: 'Nhật ký Admin', icon: ClipboardList },
@@ -162,7 +161,7 @@ function EditUserModal({ user, onClose, onSave }) {
                         <div className="flex-1"><label className="block text-sm font-medium text-gray-600 mb-1">Vai trò</label>
                             <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}
                                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-                                <option value="user">User</option><option value="admin">Admin</option></select></div>
+                                <option value="user">User</option><option value="sub_admin">Sub Admin</option><option value="super_admin">Super Admin</option></select></div>
                         <div className="flex-1"><label className="block text-sm font-medium text-gray-600 mb-1">Xác thực</label>
                             <select value={form.isVerified ? 'true' : 'false'} onChange={e => setForm({ ...form, isVerified: e.target.value === 'true' })}
                                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
@@ -282,8 +281,7 @@ function UsersTab({ currentUser }) {
                 case 'unban': await adminAPI.unbanUser(userId); break;
                 case 'lock': await adminAPI.lockUser(userId, args[0]); break;
                 case 'resetPassword': await adminAPI.resetPassword(userId, args[0]); break;
-                case 'mute': await adminAPI.muteUser(userId, 60); break;
-                case 'unmute': await adminAPI.unmuteUser(userId); break;
+
             }
             fetchUsers();
         } catch (err) { console.error(err); }
@@ -340,13 +338,13 @@ function UsersTab({ currentUser }) {
                                                 <p className="font-medium text-gray-800 dark:text-gray-200 truncate">{u.username}</p>
                                                 <p className="text-xs text-gray-400 sm:hidden truncate">{u.email}</p>
                                             </div>
-                                            {u.isMuted && <VolumeX size={14} className="text-red-400" title="Đang bị mute" />}
+
                                         </div>
                                     </td>
                                     <td className="px-4 py-3 text-gray-600 dark:text-gray-400 hidden sm:table-cell">{u.email}</td>
                                     <td className="px-4 py-3">
-                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'}`}>
-                                            {u.role === 'admin' && <Shield size={12} />} {u.role === 'admin' ? 'Admin' : 'User'}
+                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${u.role === 'super_admin' ? 'bg-purple-100 text-purple-700' : u.role === 'sub_admin' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                                            {u.role !== 'user' && <Shield size={12} />} {u.role === 'super_admin' ? 'Super Admin' : u.role === 'sub_admin' ? 'Sub Admin' : 'User'}
                                         </span>
                                     </td>
                                     <td className="px-4 py-3">
@@ -373,11 +371,6 @@ function UsersTab({ currentUser }) {
                                                     )}
                                                     <button onClick={() => setLockUser(u)} className="p-1.5 hover:bg-orange-50 rounded-lg text-orange-500" title="Khóa tạm"><Lock size={15} /></button>
                                                     <button onClick={() => setResetPwUser(u)} className="p-1.5 hover:bg-purple-50 rounded-lg text-purple-500" title="Reset mật khẩu"><Key size={15} /></button>
-                                                    {!u.isMuted ? (
-                                                        <button onClick={() => handleAction('mute', u._id)} className="p-1.5 hover:bg-yellow-50 rounded-lg text-yellow-600" title="Mute 60p"><VolumeX size={15} /></button>
-                                                    ) : (
-                                                        <button onClick={() => handleAction('unmute', u._id)} className="p-1.5 hover:bg-green-50 rounded-lg text-green-600" title="Unmute"><Volume2 size={15} /></button>
-                                                    )}
                                                     <button onClick={() => setDeleteUser(u)} className="p-1.5 hover:bg-red-50 rounded-lg text-red-500" title="Xóa"><Trash2 size={15} /></button>
                                                 </>
                                             )}
@@ -526,73 +519,6 @@ function ReportsTab() {
                     </div>
                 </div>
             )}
-        </div>
-    );
-}
-
-// ═══════════════════════════════════════════════════════════════
-// ─── Analytics Tab (Charts) ───────────────────────────────────
-// ═══════════════════════════════════════════════════════════════
-
-function SimpleBarChart({ data, label, color = '#3b82f6' }) {
-    if (!data?.length) return <p className="text-gray-400 text-sm text-center py-8">Không có dữ liệu</p>;
-    const max = Math.max(...data.map(d => d.count), 1);
-    return (
-        <div className="space-y-2">
-            <h4 className="text-sm font-medium text-gray-600 dark:text-gray-400">{label}</h4>
-            <div className="flex items-end gap-1 h-40">
-                {data.map((d, i) => (
-                    <div key={i} className="flex-1 flex flex-col items-center gap-1" title={`${d._id}: ${d.count}`}>
-                        <span className="text-[10px] text-gray-500">{d.count}</span>
-                        <div className="w-full rounded-t" style={{ height: `${(d.count / max) * 100}%`, backgroundColor: color, minHeight: 2 }} />
-                        <span className="text-[9px] text-gray-400 rotate-45 origin-top-left whitespace-nowrap">{d._id?.slice(5)}</span>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-}
-
-function AnalyticsTab() {
-    const [analytics, setAnalytics] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [days, setDays] = useState(30);
-
-    useEffect(() => {
-        const fetch = async () => {
-            setLoading(true);
-            try {
-                const res = await adminAPI.getAnalytics({ days });
-                setAnalytics(res.data);
-            } catch (err) { console.error(err); }
-            finally { setLoading(false); }
-        };
-        fetch();
-    }, [days]);
-
-    if (loading) return <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-gray-400" /></div>;
-
-    return (
-        <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2"><TrendingUp size={22} /> Thống kê chi tiết</h2>
-                <div className="flex gap-2">
-                    {[7, 14, 30].map(d => (
-                        <button key={d} onClick={() => setDays(d)}
-                            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${days === d ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-                            {d} ngày
-                        </button>
-                    ))}
-                </div>
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-5">
-                    <SimpleBarChart data={analytics?.messagesPerDay} label={`Tin nhắn / ngày (${days} ngày)`} color="#3b82f6" />
-                </div>
-                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-5">
-                    <SimpleBarChart data={analytics?.userGrowth} label={`User mới / ngày (${days} ngày)`} color="#10b981" />
-                </div>
-            </div>
         </div>
     );
 }
@@ -820,7 +746,7 @@ export default function AdminPage() {
         })();
     }, []);
 
-    if (currentUser && currentUser.role !== 'admin') {
+    if (currentUser && !['sub_admin', 'super_admin'].includes(currentUser.role)) {
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center">
                 <div className="text-center space-y-4">
@@ -838,7 +764,6 @@ export default function AdminPage() {
             case 'dashboard': return <DashboardTab stats={stats} />;
             case 'users': return <UsersTab currentUser={currentUser} />;
             case 'reports': return <ReportsTab />;
-            case 'analytics': return <AnalyticsTab />;
             case 'badwords': return <BadWordsTab />;
             case 'config': return <ConfigTab />;
             case 'logs': return <LogsTab />;

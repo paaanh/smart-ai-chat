@@ -1,49 +1,39 @@
 const express = require('express');
 const router = express.Router();
 const { authMiddleware } = require('../middlewares/auth.middleware');
-const { adminMiddleware } = require('../middlewares/admin.middleware');
+const { adminMiddleware, superAdminMiddleware } = require('../middlewares/admin.middleware');
 const {
-    getUsers, getStats, getAnalytics, getUserById, updateUser, deleteUser, toggleVerified,
+    getUsers, getStats, getUserById, updateUser, deleteUser, toggleVerified,
     banUser, unbanUser, lockUser, resetPassword,
-    muteUser, unmuteUser,
     getReports, resolveReport,
     getBadWords, addBadWord, removeBadWord,
     getSystemConfig, updateSystemConfig,
     getAdminLogs,
 } = require('../controllers/admin.controller');
 
-// Tất cả routes đều cần auth + admin
+// Tất cả routes đều cần auth + admin (sub_admin hoặc super_admin)
 router.use(authMiddleware, adminMiddleware);
 
-// Users
+// ─── Sub-admin có thể dùng ────────────────────────────────────────
 router.get('/users', getUsers);
 router.get('/stats', getStats);
-router.get('/analytics', getAnalytics);
 router.get('/users/:id', getUserById);
-router.put('/users/:id', updateUser);
-router.delete('/users/:id', deleteUser);
-router.put('/users/:id/toggle-verified', toggleVerified);
-router.put('/users/:id/ban', banUser);
-router.put('/users/:id/unban', unbanUser);
 router.put('/users/:id/lock', lockUser);
 router.put('/users/:id/reset-password', resetPassword);
-router.put('/users/:id/mute', muteUser);
-router.put('/users/:id/unmute', unmuteUser);
-
-// Reports
 router.get('/reports', getReports);
-router.put('/reports/:id/resolve', resolveReport);
-
-// Bad words
-router.get('/bad-words', getBadWords);
-router.post('/bad-words', addBadWord);
-router.delete('/bad-words/:id', removeBadWord);
-
-// System config
-router.get('/config', getSystemConfig);
-router.put('/config', updateSystemConfig);
-
-// Admin logs
 router.get('/logs', getAdminLogs);
+
+// ─── Chỉ super_admin mới được dùng ───────────────────────────────
+router.put('/users/:id', superAdminMiddleware, updateUser);
+router.delete('/users/:id', superAdminMiddleware, deleteUser);
+router.put('/users/:id/toggle-verified', superAdminMiddleware, toggleVerified);
+router.put('/users/:id/ban', superAdminMiddleware, banUser);
+router.put('/users/:id/unban', superAdminMiddleware, unbanUser);
+router.put('/reports/:id/resolve', superAdminMiddleware, resolveReport);
+router.get('/bad-words', getBadWords);
+router.post('/bad-words', superAdminMiddleware, addBadWord);
+router.delete('/bad-words/:id', superAdminMiddleware, removeBadWord);
+router.get('/config', getSystemConfig);
+router.put('/config', superAdminMiddleware, updateSystemConfig);
 
 module.exports = router;

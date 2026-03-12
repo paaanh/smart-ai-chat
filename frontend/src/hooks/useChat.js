@@ -94,12 +94,19 @@ export function useChat(roomId) {
             );
         };
 
+        const handlePollUpdated = ({ messageId, poll }) => {
+            setMessages((prev) =>
+                prev.map((m) => (m._id === messageId ? { ...m, poll } : m))
+            );
+        };
+
         on('message:received', handleNewMessage);
         on('message:deleted', handleDeleted);
         on('room:typing', handleTyping);
         on('room:stop-typing', handleStopTyping);
         on('message:translated', handleTranslation);
         on('message:reacted', handleReacted);
+        on('poll:updated', handlePollUpdated);
 
         // Join room
         emit('room:join', { roomId });
@@ -111,6 +118,7 @@ export function useChat(roomId) {
             off('room:stop-typing', handleStopTyping);
             off('message:translated', handleTranslation);
             off('message:reacted', handleReacted);
+            off('poll:updated', handlePollUpdated);
             emit('room:leave', { roomId });
         };
     }, [roomId, connected, on, off, emit]);

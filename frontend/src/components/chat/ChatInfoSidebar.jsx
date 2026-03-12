@@ -8,6 +8,7 @@ import PendingMembers from './PendingMembers';
 import NicknameModal from './NicknameModal';
 import ReportModal from './ReportModal';
 import AddMemberModal from './AddMemberModal';
+import OwnerTransferModal from './OwnerTransferModal';
 import {
     X, Users, Bell, BellOff, Ban, Flag, LogOut, UserPlus,
     ChevronDown, ChevronUp, Edit3, Shield, Loader2, Crown, Eye,
@@ -29,6 +30,7 @@ export default function ChatInfoSidebar({ room, onClose, onRoomUpdate }) {
     const [nicknameTarget, setNicknameTarget] = useState(null);
     const [showReport, setShowReport] = useState(false);
     const [showAddMember, setShowAddMember] = useState(false);
+    const [showOwnerTransfer, setShowOwnerTransfer] = useState(false);
 
     const isGroup = room?.type === 'group';
     const myMember = room?.members?.find((m) => (m.user?._id || m.user) === user?._id);
@@ -146,15 +148,23 @@ export default function ChatInfoSidebar({ room, onClose, onRoomUpdate }) {
         }
     };
 
-    const handleLeave = async () => {
-        if (!confirm('Bạn có chắc muốn rời nhóm?')) return;
+    const handleLeave = async (newOwnerId) => {
+        if (!newOwnerId && !confirm('Bạn có chắc muốn rời nhóm?')) return;
         setActionLoading('leave');
         try {
-            await roomAPI.leave(room._id);
+            const { data } = await roomAPI.leave(room._id, newOwnerId ? { newOwnerId } : undefined);
+            if (data.requireOwnerTransfer) {
+                setShowOwnerTransfer(true);
+                return;
+            }
             onRoomUpdate?.(null);
             onClose();
         } catch (err) {
-            console.error('Leave room error:', err);
+            if (err.response?.data?.requireOwnerTransfer) {
+                setShowOwnerTransfer(true);
+            } else {
+                console.error('Leave room error:', err);
+            }
         } finally {
             setActionLoading(null);
         }
@@ -446,6 +456,18 @@ export default function ChatInfoSidebar({ room, onClose, onRoomUpdate }) {
                         }
                         setShowAddMember(false);
                     }}
+                />
+            )}
+
+            {showOwnerTransfer && (
+                <OwnerTransferModal
+                    members={room.members || []}
+                    currentUserId={user?._id}
+                    onTransfer={(newOwnerId) => {
+                        setShowOwnerTransfer(false);
+                        handleLeave(newOwnerId);
+                    }}
+                    onClose={() => setShowOwnerTransfer(false)}
                 />
             )}
         </>

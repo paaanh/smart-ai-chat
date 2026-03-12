@@ -72,6 +72,16 @@ export function AuthProvider({ children }) {
         return () => window.removeEventListener('auth:logout', handleForceLogout);
     }, [logout]);
 
+    // Listen for maintenance mode force logout via socket
+    useEffect(() => {
+        const handleMaintenance = () => {
+            alert('Hệ thống đang bảo trì. Bạn sẽ bị đăng xuất.');
+            logout();
+        };
+        window.addEventListener('system:maintenance', handleMaintenance);
+        return () => window.removeEventListener('system:maintenance', handleMaintenance);
+    }, [logout]);
+
     const updateUser = useCallback((updated) => {
         setUser(updated);
         localStorage.setItem('user', JSON.stringify(updated));

@@ -6,8 +6,9 @@ import ChatWindow from '../components/chat/ChatWindow';
 import ChatInfoSidebar from '../components/chat/ChatInfoSidebar';
 import FriendPanel from '../components/friend/FriendPanel';
 import MiniAIChatBox from '../components/chat/MiniAIChatBox';
+import NoteBubbles from '../components/chat/NoteBubbles';
 // CallModal + IncomingCallModal are now rendered globally in App.jsx
-import { LogOut, Settings, MessageCircle, Users } from 'lucide-react';
+import { LogOut, Settings, MessageCircle, Users, ShieldCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function ChatPage() {
@@ -67,6 +68,15 @@ export default function ChatPage() {
                         <p className="font-medium text-gray-900 text-sm truncate">{user?.username}</p>
                         <p className="text-xs text-gray-400">{user?.preferredLanguageLabel || user?.preferredLanguage}</p>
                     </div>
+                    {user?.role && user.role !== 'user' && (
+                        <button
+                            onClick={() => navigate('/admin')}
+                            className="p-1.5 hover:bg-gray-100 rounded-full text-blue-500 transition"
+                            title="Admin Dashboard"
+                        >
+                            <ShieldCheck size={18} />
+                        </button>
+                    )}
                     <button
                         onClick={() => navigate('/settings')}
                         className="p-1.5 hover:bg-gray-100 rounded-full text-gray-400 transition"
@@ -127,8 +137,11 @@ export default function ChatPage() {
 
                 {/* Room list or Friend panel — both always mounted for socket listeners */}
                 <div className="flex-1 overflow-hidden">
-                    <div className={sidebarTab === 'chats' ? 'h-full' : 'hidden'}>
-                        <RoomList activeRoomId={activeRoomId} onSelectRoom={handleSelectRoom} />
+                    <div className={sidebarTab === 'chats' ? 'h-full flex flex-col' : 'hidden'}>
+                        <NoteBubbles />
+                        <div className="flex-1 overflow-hidden">
+                            <RoomList activeRoomId={activeRoomId} onSelectRoom={handleSelectRoom} />
+                        </div>
                     </div>
                     <div className={sidebarTab === 'friends' ? 'h-full' : 'hidden'}>
                         <FriendPanel onSelectRoom={handleSelectRoom} onRequestCountChange={handleRequestCountChange} />

@@ -115,7 +115,7 @@ exports.getRoomMessages = async (req, res, next) => {
             return res.status(403).json({ error: 'Bạn không phải thành viên của room này' });
         }
 
-        const messages = await Message.getByRoom(id, { page, limit });
+        const messages = await Message.getByRoom(id, { page, limit, userId: req.user._id });
         const hasMore = messages.length >= limit;
         res.json({ messages, page, limit, hasMore });
     } catch (error) {
@@ -175,6 +175,7 @@ exports.addMember = async (req, res, next) => {
 exports.leaveRoom = async (req, res, next) => {
     try {
         const { id } = req.params;
+        const { newOwnerId } = req.body;
 
         const room = await Room.findById(id);
         if (!room) {
@@ -187,19 +188,30 @@ exports.leaveRoom = async (req, res, next) => {
             return res.status(403).json({ error: 'Bạn không phải thành viên' });
         }
 
+        // If owner of group is leaving, they must select a new owner
+        if (room.type === 'group' && leavingMember.role === 'admin') {
+            const otherMembers = room.members.filter(m => m.user.toString() !== leavingUserId);
+            if (otherMembers.length > 0) {
+                if (!newOwnerId) {
+                    return res.status(400).json({
+                        error: 'Bạn là chủ nhóm. Vui lòng chọn thành viên mới làm trưởng nhóm trước khi rời.',
+                        requireOwnerTransfer: true,
+                        members: otherMembers.map(m => m.user),
+                    });
+                }
+                const newOwner = otherMembers.find(m => m.user.toString() === newOwnerId);
+                if (!newOwner) {
+                    return res.status(400).json({ error: 'Thành viên được chọn không hợp lệ' });
+                }
+                newOwner.role = 'admin';
+            }
+        }
+
         room.members = room.members.filter(m => m.user.toString() !== leavingUserId);
 
         if (room.members.length === 0) {
             await Room.findByIdAndDelete(id);
             return res.json({ message: 'Room đã bị xóa vì không còn thành viên' });
-        }
-
-        // Nếu admin rời nhóm, chuyển quyền cho member đầu tiên
-        if (room.type === 'group' && leavingMember.role === 'admin') {
-            const hasOtherAdmin = room.members.some(m => m.role === 'admin');
-            if (!hasOtherAdmin && room.members.length > 0) {
-                room.members[0].role = 'admin';
-            }
         }
 
         await room.save();
@@ -239,9 +251,28 @@ exports.setNickname = async (req, res, next) => {
 
         await room.save();
 
+        // Create system message for nickname change
+        const setter = await User.findById(req.user._id).select('username').lean();
+        const target = await User.findById(targetUserId).select('username').lean();
+        const systemContent = nickname && nickname.trim()
+            ? `${setter?.username || '?'} đã đặt biệt danh cho ${target?.username || '?'} thành "${nickname.trim()}"`
+            : `${setter?.username || '?'} đã xóa biệt danh của ${target?.username || '?'}`;
+
+        const systemMsg = await Message.create({
+            room: id,
+            sender: req.user._id,
+            type: 'system',
+            content: systemContent,
+        });
+        const populatedSystemMsg = await Message.findById(systemMsg._id)
+            .populate('sender', 'username avatar googlePicture preferredLanguage');
+
         // Emit realtime nickname update to all room members
         const io = req.app.get('io');
         const updatedNicknames = Object.fromEntries(room.nicknames);
+
+        // Emit system message + nickname update
+        io.to(id).emit('message:received', { message: populatedSystemMsg });
         for (const member of room.members) {
             const memberDoc = await User.findById(member.user).select('socketId').lean();
             if (memberDoc?.socketId) {
@@ -474,6 +505,148 @@ exports.updateGroupSettings = async (req, res, next) => {
         }
 
         res.json({ room: populated });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// ─── Xóa lịch sử chat cho user hiện tại ─────────────────────────────
+exports.deleteChat = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user._id;
+
+        const room = await Room.findById(id);
+        if (!room) return res.status(404).json({ error: 'Room không tồn tại' });
+
+        const isMember = room.members.some(m => m.user.toString() === userId.toString());
+        if (!isMember) return res.status(403).json({ error: 'Bạn không phải thành viên' });
+
+        await Message.updateMany(
+            { room: id, deletedFor: { $ne: userId } },
+            { $addToSet: { deletedFor: userId } },
+        );
+
+        res.json({ message: 'Đã xóa lịch sử trò chuyện' });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// ─── Ghim tin nhắn ───────────────────────────────────────────────────
+exports.pinMessage = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { messageId } = req.body;
+
+        const room = await Room.findById(id);
+        if (!room) return res.status(404).json({ error: 'Room không tồn tại' });
+
+        const isMember = room.members.some(m => m.user.toString() === req.user._id.toString());
+        if (!isMember) return res.status(403).json({ error: 'Bạn không phải thành viên' });
+
+        const message = await Message.findById(messageId);
+        if (!message || message.room.toString() !== id) {
+            return res.status(404).json({ error: 'Tin nhắn không tồn tại trong room này' });
+        }
+
+        message.pinned = true;
+        message.pinnedBy = req.user._id;
+        message.pinnedAt = new Date();
+        await message.save();
+
+        if (!room.pinnedMessages.includes(messageId)) {
+            room.pinnedMessages.push(messageId);
+            await room.save();
+        }
+
+        const pinner = await User.findById(req.user._id).select('username').lean();
+        const systemMsg = await Message.create({
+            room: id, sender: req.user._id, type: 'system',
+            content: `${pinner?.username || '?'} đã ghim một tin nhắn`,
+        });
+        const populatedSystemMsg = await Message.findById(systemMsg._id)
+            .populate('sender', 'username avatar googlePicture preferredLanguage');
+
+        const io = req.app.get('io');
+        io.to(id).emit('message:received', { message: populatedSystemMsg });
+        io.to(id).emit('message:pinned', { messageId, roomId: id, pinned: true });
+
+        res.json({ message: 'Đã ghim tin nhắn' });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// ─── Bỏ ghim tin nhắn ───────────────────────────────────────────────
+exports.unpinMessage = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { messageId } = req.body;
+
+        const room = await Room.findById(id);
+        if (!room) return res.status(404).json({ error: 'Room không tồn tại' });
+
+        const message = await Message.findById(messageId);
+        if (message) {
+            message.pinned = false;
+            message.pinnedBy = null;
+            message.pinnedAt = null;
+            await message.save();
+        }
+
+        room.pinnedMessages = room.pinnedMessages.filter(
+            (pid) => pid.toString() !== messageId
+        );
+        await room.save();
+
+        const io = req.app.get('io');
+        io.to(id).emit('message:pinned', { messageId, roomId: id, pinned: false });
+
+        res.json({ message: 'Đã bỏ ghim tin nhắn' });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// ─── Chuyển tiếp tin nhắn ────────────────────────────────────────────
+exports.forwardMessage = async (req, res, next) => {
+    try {
+        const { messageId, targetRoomId } = req.body;
+
+        const originalMessage = await Message.findById(messageId)
+            .populate('sender', 'username').lean();
+        if (!originalMessage) return res.status(404).json({ error: 'Tin nhắn không tồn tại' });
+
+        const targetRoom = await Room.findById(targetRoomId);
+        if (!targetRoom) return res.status(404).json({ error: 'Room đích không tồn tại' });
+
+        const isMember = targetRoom.members.some(m => m.user.toString() === req.user._id.toString());
+        if (!isMember) return res.status(403).json({ error: 'Bạn không phải thành viên của room đích' });
+
+        const forwardedMsg = await Message.create({
+            room: targetRoomId,
+            sender: req.user._id,
+            type: originalMessage.type === 'system' ? 'text' : originalMessage.type,
+            content: originalMessage.content,
+            file: originalMessage.file,
+            location: originalMessage.location,
+            forwardedFrom: {
+                room: originalMessage.room,
+                sender: originalMessage.sender?._id || originalMessage.sender,
+                senderName: originalMessage.sender?.username || 'Unknown',
+            },
+        });
+
+        const populated = await Message.findById(forwardedMsg._id)
+            .populate('sender', 'username avatar googlePicture preferredLanguage');
+
+        await Room.findByIdAndUpdate(targetRoomId, { lastMessage: forwardedMsg._id });
+
+        const io = req.app.get('io');
+        io.to(targetRoomId).emit('message:received', { message: populated });
+
+        res.json({ message: 'Đã chuyển tiếp tin nhắn', forwardedMessage: populated });
     } catch (error) {
         next(error);
     }

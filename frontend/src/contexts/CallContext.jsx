@@ -625,47 +625,58 @@ export function CallProvider({ children }) {
         if (!localStreamRef.current) return;
         const stream = localStreamRef.current;
         const track = stream.getVideoTracks()[0];
-        if (!track) return;
 
-        if (track.enabled) {
-            // Disable: just toggle off
+        if (track && track.enabled) {
+            // Disable: just toggle off (keep track alive for easy re-enable)
             track.enabled = false;
+            // Force React re-render
+            setLocalStream(new MediaStream(stream.getTracks()));
+        } else if (track && !track.enabled && track.readyState === 'live') {
+            // Re-enable existing live track
+            track.enabled = true;
+            setLocalStream(new MediaStream(stream.getTracks()));
         } else {
-            // Re-enable: try to get a fresh video track to avoid stuck camera
+            // Track is ended or doesn't exist — get a fresh video track
             try {
                 const newStream = await navigator.mediaDevices.getUserMedia({ video: true });
                 const newTrack = newStream.getVideoTracks()[0];
-                if (!newTrack) { track.enabled = true; return; }
+                if (!newTrack) return;
 
-                // Replace in local stream
-                stream.removeTrack(track);
-                track.stop();
+                // Remove old track if exists
+                if (track) {
+                    stream.removeTrack(track);
+                    track.stop();
+                }
                 stream.addTrack(newTrack);
 
-                // Replace in all peer connections
+                // Replace track in all peer connections
                 const peers = Object.keys(peersRef.current).length > 0
                     ? Object.values(peersRef.current)
                     : (peerRef.current ? [peerRef.current] : []);
+
                 for (const peer of peers) {
                     const pc = peer._pc;
                     if (!pc) continue;
-                    const sender = pc.getSenders().find(s => s.track?.kind === 'video' || (s.track === null && s._kind === 'video'));
-                    if (!sender) {
-                        // Fallback: find the video sender even if track is null
-                        const videoSender = pc.getSenders().find(s => {
-                            try { return s.track?.kind === 'video'; } catch { return false; }
-                        });
-                        if (videoSender) await videoSender.replaceTrack(newTrack);
+                    const senders = pc.getSenders();
+                    const videoSender = senders.find(s => s.track?.kind === 'video')
+                        || senders.find(s => !s.track && pc.getTransceivers?.()?.some(t => t.sender === s && t.mid !== null && t.receiver?.track?.kind === 'video'));
+                    if (videoSender) {
+                        await videoSender.replaceTrack(newTrack);
                     } else {
-                        await sender.replaceTrack(newTrack);
+                        // No video sender found — add track directly
+                        try { pc.addTrack(newTrack, stream); } catch { /* ignore */ }
                     }
                 }
 
                 // Update state so React re-renders
-                setLocalStream(stream);
-            } catch {
-                // Fallback: just toggle enabled
-                track.enabled = true;
+                setLocalStream(new MediaStream(stream.getTracks()));
+            } catch (err) {
+                console.error('[Call] toggleVideo: failed to get new track:', err.message);
+                // Last resort: just enable existing track
+                if (track) {
+                    track.enabled = true;
+                    setLocalStream(new MediaStream(stream.getTracks()));
+                }
             }
         }
     }, []);

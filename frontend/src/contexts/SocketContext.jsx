@@ -44,6 +44,11 @@ export function SocketProvider({ children }) {
             setOnlineUsers((prev) => prev.filter((id) => id !== userId));
         });
 
+        // Maintenance mode force logout
+        socket.on('system:maintenance', () => {
+            window.dispatchEvent(new Event('system:maintenance'));
+        });
+
         return () => {
             disconnectSocket();
             setConnected(false);

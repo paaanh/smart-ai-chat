@@ -8,6 +8,8 @@ import { useAI } from '../../hooks/useAI';
 import MessageBubble from './MessageBubble';
 import MessageInput from './MessageInput';
 import AIToggle from './AIToggle';
+import ForwardModal from './ForwardModal';
+import PollCreator from './PollCreator';
 import {
     Phone,
     Video,
@@ -17,6 +19,8 @@ import {
     ChevronUp,
     Info,
     Ban,
+    Pin,
+    BarChart3,
 } from 'lucide-react';
 
 export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled, onAIToggle, autoTranslate }) {
@@ -34,6 +38,8 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
     const containerRef = useRef(null);
     const [autoScroll, setAutoScroll] = useState(true);
     const translatedIdsRef = useRef(new Set());
+    const [forwardMsg, setForwardMsg] = useState(null);
+    const [showPollCreator, setShowPollCreator] = useState(false);
 
     // Load room info
     useEffect(() => {
@@ -224,7 +230,6 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
 
     const handleCall = (type) => {
         if (display.isGroup) {
-            // Group call: pass all member IDs except self
             const memberIds = (room?.members || [])
                 .map(m => m.user?._id || m.user)
                 .filter(id => id && id !== user?._id);
@@ -237,6 +242,48 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
             initiateCall(roomId, display.otherUserId, type, display.name);
         }
     };
+
+    const handleForwardMessage = async (messageId, targetRoomId) => {
+        try {
+            const { roomAPI } = await import('../../services/api');
+            await roomAPI.forwardMessage(messageId, targetRoomId);
+        } catch (err) {
+            console.error('Forward error:', err);
+        }
+    };
+
+    const handlePinMessage = async (message) => {
+        try {
+            const { roomAPI: rAPI } = await import('../../services/api');
+            if (message.pinned) {
+                await rAPI.unpinMessage(roomId, message._id);
+            } else {
+                await rAPI.pinMessage(roomId, message._id);
+            }
+        } catch (err) {
+            console.error('Pin error:', err);
+        }
+    };
+
+    const handleSendPoll = ({ question, options }) => {
+        emit('message:send-poll', { roomId, question, options });
+    };
+
+    const handleVotePoll = (messageId, optionIndex) => {
+        emit('poll:vote', { messageId, roomId, optionIndex });
+    };
+
+    // Listen for poll updates
+    useEffect(() => {
+        if (!roomId) return;
+        const handlePollUpdated = ({ messageId, poll }) => {
+            // useChat will handle updating messages via message:received
+            // but poll:updated is a separate event, so we need to refresh
+            // The messages state is managed by useChat, we can emit a custom event
+        };
+        on('poll:updated', handlePollUpdated);
+        return () => off('poll:updated', handlePollUpdated);
+    }, [roomId, on, off]);
 
     if (!roomId) {
         return (
@@ -317,6 +364,14 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                         title="Gọi video"
                     >
                         <Video size={18} />
+                    </button>
+
+                    <button
+                        onClick={() => setShowPollCreator(true)}
+                        className="p-2 hover:bg-gray-100 rounded-full transition text-gray-600"
+                        title="Tạo bình chọn"
+                    >
+                        <BarChart3 size={18} />
                     </button>
 
                     <button
@@ -403,6 +458,9 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                                 localTranslation={localTranslations[msg._id]}
                                 onDelete={deleteMessage}
                                 onReact={reactToMessage}
+                                onForward={(msg) => setForwardMsg(msg)}
+                                onPinMessage={handlePinMessage}
+                                onVotePoll={handleVotePoll}
                             />
                         ))}
                     </>
@@ -455,6 +513,23 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                     onSendLocation={sendLocation}
                     onTyping={startTyping}
                     disabled={!room}
+                />
+            )}
+
+            {/* Forward Modal */}
+            {forwardMsg && (
+                <ForwardModal
+                    message={forwardMsg}
+                    onClose={() => setForwardMsg(null)}
+                    onForward={handleForwardMessage}
+                />
+            )}
+
+            {/* Poll Creator */}
+            {showPollCreator && (
+                <PollCreator
+                    onSend={handleSendPoll}
+                    onClose={() => setShowPollCreator(false)}
                 />
             )}
         </div>

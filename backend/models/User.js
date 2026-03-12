@@ -129,15 +129,7 @@ const userSchema = new mongoose.Schema({
         default: null,
     },
 
-    // ===== MUTE (cấm gửi tin nhắn) =====
-    isMuted: {
-        type: Boolean,
-        default: false,
-    },
-    muteExpires: {
-        type: Date,
-        default: null,
-    },
+
 
     // Danh sách user bị chặn
     blockedUsers: [{
@@ -170,7 +162,7 @@ const userSchema = new mongoose.Schema({
     // ===== PHÂN QUYỀN =====
     role: {
         type: String,
-        enum: ['user', 'admin'],
+        enum: ['user', 'sub_admin', 'super_admin'],
         default: 'user',
     },
 }, { timestamps: true });

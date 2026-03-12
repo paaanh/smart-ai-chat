@@ -78,6 +78,12 @@ const roomSchema = new mongoose.Schema({
         default: null,
     },
 
+    // Tin nhắn đã ghim
+    pinnedMessages: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Message',
+    }],
+
     // Cài đặt room-level
     settings: {
         aiTranslationEnabled: {

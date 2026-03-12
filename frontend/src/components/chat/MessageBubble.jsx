@@ -1,6 +1,6 @@
 import { useAuth } from '../../hooks/useAuth';
 import { format } from 'date-fns';
-import { Bot, Trash2, Globe, ChevronDown, ChevronUp, FileText, FileArchive, FileSpreadsheet, FileImage, FileVideo, FileAudio, File, Download, SmilePlus } from 'lucide-react';
+import { Bot, Trash2, Globe, ChevronDown, ChevronUp, FileText, FileArchive, FileSpreadsheet, FileImage, FileVideo, FileAudio, File, Download, SmilePlus, Forward, Pin } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ImageModal from './ImageModal';
@@ -19,7 +19,7 @@ function getAvatarColor(id) {
     return avatarColors[Math.abs(hash) % avatarColors.length];
 }
 
-export default function MessageBubble({ message, isOwn, onDelete, onReact, nicknames, localTranslation }) {
+export default function MessageBubble({ message, isOwn, onDelete, onReact, nicknames, localTranslation, onForward, onPinMessage, onVotePoll }) {
     const { user } = useAuth();
     const navigate = useNavigate();
     const [showTranslation, setShowTranslation] = useState(false);
@@ -164,6 +164,72 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
         );
     };
 
+    // ─── Poll rendering ─────────────────────────────────────────────
+    if (message.type === 'poll' && message.poll) {
+        const totalVotes = message.poll.options.reduce((sum, o) => sum + (o.votes?.length || 0), 0);
+        return (
+            <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-2`}>
+                {!isOwn && (
+                    <div className="w-8 h-8 rounded-full flex-shrink-0 mr-2 overflow-hidden cursor-pointer"
+                        onClick={() => message.sender?._id && navigate(`/profile/${message.sender._id}`)}>
+                        {(message.sender?.avatar || message.sender?.googlePicture) ? (
+                            <img src={resolveMediaUrl(message.sender.avatar || message.sender.googlePicture)} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                            <div className={`w-full h-full ${getAvatarColor(message.sender?._id)} flex items-center justify-center text-white text-xs font-bold`}>
+                                {senderName.charAt(0).toUpperCase()}
+                            </div>
+                        )}
+                    </div>
+                )}
+                <div className="max-w-[75%] bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+                    <p className="text-xs text-gray-500 mb-1">{senderName}</p>
+                    <p className="font-medium text-gray-800 mb-3">📊 {message.poll.question}</p>
+                    <div className="space-y-2">
+                        {message.poll.options.map((opt, idx) => {
+                            const voteCount = opt.votes?.length || 0;
+                            const pct = totalVotes > 0 ? Math.round((voteCount / totalVotes) * 100) : 0;
+                            const myVote = opt.votes?.some(v => (v?._id || v)?.toString() === user?._id);
+                            return (
+                                <button key={idx} onClick={() => onVotePoll?.(message._id, idx)}
+                                    className={`w-full text-left relative overflow-hidden rounded-lg border px-3 py-2 text-sm transition ${myVote ? 'border-blue-400 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                                    <div className="absolute inset-0 bg-blue-100 rounded-lg transition-all" style={{ width: `${pct}%`, opacity: 0.3 }} />
+                                    <div className="relative flex justify-between items-center">
+                                        <span>{opt.text}</span>
+                                        <span className="text-xs text-gray-500 ml-2">{voteCount} ({pct}%)</span>
+                                    </div>
+                                </button>
+                            );
+                        })}
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-2">{totalVotes} lượt bình chọn · {format(new Date(message.createdAt), 'HH:mm')}</p>
+                </div>
+            </div>
+        );
+    }
+
+    // ─── Contact card rendering ──────────────────────────────────────
+    if (message.type === 'contact-card' && message.contactCard) {
+        const card = message.contactCard;
+        return (
+            <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-2`}>
+                <div className="max-w-[280px] bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+                    <p className="text-xs text-gray-500 mb-2">{senderName} đã chia sẻ liên hệ</p>
+                    <div className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 rounded-lg p-2 -mx-2 transition"
+                        onClick={() => card.userId && navigate(`/profile/${card.userId}`)}>
+                        <div className="w-12 h-12 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold overflow-hidden shrink-0">
+                            {card.avatar ? <img src={resolveMediaUrl(card.avatar)} alt="" className="w-full h-full object-cover" /> : card.username?.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                            <p className="font-medium text-gray-800 truncate">{card.username}</p>
+                            {card.bio && <p className="text-xs text-gray-500 truncate">{card.bio}</p>}
+                        </div>
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-2 text-right">{format(new Date(message.createdAt), 'HH:mm')}</p>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <>
             {lightbox && (
@@ -220,6 +286,20 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                         : 'bg-gray-100 text-gray-900'
                                 }`}
                         >
+                            {/* Forward indicator */}
+                            {message.forwardedFrom && (
+                                <p className={`text-[10px] mb-1 flex items-center gap-1 ${isOwn ? 'text-white/60' : 'text-gray-400'}`}>
+                                    <Forward size={10} /> Chuyển tiếp từ {message.forwardedFrom.senderName || 'Unknown'}
+                                </p>
+                            )}
+
+                            {/* Pin indicator */}
+                            {message.pinned && (
+                                <p className={`text-[10px] mb-1 flex items-center gap-1 ${isOwn ? 'text-white/60' : 'text-gray-400'}`}>
+                                    <Pin size={10} /> Đã ghim
+                                </p>
+                            )}
+
                             {displayText && message.type !== 'location' && (
                                 <p className="text-sm whitespace-pre-wrap wrap-break-word">{displayText}</p>
                             )}
@@ -282,6 +362,22 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                             >
                                 <Trash2 size={14} />
                             </button>
+                        )}
+
+                        {/* Forward & Pin actions */}
+                        {showActions && message.type !== 'system' && (
+                            <div className={`absolute ${isOwn ? '-left-16 bottom-1' : '-right-16 bottom-1'} flex gap-0.5 opacity-0 group-hover:opacity-100 transition`}>
+                                {onForward && (
+                                    <button onClick={() => onForward?.(message)} className="p-1 text-gray-400 hover:text-blue-500 transition" title="Chuyển tiếp">
+                                        <Forward size={14} />
+                                    </button>
+                                )}
+                                {onPinMessage && (
+                                    <button onClick={() => onPinMessage?.(message)} className="p-1 text-gray-400 hover:text-orange-500 transition" title={message.pinned ? 'Bỏ ghim' : 'Ghim'}>
+                                        <Pin size={14} />
+                                    </button>
+                                )}
+                            </div>
                         )}
 
                         {/* Reaction button */}

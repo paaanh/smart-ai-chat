@@ -1,4 +1,5 @@
 const { User } = require('../models/User');
+const { SystemConfig } = require('../models/User');
 const { socketAuthMiddleware } = require('../middlewares/auth.middleware');
 const chatHandler = require('./chat.handler');
 const webrtcHandler = require('./webrtc.handler');
@@ -12,6 +13,16 @@ const initializeSocket = (io) => {
 
     io.on('connection', async (socket) => {
         const user = socket.user;
+
+        // ─── Kiểm tra maintenance mode ────────────────────────────────
+        if (!['sub_admin', 'super_admin'].includes(user.role)) {
+            const config = await SystemConfig.findOne({ key: 'maintenanceMode' });
+            if (config && config.value === true) {
+                socket.emit('system:maintenance', { message: 'Hệ thống đang bảo trì' });
+                return socket.disconnect(true);
+            }
+        }
+
         console.log(`🟢 ${user.username} connected (socket: ${socket.id})`);
 
         // Cập nhật trạng thái online & socketId

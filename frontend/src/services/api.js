@@ -101,7 +101,7 @@ export const roomAPI = {
     getById: (id) => api.get(`/rooms/${id}`),
     getMessages: (id, page = 1) => api.get(`/rooms/${id}/messages?page=${page}`),
     addMember: (id, userId) => api.post(`/rooms/${id}/members`, { userId }),
-    leave: (id) => api.delete(`/rooms/${id}/leave`),
+    leave: (id, data) => api.delete(`/rooms/${id}/leave`, { data }),
     // Chat Info Sidebar
     setNickname: (id, targetUserId, nickname) =>
         api.put(`/rooms/${id}/nickname`, { targetUserId, nickname }),
@@ -111,6 +111,11 @@ export const roomAPI = {
     rejectMember: (id, userId) => api.put(`/rooms/${id}/reject`, { userId }),
     getPending: (id) => api.get(`/rooms/${id}/pending`),
     updateGroupSettings: (id, data) => api.put(`/rooms/${id}/settings`, data),
+    // New chat features
+    deleteChat: (id) => api.delete(`/rooms/${id}/chat`),
+    pinMessage: (id, messageId) => api.put(`/rooms/${id}/pin`, { messageId }),
+    unpinMessage: (id, messageId) => api.put(`/rooms/${id}/unpin`, { messageId }),
+    forwardMessage: (messageId, targetRoomId) => api.post('/rooms/forward', { messageId, targetRoomId }),
 };
 
 // ── User Actions endpoints (block / report) ───────────────────
@@ -152,7 +157,6 @@ export const uploadAPI = {
 export const adminAPI = {
     getUsers: (params) => api.get('/admin/users', { params }),
     getStats: () => api.get('/admin/stats'),
-    getAnalytics: (params) => api.get('/admin/analytics', { params }),
     getUserById: (id) => api.get(`/admin/users/${id}`),
     updateUser: (id, data) => api.put(`/admin/users/${id}`, data),
     deleteUser: (id) => api.delete(`/admin/users/${id}`),
@@ -161,8 +165,6 @@ export const adminAPI = {
     unbanUser: (id) => api.put(`/admin/users/${id}/unban`),
     lockUser: (id, duration) => api.put(`/admin/users/${id}/lock`, { duration }),
     resetPassword: (id, newPassword) => api.put(`/admin/users/${id}/reset-password`, { newPassword }),
-    muteUser: (id, duration) => api.put(`/admin/users/${id}/mute`, { duration }),
-    unmuteUser: (id) => api.put(`/admin/users/${id}/unmute`),
     // Reports
     getReports: (params) => api.get('/admin/reports', { params }),
     resolveReport: (id, data) => api.put(`/admin/reports/${id}/resolve`, data),
@@ -175,6 +177,14 @@ export const adminAPI = {
     updateConfig: (data) => api.put('/admin/config', data),
     // Admin logs
     getLogs: (params) => api.get('/admin/logs', { params }),
+};
+
+// ── Note endpoints ─────────────────────────────────────────────
+export const noteAPI = {
+    getFriendNotes: () => api.get('/notes'),
+    create: (data) => api.post('/notes', data),
+    delete: (id) => api.delete(`/notes/${id}`),
+    reply: (id, content) => api.post(`/notes/${id}/reply`, { content }),
 };
 
 export default api;

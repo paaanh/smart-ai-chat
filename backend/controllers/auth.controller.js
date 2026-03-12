@@ -2,6 +2,7 @@ const { User, SUPPORTED_LANGUAGES, LANGUAGE_LABELS } = require('../models/User')
 const { generateToken } = require('../middlewares/auth.middleware');
 const crypto = require('crypto');
 const { sendOTPEmail, sendRegistrationOTPEmail } = require('../config/mailer');
+const SystemConfig = require('../models/SystemConfig');
 
 // ─── In-memory store for registration OTPs ────────────────────────────
 // key: email, value: { otp, expire, ... }
@@ -134,6 +135,29 @@ exports.login = async (req, res, next) => {
         const isMatch = await user.comparePassword(password);
         if (!isMatch) {
             return res.status(401).json({ error: 'Email hoặc mật khẩu không đúng' });
+        }
+
+        // Check account status
+        if (user.accountStatus === 'banned') {
+            return res.status(403).json({ error: 'Tài khoản của bạn đã bị khóa vĩnh viễn.' });
+        }
+        if (user.accountStatus === 'locked' && user.lockUntil && new Date(user.lockUntil) > new Date()) {
+            const remaining = Math.ceil((new Date(user.lockUntil) - new Date()) / 60000);
+            return res.status(403).json({ error: `Tài khoản đang bị khóa tạm thời. Còn ${remaining} phút.` });
+        }
+        // Auto-unlock expired lock
+        if (user.accountStatus === 'locked' && user.lockUntil && new Date(user.lockUntil) <= new Date()) {
+            user.accountStatus = 'active';
+            user.lockUntil = null;
+            await user.save({ validateModifiedOnly: true });
+        }
+
+        // Check maintenance mode (only allow admins)
+        if (!['sub_admin', 'super_admin'].includes(user.role)) {
+            const maintenanceConfig = await SystemConfig.findOne({ key: 'maintenanceMode' }).lean();
+            if (maintenanceConfig?.value === true) {
+                return res.status(503).json({ error: 'Hệ thống đang bảo trì. Vui lòng quay lại sau.' });
+            }
         }
 
         const token = generateToken(user._id);
@@ -308,6 +332,15 @@ exports.googleLogin = async (req, res, next) => {
             }
             user.isVerified = true;
             await user.save({ validateModifiedOnly: true });
+
+            // Check account status for existing users
+            if (user.accountStatus === 'banned') {
+                return res.status(403).json({ error: 'Tài khoản của bạn đã bị khóa vĩnh viễn.' });
+            }
+            if (user.accountStatus === 'locked' && user.lockUntil && new Date(user.lockUntil) > new Date()) {
+                const remaining = Math.ceil((new Date(user.lockUntil) - new Date()) / 60000);
+                return res.status(403).json({ error: `Tài khoản đang bị khóa tạm thời. Còn ${remaining} phút.` });
+            }
         } else {
             // Tạo user mới từ Google
             user = await User.create({
@@ -319,6 +352,14 @@ exports.googleLogin = async (req, res, next) => {
                 googlePicture: googlePicture || '',
                 isVerified: true,
             });
+        }
+
+        // Check maintenance mode for Google login (only allow admins)
+        if (!['sub_admin', 'super_admin'].includes(user.role)) {
+            const maintenanceConfig = await SystemConfig.findOne({ key: 'maintenanceMode' }).lean();
+            if (maintenanceConfig?.value === true) {
+                return res.status(503).json({ error: 'Hệ thống đang bảo trì. Vui lòng quay lại sau.' });
+            }
         }
 
         const token = generateToken(user._id);
