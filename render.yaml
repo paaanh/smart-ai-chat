@@ -5,6 +5,10 @@ services:
     rootDir: backend
     buildCommand: npm ci
     startCommand: node index.js
+    disk:
+      name: uploads
+      mountPath: /opt/render/project/src/backend/uploads
+      sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
@@ -23,4 +27,6 @@ services:
       - key: CORS_ORIGINS
         sync: false
       - key: CORS_ORIGIN_PATTERNS
+        sync: false
+      - key: PUBLIC_BASE_URL
         sync: false

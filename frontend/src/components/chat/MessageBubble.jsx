@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import ImageModal from './ImageModal';
 import LocationMessage from './LocationMessage';
 import VoiceMessage from './VoiceMessage';
+import { resolveMediaUrl } from '../../services/api';
 
 const avatarColors = [
     'bg-red-500', 'bg-[var(--color-primary)]', 'bg-green-500', 'bg-yellow-500',
@@ -103,33 +104,34 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
     const renderFile = () => {
         if (!message.file) return null;
         const { url, mimeType, name: rawName, size } = message.file;
+        const resolvedUrl = resolveMediaUrl(url);
         let fileName = rawName;
         try { fileName = decodeURIComponent(rawName); } catch { /* already decoded */ }
 
         if (message.type === 'image' || mimeType?.startsWith('image/')) {
             return (
                 <img
-                    src={url}
+                    src={resolvedUrl}
                     alt={fileName}
                     className="max-w-70 rounded-lg mt-1 cursor-pointer hover:opacity-90"
-                    onClick={() => setLightbox({ src: url, alt: fileName })}
+                    onClick={() => setLightbox({ src: resolvedUrl, alt: fileName })}
                 />
             );
         }
         if (message.type === 'video' || mimeType?.startsWith('video/')) {
             return (
-                <video src={url} controls className="max-w-70 rounded-lg mt-1" />
+                <video src={resolvedUrl} controls className="max-w-70 rounded-lg mt-1" />
             );
         }
         if (mimeType?.startsWith('audio/')) {
-            return <VoiceMessage url={url} isOwn={isOwn} />;
+            return <VoiceMessage url={resolvedUrl} isOwn={isOwn} />;
         }
 
         const IconComponent = getFileIcon(mimeType);
 
         return (
             <a
-                href={url}
+                href={resolvedUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className={`flex items-center gap-3 mt-1 px-3 py-2.5 rounded-2xl max-w-[280px] w-fit cursor-pointer transition-all duration-150 group/file

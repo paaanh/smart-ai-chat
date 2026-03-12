@@ -9,6 +9,34 @@ import axios from 'axios';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
+const isAbsoluteUrl = (value) => /^https?:\/\//i.test(value || '');
+
+const getApiOrigin = () => {
+    if (!isAbsoluteUrl(API_BASE)) {
+        return typeof window !== 'undefined' ? window.location.origin : '';
+    }
+
+    try {
+        return new URL(API_BASE).origin;
+    } catch {
+        return '';
+    }
+};
+
+export const resolveMediaUrl = (value) => {
+    if (!value) return value;
+    if (isAbsoluteUrl(value) || value.startsWith('blob:') || value.startsWith('data:')) {
+        return value;
+    }
+
+    const apiOrigin = getApiOrigin();
+    if (!apiOrigin) {
+        return value;
+    }
+
+    return new URL(value, `${apiOrigin}/`).toString();
+};
+
 const api = axios.create({
     baseURL: API_BASE,
     timeout: 15000,

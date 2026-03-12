@@ -1,5 +1,30 @@
 const path = require('path');
 
+const trimTrailingSlashes = (value = '') => String(value).replace(/\/+$/, '');
+
+const getPublicBaseUrl = (req) => {
+    if (process.env.PUBLIC_BASE_URL) {
+        return trimTrailingSlashes(process.env.PUBLIC_BASE_URL);
+    }
+
+    const forwardedProto = req.headers['x-forwarded-proto'];
+    const protocol = forwardedProto || req.protocol || 'http';
+    const host = req.get('host');
+
+    if (!host) {
+        return '';
+    }
+
+    return `${protocol}://${host}`;
+};
+
+const buildFileUrl = (req, filename) => {
+    const relativePath = `/uploads/${filename}`;
+    const baseUrl = getPublicBaseUrl(req);
+
+    return baseUrl ? `${baseUrl}${relativePath}` : relativePath;
+};
+
 // ─── Upload single file ──────────────────────────────────────────────
 exports.uploadFile = async (req, res, next) => {
     try {
@@ -10,7 +35,7 @@ exports.uploadFile = async (req, res, next) => {
         const file = req.file;
         // Fix Vietnamese filename encoding (multer returns latin1)
         file.originalname = Buffer.from(file.originalname, 'latin1').toString('utf8');
-        const fileUrl = `/uploads/${file.filename}`;
+        const fileUrl = buildFileUrl(req, file.filename);
 
         res.json({
             message: 'Upload thành công',
@@ -37,7 +62,7 @@ exports.uploadFiles = async (req, res, next) => {
             // Fix Vietnamese filename encoding (multer returns latin1)
             file.originalname = Buffer.from(file.originalname, 'latin1').toString('utf8');
             return {
-                url: `/uploads/${file.filename}`,
+                url: buildFileUrl(req, file.filename),
                 name: file.originalname,
                 size: file.size,
                 mimeType: file.mimetype,
