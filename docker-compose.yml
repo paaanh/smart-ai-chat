@@ -2,7 +2,6 @@ services:
   # ─── MongoDB ──────────────────────────────────────────────────────────
   mongo:
     image: mongo:7
-    container_name: smart-ai-mongo
     ports:
       - "27018:27017"
     volumes:
@@ -12,7 +11,6 @@ services:
   # ─── Backend ──────────────────────────────────────────────────────────
   backend:
     build: ./backend
-    container_name: smart-ai-backend
     ports:
       - "5000:5000"
     environment:
@@ -40,7 +38,6 @@ services:
       context: ./frontend
       args:
         - VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID:-}
-    container_name: smart-ai-frontend
     ports:
       - "80:80"
     depends_on:
