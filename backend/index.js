@@ -7,7 +7,7 @@ require('dotenv').config();
 
 const { Server } = require('socket.io');
 const connectDB = require('./config/db');
-const { corsOptions, allowedOrigins } = require('./config/cors');
+const { corsOptions, allowedOrigins, isOriginAllowed } = require('./config/cors');
 const errorHandler = require('./middlewares/errorHandler');
 const { initAI, getAIStats } = require('./services/ai.service');
 const initializeSocket = require('./socket');
@@ -19,7 +19,14 @@ const server = http.createServer(app);
 // ─── Khởi tạo Socket.io ──────────────────────────────────────────────
 const io = new Server(server, {
     cors: {
-        origin: allowedOrigins,
+        origin: function (origin, callback) {
+            if (!origin) return callback(null, true);
+            if (isOriginAllowed(origin)) {
+                callback(null, true);
+            } else {
+                callback(new Error('Not allowed by CORS'));
+            }
+        },
         credentials: true,
     },
     maxHttpBufferSize: 1e8, // 100MB cho file transfer

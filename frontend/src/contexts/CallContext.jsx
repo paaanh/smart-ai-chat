@@ -25,6 +25,9 @@ export function CallProvider({ children }) {
     const { on, off, emit } = useSocket();
     const { user } = useAuth();
 
+    // Ref to track isGroup for use in socket handlers (avoids stale closure)
+    const isGroupRef = useRef(false);
+
     const [callState, setCallState] = useState({
         active: false,
         incoming: false,
@@ -106,6 +109,10 @@ export function CallProvider({ children }) {
     }, []);
 
     // ---- Helpers ----
+
+    // Keep isGroupRef in sync
+    useEffect(() => { isGroupRef.current = callState.isGroup; }, [callState.isGroup]);
+
     const cleanup = useCallback(() => {
         console.log('[Call] cleanup()');
         stopRingtone();
@@ -404,9 +411,8 @@ export function CallProvider({ children }) {
             }
 
             // If group call but no peer yet → create non-initiator peer
-            // Use a ref-based check instead of stale callState
-            const currentCallState = callState;
-            if (currentCallState.isGroup || Object.keys(peersRef.current).length > 0) {
+            // Use ref to avoid stale closure
+            if (isGroupRef.current || Object.keys(peersRef.current).length > 0) {
                 const stream = localStreamRef.current;
                 if (stream) {
                     const peer = await createPeerForUser(fromUserId, false, stream);
@@ -615,10 +621,52 @@ export function CallProvider({ children }) {
         }
     }, []);
 
-    const toggleVideo = useCallback(() => {
-        if (localStreamRef.current) {
-            const track = localStreamRef.current.getVideoTracks()[0];
-            if (track) track.enabled = !track.enabled;
+    const toggleVideo = useCallback(async () => {
+        if (!localStreamRef.current) return;
+        const stream = localStreamRef.current;
+        const track = stream.getVideoTracks()[0];
+        if (!track) return;
+
+        if (track.enabled) {
+            // Disable: just toggle off
+            track.enabled = false;
+        } else {
+            // Re-enable: try to get a fresh video track to avoid stuck camera
+            try {
+                const newStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                const newTrack = newStream.getVideoTracks()[0];
+                if (!newTrack) { track.enabled = true; return; }
+
+                // Replace in local stream
+                stream.removeTrack(track);
+                track.stop();
+                stream.addTrack(newTrack);
+
+                // Replace in all peer connections
+                const peers = Object.keys(peersRef.current).length > 0
+                    ? Object.values(peersRef.current)
+                    : (peerRef.current ? [peerRef.current] : []);
+                for (const peer of peers) {
+                    const pc = peer._pc;
+                    if (!pc) continue;
+                    const sender = pc.getSenders().find(s => s.track?.kind === 'video' || (s.track === null && s._kind === 'video'));
+                    if (!sender) {
+                        // Fallback: find the video sender even if track is null
+                        const videoSender = pc.getSenders().find(s => {
+                            try { return s.track?.kind === 'video'; } catch { return false; }
+                        });
+                        if (videoSender) await videoSender.replaceTrack(newTrack);
+                    } else {
+                        await sender.replaceTrack(newTrack);
+                    }
+                }
+
+                // Update state so React re-renders
+                setLocalStream(stream);
+            } catch {
+                // Fallback: just toggle enabled
+                track.enabled = true;
+            }
         }
     }, []);
 

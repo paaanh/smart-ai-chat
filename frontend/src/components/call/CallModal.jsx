@@ -150,27 +150,100 @@ export default function CallModal() {
     const [showInvitePanel, setShowInvitePanel] = useState(false);
     const controlsTimerRef = useRef(null);
 
+    // ── Draggable PiP state ──
+    const pipRef = useRef(null);
+    const dragState = useRef({ dragging: false, startX: 0, startY: 0, startLeft: 0, startTop: 0, moved: false });
+    const [pipPosition, setPipPosition] = useState(null); // null = use default CSS position
+
+    const handleDragStart = useCallback((clientX, clientY) => {
+        const el = pipRef.current;
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        dragState.current = {
+            dragging: true,
+            startX: clientX,
+            startY: clientY,
+            startLeft: rect.left,
+            startTop: rect.top,
+            moved: false,
+        };
+    }, []);
+
+    const handleDragMove = useCallback((clientX, clientY) => {
+        const ds = dragState.current;
+        if (!ds.dragging) return;
+        const dx = clientX - ds.startX;
+        const dy = clientY - ds.startY;
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) ds.moved = true;
+        if (!ds.moved) return;
+        const el = pipRef.current;
+        if (!el) return;
+        const maxX = window.innerWidth - el.offsetWidth;
+        const maxY = window.innerHeight - el.offsetHeight;
+        const newLeft = Math.min(Math.max(0, ds.startLeft + dx), maxX);
+        const newTop = Math.min(Math.max(0, ds.startTop + dy), maxY);
+        setPipPosition({ left: newLeft, top: newTop });
+    }, []);
+
+    const handleDragEnd = useCallback(() => {
+        dragState.current.dragging = false;
+    }, []);
+
+    // Mouse drag listeners
+    useEffect(() => {
+        const onMouseMove = (e) => handleDragMove(e.clientX, e.clientY);
+        const onMouseUp = () => handleDragEnd();
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+        return () => {
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+        };
+    }, [handleDragMove, handleDragEnd]);
+
+    // Touch drag listeners
+    useEffect(() => {
+        const onTouchMove = (e) => {
+            if (!dragState.current.dragging) return;
+            e.preventDefault();
+            const t = e.touches[0];
+            handleDragMove(t.clientX, t.clientY);
+        };
+        const onTouchEnd = () => handleDragEnd();
+        window.addEventListener('touchmove', onTouchMove, { passive: false });
+        window.addEventListener('touchend', onTouchEnd);
+        return () => {
+            window.removeEventListener('touchmove', onTouchMove);
+            window.removeEventListener('touchend', onTouchEnd);
+        };
+    }, [handleDragMove, handleDragEnd]);
+
+    // Reset PiP position when exiting PiP mode
+    useEffect(() => {
+        if (!pipMode) setPipPosition(null);
+    }, [pipMode]);
+
     const isGroup = callState.isGroup;
 
     // ── For 1-1 backward compat ──
     const localVideoRef = useRef(null);
     const remoteVideoRef = useRef(null);
 
-    // Attach local stream (1-1)
+    // Attach local stream (1-1) — re-run when layout changes (hasRemote/pipMode/screenSharing)
     useEffect(() => {
         const el = localVideoRef.current;
         if (!el) return;
         if (localStream) { el.srcObject = localStream; el.play().catch(() => { }); }
         else { el.srcObject = null; }
-    }, [localStream]);
+    }, [localStream, remoteStream, callState.active, pipMode, screenSharing, remoteScreenSharing]);
 
-    // Attach remote stream (1-1)
+    // Attach remote stream (1-1) — re-run when layout changes
     useEffect(() => {
         const el = remoteVideoRef.current;
         if (!el) return;
         if (remoteStream) { el.srcObject = remoteStream; el.play().catch(() => { }); }
         else { el.srcObject = null; }
-    }, [remoteStream]);
+    }, [remoteStream, callState.active, pipMode, screenSharing, remoteScreenSharing]);
 
     // Attach remote audio (1-1)
     useEffect(() => {
@@ -178,7 +251,7 @@ export default function CallModal() {
         if (!el) return;
         if (remoteStream) { el.srcObject = remoteStream; el.play().catch(() => { }); }
         else { el.srcObject = null; }
-    }, [remoteStream]);
+    }, [remoteStream, pipMode]);
 
     // Attach screen share stream
     useEffect(() => {
@@ -186,7 +259,7 @@ export default function CallModal() {
         if (!el) return;
         if (screenStream) { el.srcObject = screenStream; el.play().catch(() => { }); }
         else { el.srcObject = null; }
-    }, [screenStream]);
+    }, [screenStream, screenSharing]);
 
     // Determine if we have any remote connection
     const hasRemote = isGroup
@@ -268,12 +341,18 @@ export default function CallModal() {
     // ─── PiP (Picture-in-Picture) Bubble Mode ───────────────
     // ═════════════════════════════════════════════════════════
     if (pipMode) {
+        const pipStyle = pipPosition
+            ? { aspectRatio: '16/10', position: 'fixed', left: pipPosition.left, top: pipPosition.top, bottom: 'auto', right: 'auto' }
+            : { aspectRatio: '16/10' };
         return (
             <div
-                className="fixed bottom-20 right-4 z-45 w-72 rounded-2xl overflow-hidden shadow-2xl border border-white/10 bg-gray-900 cursor-pointer group"
-                style={{ aspectRatio: '16/10' }}
-                onClick={() => setPipMode(false)}
-                title="Nhấn để mở rộng"
+                ref={pipRef}
+                className={`fixed ${!pipPosition ? 'bottom-20 right-4' : ''} z-45 w-72 rounded-2xl overflow-hidden shadow-2xl border border-white/10 bg-gray-900 cursor-grab active:cursor-grabbing group select-none`}
+                style={pipStyle}
+                onMouseDown={(e) => { e.preventDefault(); handleDragStart(e.clientX, e.clientY); }}
+                onTouchStart={(e) => { const t = e.touches[0]; handleDragStart(t.clientX, t.clientY); }}
+                onClick={() => { if (!dragState.current.moved) setPipMode(false); }}
+                title="Kéo để di chuyển \u2022 Nhấn để mở rộng"
             >
                 <audio ref={remoteAudioRef} autoPlay playsInline />
 
