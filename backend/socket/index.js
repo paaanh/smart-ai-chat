@@ -1,5 +1,5 @@
 const { User } = require('../models/User');
-const { SystemConfig } = require('../models/User');
+const SystemConfig = require('../models/SystemConfig');
 const { socketAuthMiddleware } = require('../middlewares/auth.middleware');
 const chatHandler = require('./chat.handler');
 const webrtcHandler = require('./webrtc.handler');
