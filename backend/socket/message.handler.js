@@ -2,6 +2,7 @@ const Room = require('../models/Room');
 const Message = require('../models/Message');
 const { User } = require('../models/User');
 const { translateForRoom, getTranslationForUser } = require('../services/translation.service');
+const { filterMessage } = require('../utils/badWordFilter');
 
 module.exports = (io, socket) => {
     const userId = socket.user._id;
@@ -40,15 +41,40 @@ module.exports = (io, socket) => {
             }
 
             // ── Lấy preferredLanguage MỚI NHẤT từ DB (socket.user có thể stale) ──
-            const senderFresh = await User.findById(userId).select('preferredLanguage').lean();
+            const senderFresh = await User.findById(userId).select('preferredLanguage isMuted muteExpires accountStatus').lean();
+
+            // ── Check account status ──
+            if (senderFresh?.accountStatus === 'banned') {
+                return socket.emit('error', { message: 'Tài khoản của bạn đã bị khóa.' });
+            }
+            if (senderFresh?.accountStatus === 'locked' && senderFresh?.lockUntil && new Date(senderFresh.lockUntil) > new Date()) {
+                return socket.emit('error', { message: 'Tài khoản đang bị khóa tạm thời.' });
+            }
+
+            // ── Check mute status ──
+            if (senderFresh?.isMuted) {
+                if (!senderFresh.muteExpires || new Date(senderFresh.muteExpires) > new Date()) {
+                    return socket.emit('error', { message: 'Bạn đang bị cấm gửi tin nhắn.' });
+                }
+                // Mute expired — auto-unmute
+                await User.findByIdAndUpdate(userId, { isMuted: false, muteExpires: null });
+            }
+
             const senderLanguage = senderFresh?.preferredLanguage || socket.user.preferredLanguage || 'vi';
+
+            // ── Bad word filter ──
+            let filteredContent = content;
+            if (type === 'text' && content) {
+                const { filtered } = await filterMessage(content);
+                filteredContent = filtered;
+            }
 
             // ── Tạo message ──
             const messageData = {
                 room: roomId,
                 sender: userId,
                 type,
-                content: content || '',
+                content: filteredContent || '',
                 originalLanguage: senderLanguage,
             };
 
@@ -102,8 +128,8 @@ module.exports = (io, socket) => {
             // ═════════════════════════════════════════════════════════════════
             // BƯỚC 2: Dịch thuật ASYNC (fire-and-forget, không block UX)
             // ═════════════════════════════════════════════════════════════════
-            if (type === 'text' && content && content.trim().length >= 2) {
-                translateForRoom(io, roomId, message._id, content, senderLanguage)
+            if (type === 'text' && filteredContent && filteredContent.trim().length >= 2) {
+                translateForRoom(io, roomId, message._id, filteredContent, senderLanguage)
                     .catch(err => console.error('Translation error:', err.message));
             }
 

@@ -101,7 +101,7 @@ const userSchema = new mongoose.Schema({
     preferredTheme: {
         type: String,
         default: 'blue',
-        enum: ['blue', 'red', 'purple', 'yellow', 'brown', 'dark', 'light'],
+        enum: ['blue', 'red', 'purple', 'yellow', 'brown', 'dark', 'light', 'midnight-purple', 'solarized', 'glassmorphism', 'retro-terminal'],
     },
 
     status: {
@@ -112,6 +112,31 @@ const userSchema = new mongoose.Schema({
     lastSeen: {
         type: Date,
         default: Date.now,
+    },
+    lastOnline: {
+        type: Date,
+        default: null,
+    },
+
+    // ===== TRẠNG THÁI TÀI KHOẢN =====
+    accountStatus: {
+        type: String,
+        enum: ['active', 'banned', 'locked'],
+        default: 'active',
+    },
+    lockUntil: {
+        type: Date,
+        default: null,
+    },
+
+    // ===== MUTE (cấm gửi tin nhắn) =====
+    isMuted: {
+        type: Boolean,
+        default: false,
+    },
+    muteExpires: {
+        type: Date,
+        default: null,
     },
 
     // Danh sách user bị chặn

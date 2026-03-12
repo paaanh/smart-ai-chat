@@ -18,6 +18,7 @@ const initializeSocket = (io) => {
         await User.findByIdAndUpdate(user._id, {
             status: 'online',
             socketId: socket.id,
+            lastOnline: new Date(),
         });
 
         // Broadcast user online cho tất cả

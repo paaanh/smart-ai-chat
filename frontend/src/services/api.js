@@ -152,10 +152,29 @@ export const uploadAPI = {
 export const adminAPI = {
     getUsers: (params) => api.get('/admin/users', { params }),
     getStats: () => api.get('/admin/stats'),
+    getAnalytics: (params) => api.get('/admin/analytics', { params }),
     getUserById: (id) => api.get(`/admin/users/${id}`),
     updateUser: (id, data) => api.put(`/admin/users/${id}`, data),
     deleteUser: (id) => api.delete(`/admin/users/${id}`),
     toggleVerified: (id) => api.put(`/admin/users/${id}/toggle-verified`),
+    banUser: (id) => api.put(`/admin/users/${id}/ban`),
+    unbanUser: (id) => api.put(`/admin/users/${id}/unban`),
+    lockUser: (id, duration) => api.put(`/admin/users/${id}/lock`, { duration }),
+    resetPassword: (id, newPassword) => api.put(`/admin/users/${id}/reset-password`, { newPassword }),
+    muteUser: (id, duration) => api.put(`/admin/users/${id}/mute`, { duration }),
+    unmuteUser: (id) => api.put(`/admin/users/${id}/unmute`),
+    // Reports
+    getReports: (params) => api.get('/admin/reports', { params }),
+    resolveReport: (id, data) => api.put(`/admin/reports/${id}/resolve`, data),
+    // Bad words
+    getBadWords: () => api.get('/admin/bad-words'),
+    addBadWord: (data) => api.post('/admin/bad-words', data),
+    removeBadWord: (id) => api.delete(`/admin/bad-words/${id}`),
+    // System config
+    getConfig: () => api.get('/admin/config'),
+    updateConfig: (data) => api.put('/admin/config', data),
+    // Admin logs
+    getLogs: (params) => api.get('/admin/logs', { params }),
 };
 
 export default api;
