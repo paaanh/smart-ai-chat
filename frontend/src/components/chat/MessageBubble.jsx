@@ -192,7 +192,7 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                         >
                             {(message.sender?.avatar || message.sender?.googlePicture) && !imgError ? (
                                 <img
-                                    src={message.sender.avatar || message.sender.googlePicture}
+                                    src={resolveMediaUrl(message.sender.avatar || message.sender.googlePicture)}
                                     alt={senderName}
                                     className="w-full h-full object-cover"
                                     onError={() => setImgError(true)}

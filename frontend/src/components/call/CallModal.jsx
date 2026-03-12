@@ -14,6 +14,7 @@ import {
     UserPlus,
     X,
 } from 'lucide-react';
+import { resolveMediaUrl } from '../../services/api';
 
 // ── Smart grid: returns inline style for CSS Grid ──
 // Even counts → perfectly symmetric. Odd counts → last item centered.
@@ -238,7 +239,7 @@ export default function CallModal() {
     const displayName = isGroup
         ? (callState.roomName || 'Cuộc gọi nhóm')
         : (otherPerson?.username || 'Unknown');
-    const displayAvatar = otherPerson?.avatar || otherPerson?.googlePicture;
+    const displayAvatar = resolveMediaUrl(otherPerson?.avatar || otherPerson?.googlePicture);
 
     // ── Build group tiles list (must be before early return to respect hooks rules) ──
     const groupTiles = useMemo(() => {
@@ -253,7 +254,7 @@ export default function CallModal() {
                 id: uid,
                 stream,
                 label: p?.username || 'User',
-                avatar: p?.avatar,
+                avatar: resolveMediaUrl(p?.avatar),
                 muted: false,
                 mirror: false,
             });
@@ -705,7 +706,7 @@ function InvitePanel({ roomId, participants, onInvite, onClose }) {
                                 <div className="flex items-center gap-3">
                                     <div className="w-11 h-11 rounded-full bg-blue-500 flex items-center justify-center text-white text-base font-bold overflow-hidden shrink-0">
                                         {(member.avatar || member.googlePicture) ? (
-                                            <img src={member.avatar || member.googlePicture} alt={member.username} className="w-full h-full object-cover" />
+                                            <img src={resolveMediaUrl(member.avatar || member.googlePicture)} alt={member.username} className="w-full h-full object-cover" />
                                         ) : (member.username || '?').charAt(0).toUpperCase()}
                                     </div>
                                     <span className="text-white text-base font-medium">{member.username}</span>

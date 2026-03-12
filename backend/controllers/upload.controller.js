@@ -25,6 +25,9 @@ const buildFileUrl = (req, filename) => {
     return baseUrl ? `${baseUrl}${relativePath}` : relativePath;
 };
 
+// ─── Export helpers for reuse in other controllers ───────────────────
+exports.buildFileUrl = buildFileUrl;
+
 // ─── Upload single file ──────────────────────────────────────────────
 exports.uploadFile = async (req, res, next) => {
     try {

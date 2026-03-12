@@ -1,5 +1,6 @@
 import { useCall } from '../../hooks/useCall';
 import { Phone, PhoneOff, Video, Loader2 } from 'lucide-react';
+import { resolveMediaUrl } from '../../services/api';
 import { useState, useEffect } from 'react';
 
 export default function IncomingCallModal() {
@@ -18,7 +19,7 @@ export default function IncomingCallModal() {
     if (!callState.incoming) return null;
 
     const callerName = callState.caller?.username || 'Unknown';
-    const callerAvatar = callState.caller?.avatar || callState.caller?.googlePicture;
+    const callerAvatar = resolveMediaUrl(callState.caller?.avatar || callState.caller?.googlePicture);
     const isVideoCall = callState.callType === 'video';
     const isGroup = callState.isGroup;
     const roomName = callState.roomName;

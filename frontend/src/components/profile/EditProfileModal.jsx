@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import { X, Camera, Loader2, Plus, Trash2 } from 'lucide-react';
-import { userAPI } from '../../services/api';
+import { userAPI, resolveMediaUrl } from '../../services/api';
 
 export default function EditProfileModal({ profile, onClose, onSaved }) {
     const [form, setForm] = useState({
@@ -21,12 +21,12 @@ export default function EditProfileModal({ profile, onClose, onSaved }) {
 
     const avatarPreview = useMemo(() => {
         if (avatarFile) return URL.createObjectURL(avatarFile);
-        return profile.avatar || profile.googlePicture || null;
+        return resolveMediaUrl(profile.avatar || profile.googlePicture) || null;
     }, [avatarFile, profile.avatar, profile.googlePicture]);
 
     const coverPreview = useMemo(() => {
         if (coverFile) return URL.createObjectURL(coverFile);
-        return profile.coverPicture || null;
+        return resolveMediaUrl(profile.coverPicture) || null;
     }, [coverFile, profile.coverPicture]);
 
     useEffect(() => {

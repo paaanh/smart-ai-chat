@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useSocket } from '../hooks/useSocket';
-import { userAPI, friendAPI, roomAPI } from '../services/api';
+import { userAPI, friendAPI, roomAPI, resolveMediaUrl } from '../services/api';
 import {
     ArrowLeft, MapPin, GraduationCap, Phone, Mail, Heart, Edit3,
     MessageCircle, UserX, Loader2, Calendar, Shield
@@ -131,7 +131,7 @@ export default function ProfilePage() {
                     <div className="h-48 sm:h-64 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-gradient-to)] rounded-b-2xl overflow-hidden">
                         {profile.coverPicture && (
                             <img
-                                src={profile.coverPicture}
+                                src={resolveMediaUrl(profile.coverPicture)}
                                 alt="cover"
                                 className="w-full h-full object-cover"
                             />
@@ -142,7 +142,7 @@ export default function ProfilePage() {
                     <div className="absolute -bottom-16 left-6">
                         <div className="w-32 h-32 rounded-full border-4 border-white bg-[var(--color-primary)] flex items-center justify-center text-white text-5xl font-bold overflow-hidden shadow-lg">
                             {(profile.avatar || profile.googlePicture) ? (
-                                <img src={profile.avatar || profile.googlePicture} alt={profile.username} className="w-full h-full object-cover" />
+                                <img src={resolveMediaUrl(profile.avatar || profile.googlePicture)} alt={profile.username} className="w-full h-full object-cover" />
                             ) : (
                                 initial
                             )}

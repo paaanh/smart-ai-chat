@@ -1,5 +1,6 @@
 import { useAuth } from '../../hooks/useAuth';
 import { useSocket } from '../../hooks/useSocket';
+import { resolveMediaUrl } from '../../services/api';
 import { Shield, Crown, MoreVertical, UserMinus, Edit3 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -19,7 +20,7 @@ export default function MemberList({ members, nicknames, isAdmin, onSetNickname,
             name: nick || u?.username || 'Unknown',
             originalName: u?.username || 'Unknown',
             hasNickname: !!nick,
-            avatar: u?.avatar,
+            avatar: resolveMediaUrl(u?.avatar),
             role: member.role,
             isOnline: onlineUsers.includes(userId),
             isSelf: userId === user?._id,

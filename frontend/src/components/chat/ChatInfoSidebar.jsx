@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useSocket } from '../../hooks/useSocket';
-import { roomAPI, userActionsAPI } from '../../services/api';
+import { roomAPI, userActionsAPI, resolveMediaUrl } from '../../services/api';
 import MemberList from './MemberList';
 import PendingMembers from './PendingMembers';
 import NicknameModal from './NicknameModal';
@@ -214,12 +214,12 @@ export default function ChatInfoSidebar({ room, onClose, onRoomUpdate }) {
                         >
                             {isGroup ? (
                                 room.groupAvatar ? (
-                                    <img src={room.groupAvatar} alt={displayName} className="w-full h-full object-cover" />
+                                    <img src={resolveMediaUrl(room.groupAvatar)} alt={displayName} className="w-full h-full object-cover" />
                                 ) : (
                                     <Users size={32} />
                                 )
                             ) : (otherUser?.avatar || otherUser?.googlePicture) ? (
-                                <img src={otherUser.avatar || otherUser.googlePicture} alt={displayName} className="w-full h-full object-cover" />
+                                <img src={resolveMediaUrl(otherUser.avatar || otherUser.googlePicture)} alt={displayName} className="w-full h-full object-cover" />
                             ) : (
                                 initial
                             )}

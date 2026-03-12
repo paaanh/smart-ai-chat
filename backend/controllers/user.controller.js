@@ -1,4 +1,5 @@
 const { User, SUPPORTED_LANGUAGES, LANGUAGE_LABELS } = require('../models/User');
+const { buildFileUrl } = require('./upload.controller');
 
 // ─── Cập nhật profile (hỗ trợ upload avatar + cover) ──────────────────
 exports.updateProfile = async (req, res, next) => {
@@ -27,10 +28,10 @@ exports.updateProfile = async (req, res, next) => {
         // Handle uploaded files (multer)
         if (req.files) {
             if (req.files.avatar?.[0]) {
-                updates.avatar = `/uploads/${req.files.avatar[0].filename}`;
+                updates.avatar = buildFileUrl(req, req.files.avatar[0].filename);
             }
             if (req.files.coverPicture?.[0]) {
-                updates.coverPicture = `/uploads/${req.files.coverPicture[0].filename}`;
+                updates.coverPicture = buildFileUrl(req, req.files.coverPicture[0].filename);
             }
         }
 

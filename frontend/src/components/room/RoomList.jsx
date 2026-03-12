@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { roomAPI } from '../../services/api';
+import { roomAPI, resolveMediaUrl } from '../../services/api';
 import { useAuth } from '../../hooks/useAuth';
 import { useSocket } from '../../hooks/useSocket';
 import { formatDistanceToNow } from 'date-fns';
@@ -116,7 +116,7 @@ export default function RoomList({ activeRoomId, onSelectRoom }) {
         const otherNickname = otherUser?._id && room.nicknames?.[otherUser._id];
         return {
             name: otherNickname || otherUser?.username || 'Unknown',
-            avatar: otherUser?.avatar || otherUser?.googlePicture,
+            avatar: resolveMediaUrl(otherUser?.avatar || otherUser?.googlePicture),
             isGroup: false,
             otherUserId: otherUser?._id,
         };

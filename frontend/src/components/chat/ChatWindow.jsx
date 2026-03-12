@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { roomAPI, userActionsAPI } from '../../services/api';
+import { roomAPI, userActionsAPI, resolveMediaUrl } from '../../services/api';
 import { useAuth } from '../../hooks/useAuth';
 import { useSocket } from '../../hooks/useSocket';
 import { useCall } from '../../hooks/useCall';
@@ -211,7 +211,7 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
             isOnline,
             isGroup: false,
             otherUserId: otherUser?._id,
-            avatar: otherUser?.avatar || otherUser?.googlePicture,
+            avatar: resolveMediaUrl(otherUser?.avatar || otherUser?.googlePicture),
         };
     };
 
@@ -270,7 +270,7 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                     >
                         {display.isGroup ? (
                             room?.groupAvatar ? (
-                                <img src={room.groupAvatar} alt={display.name} className="w-full h-full object-cover" />
+                                <img src={resolveMediaUrl(room.groupAvatar)} alt={display.name} className="w-full h-full object-cover" />
                             ) : (
                                 <Users size={18} />
                             )
@@ -345,7 +345,7 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                         >
                             {display.isGroup ? (
                                 room?.groupAvatar ? (
-                                    <img src={room.groupAvatar} alt={display.name} className="w-full h-full object-cover" />
+                                    <img src={resolveMediaUrl(room.groupAvatar)} alt={display.name} className="w-full h-full object-cover" />
                                 ) : (
                                     <Users size={40} />
                                 )

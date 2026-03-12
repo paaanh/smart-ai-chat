@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useSocket } from '../hooks/useSocket';
-import { roomAPI, uploadAPI } from '../services/api';
+import { roomAPI, uploadAPI, resolveMediaUrl } from '../services/api';
 import {
     ArrowLeft, Users, Edit3, Camera, Loader2, Calendar, MessageCircle,
 } from 'lucide-react';
@@ -132,7 +132,7 @@ export default function GroupProfilePage() {
                     <div className="h-48 sm:h-64 bg-gradient-to-r from-[var(--color-gradient-from)] to-[var(--color-gradient-to)] rounded-b-2xl overflow-hidden relative group">
                         {room.groupBackground && (
                             <img
-                                src={room.groupBackground}
+                                src={resolveMediaUrl(room.groupBackground)}
                                 alt="cover"
                                 className="w-full h-full object-cover"
                             />
@@ -169,7 +169,7 @@ export default function GroupProfilePage() {
                         <div className="relative group">
                             <div className="w-32 h-32 rounded-full border-4 border-white bg-purple-500 flex items-center justify-center text-white text-5xl font-bold overflow-hidden shadow-lg">
                                 {room.groupAvatar ? (
-                                    <img src={room.groupAvatar} alt={room.name} className="w-full h-full object-cover" />
+                                    <img src={resolveMediaUrl(room.groupAvatar)} alt={room.name} className="w-full h-full object-cover" />
                                 ) : (
                                     <Users size={48} />
                                 )}
@@ -252,7 +252,7 @@ export default function GroupProfilePage() {
                                 >
                                     <div className="w-10 h-10 rounded-full bg-[var(--color-primary)] flex items-center justify-center text-white font-semibold overflow-hidden shrink-0">
                                         {u?.avatar ? (
-                                            <img src={u.avatar} alt={username} className="w-full h-full object-cover" />
+                                            <img src={resolveMediaUrl(u.avatar)} alt={username} className="w-full h-full object-cover" />
                                         ) : (
                                             memberInitial
                                         )}
