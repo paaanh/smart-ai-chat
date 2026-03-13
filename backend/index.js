@@ -35,6 +35,7 @@ const io = new Server(server, {
 
 // Expose io to HTTP controllers (for real-time notifications from REST routes)
 app.set('io', io);
+app.set('socketio', io);
 
 // ─── Middleware ───────────────────────────────────────────────────────
 app.use(cors(corsOptions));
