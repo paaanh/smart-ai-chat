@@ -91,7 +91,7 @@ app.get('/api/ice-servers', async (req, res) => {
 
         // If Metered.ca API key is configured, fetch real TURN credentials
         const meteredApiKey = process.env.METERED_API_KEY;
-        const meteredDomain = process.env.METERED_DOMAIN || 'smart-ai-chat.metered.live';
+        const meteredDomain = process.env.METERED_DOMAIN || 'phucanh.metered.live';
         if (meteredApiKey) {
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 5000);
@@ -120,6 +120,20 @@ app.get('/api/ice-servers', async (req, res) => {
             }
         }
 
+        // Manual TURN server from env vars
+        const turnUrl = process.env.TURN_URL;
+        const turnUser = process.env.TURN_USERNAME;
+        const turnCred = process.env.TURN_CREDENTIAL;
+        if (turnUrl) {
+            iceServers.push({
+                urls: turnUrl.split(',').map(u => u.trim()),
+                username: turnUser || '',
+                credential: turnCred || '',
+            });
+            hasTurn = true;
+            console.log('✅ Using TURN servers from TURN_URL env');
+        }
+
         // Fallback: Open Relay free TURN servers (static auth)
         if (!hasTurn) {
             const username = 'openrelayproject';
@@ -134,18 +148,6 @@ app.get('/api/ice-servers', async (req, res) => {
             );
             hasTurn = true;
             console.log('✅ Using Open Relay free TURN servers (static auth)');
-        }
-
-        // Manual TURN server from env vars
-        const turnUrl = process.env.TURN_URL;
-        const turnUser = process.env.TURN_USERNAME;
-        const turnCred = process.env.TURN_CREDENTIAL;
-        if (turnUrl) {
-            iceServers.push({
-                urls: turnUrl.split(',').map(u => u.trim()),
-                username: turnUser || '',
-                credential: turnCred || '',
-            });
         }
 
         res.json({ iceServers });
