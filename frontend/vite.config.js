@@ -11,12 +11,13 @@ export default defineConfig({
   resolve: {
     alias: {
       events: 'events',
+      stream: 'readable-stream',
       buffer: 'buffer',
       process: 'process/browser',
     },
   },
   optimizeDeps: {
-    include: ['buffer', 'events', 'process/browser', 'simple-peer'],
+    include: ['buffer', 'events', 'readable-stream', 'process/browser', 'simple-peer'],
   },
   server: {
     proxy: {
