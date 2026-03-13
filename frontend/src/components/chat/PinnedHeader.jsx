@@ -54,15 +54,13 @@ export default function PinnedHeader({ pinnedMessages, onScrollToMessage, onUnpi
                 </button>
 
                 {/* "+N ghim" button with dropdown arrow */}
-                {pinnedMessages.length > 0 && (
-                    <button
-                        onClick={() => setShowDropdown((v) => !v)}
-                        className="flex items-center gap-1 text-xs font-medium text-amber-700 hover:text-amber-900 bg-amber-100 hover:bg-amber-200 px-2 py-1 rounded-lg transition shrink-0"
-                    >
-                        {pinnedMessages.length} ghim
-                        <ChevronDown size={12} className={`transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
-                    </button>
-                )}
+                <button
+                    onClick={() => setShowDropdown((v) => !v)}
+                    className="flex items-center gap-1 text-xs font-medium text-amber-700 hover:text-amber-900 bg-amber-100 hover:bg-amber-200 px-2 py-1 rounded-lg transition shrink-0"
+                >
+                    {pinnedMessages.length} ghim
+                    <ChevronDown size={12} className={`transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
+                </button>
             </div>
 
             {/* Dropdown: all pinned messages */}
