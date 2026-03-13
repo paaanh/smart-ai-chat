@@ -2,6 +2,7 @@ const Note = require('../models/Note');
 const Friendship = require('../models/Friendship');
 const Room = require('../models/Room');
 const Message = require('../models/Message');
+const { User } = require('../models/User');
 
 // ─── Lấy notes của bạn bè (chưa hết hạn) ────────────────────────────
 exports.getFriendNotes = async (req, res, next) => {
@@ -133,17 +134,15 @@ exports.replyNote = async (req, res, next) => {
             io.to(room._id.toString()).emit('message:received', { message: populatedMessage });
 
             // Notify room members for sidebar update
-            const populatedRoom = await Room.findById(room._id).populate('members.user', 'socketId');
-            if (populatedRoom) {
-                for (const member of populatedRoom.members) {
-                    if (member.user._id.toString() === replierId.toString()) continue;
-                    if (member.user.socketId) {
-                        io.to(member.user.socketId).emit('room:new-message', {
-                            roomId: room._id.toString(),
-                            lastMessage: populatedMessage,
-                            senderId: replierId.toString(),
-                        });
-                    }
+            for (const member of room.members) {
+                if (member.user.toString() === replierId.toString()) continue;
+                const memberDoc = await User.findById(member.user).select('socketId').lean();
+                if (memberDoc?.socketId) {
+                    io.to(memberDoc.socketId).emit('room:new-message', {
+                        roomId: room._id.toString(),
+                        lastMessage: populatedMessage,
+                        senderId: replierId.toString(),
+                    });
                 }
             }
         }
