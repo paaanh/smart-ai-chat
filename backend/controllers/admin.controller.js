@@ -115,7 +115,7 @@ const updateUser = async (req, res) => {
         if (isVerified !== undefined) user.isVerified = isVerified;
         if (bio !== undefined) user.bio = bio;
 
-        await user.save();
+        await user.save({ validateModifiedOnly: true });
         await logAction(req.user._id, 'update_user', user._id, `Updated fields for ${user.username}`, req.ip);
         res.json(user);
     } catch (error) {
@@ -148,7 +148,7 @@ const toggleVerified = async (req, res) => {
         if (!user) return res.status(404).json({ error: 'Không tìm thấy user' });
 
         user.isVerified = !user.isVerified;
-        await user.save();
+        await user.save({ validateModifiedOnly: true });
         await logAction(req.user._id, 'toggle_verified', user._id, `Set verified=${user.isVerified}`, req.ip);
         res.json(user);
     } catch (error) {
@@ -166,7 +166,7 @@ const banUser = async (req, res) => {
         if (!user) return res.status(404).json({ error: 'Không tìm thấy user' });
 
         user.accountStatus = 'banned';
-        await user.save();
+        await user.save({ validateModifiedOnly: true });
 
         // Disconnect user's socket if online
         const io = req.app.get('io');
@@ -189,7 +189,7 @@ const unbanUser = async (req, res) => {
 
         user.accountStatus = 'active';
         user.lockUntil = null;
-        await user.save();
+        await user.save({ validateModifiedOnly: true });
 
         await logAction(req.user._id, 'unban_user', user._id, `Unbanned ${user.username}`, req.ip);
         res.json({ message: `Đã gỡ ban user ${user.username}`, user });
@@ -214,7 +214,7 @@ const lockUser = async (req, res) => {
 
         user.accountStatus = 'locked';
         user.lockUntil = new Date(Date.now() + duration * 60000);
-        await user.save();
+        await user.save({ validateModifiedOnly: true });
 
         const io = req.app.get('io');
         if (user.socketId && io) {
