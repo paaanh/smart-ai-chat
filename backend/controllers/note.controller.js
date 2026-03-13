@@ -120,6 +120,7 @@ exports.replyNote = async (req, res, next) => {
             sender: replierId,
             type: 'text',
             content: content.trim(),
+            replyToNote: note.content,
         });
 
         const populatedMessage = await Message.findById(message._id)

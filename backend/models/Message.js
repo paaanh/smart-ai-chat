@@ -103,6 +103,12 @@ const messageSchema = new mongoose.Schema({
         bio: { type: String },
     },
 
+    // ===== REPLY TO NOTE =====
+    replyToNote: {
+        type: String,
+        default: null,
+    },
+    
     // ===== SOFT DELETE PER USER =====
     deletedFor: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
 }, { timestamps: true });
