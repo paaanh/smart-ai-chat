@@ -115,7 +115,7 @@ const updateUser = async (req, res) => {
         if (isVerified !== undefined) user.isVerified = isVerified;
         if (bio !== undefined) user.bio = bio;
 
-        await user.save();
+        await user.save({ validateModifiedOnly: true });
         await logAction(req.user._id, 'update_user', user._id, `Updated fields for ${user.username}`, req.ip);
         res.json(user);
     } catch (error) {
@@ -148,7 +148,7 @@ const toggleVerified = async (req, res) => {
         if (!user) return res.status(404).json({ error: 'Không tìm thấy user' });
 
         user.isVerified = !user.isVerified;
-        await user.save();
+        await user.save({ validateModifiedOnly: true });
         await logAction(req.user._id, 'toggle_verified', user._id, `Set verified=${user.isVerified}`, req.ip);
         res.json(user);
     } catch (error) {
@@ -169,7 +169,7 @@ const banUser = async (req, res) => {
         user.status = 'banned';
         user.is_locked = true;
         user.lock_until = null;
-        await user.save();
+        await user.save({ validateModifiedOnly: true });
 
         const io = req.io || req.app.get('socketio') || req.app.get('io');
         if (io && user.socketId) {
@@ -201,7 +201,7 @@ const unbanUser = async (req, res) => {
         user.status = 'active';
         user.is_locked = false;
         user.lock_until = null;
-        await user.save();
+        await user.save({ validateModifiedOnly: true });
 
         const io = req.io || req.app.get('socketio') || req.app.get('io');
         if (io) {
@@ -245,7 +245,7 @@ const lockUser = async (req, res) => {
             user.is_locked = true;
             user.lock_until = new Date(Date.now() + minutes * 60000);
         }
-        await user.save();
+        await user.save({ validateModifiedOnly: true });
 
         const io = req.io || req.app.get('socketio') || req.app.get('io');
         if (io) {
