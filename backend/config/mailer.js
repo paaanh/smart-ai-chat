@@ -7,22 +7,24 @@ if (typeof dns.setDefaultResultOrder === 'function') {
 
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
+    port: 587,
+    secure: false,
     auth: {
-        user: process.env.MAIL_USER,
-        pass: process.env.MAIL_APP_PASSWORD,
+        user: process.env.MAIL_USER || process.env.EMAIL_USER,
+        pass: process.env.MAIL_APP_PASSWORD || process.env.EMAIL_PASS,
     },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 20000,
     tls: {
-        servername: 'smtp.gmail.com',
+        rejectUnauthorized: false,
     },
 });
 
 const ensureMailConfig = () => {
-    if (!process.env.MAIL_USER || !process.env.MAIL_APP_PASSWORD) {
+    const user = process.env.MAIL_USER || process.env.EMAIL_USER;
+    const pass = process.env.MAIL_APP_PASSWORD || process.env.EMAIL_PASS;
+    if (!user || !pass) {
         const error = new Error('Dịch vụ email chưa được cấu hình. Thiếu MAIL_USER hoặc MAIL_APP_PASSWORD.');
         error.statusCode = 500;
         throw error;
@@ -33,6 +35,8 @@ const sendMail = async (mailOptions) => {
     ensureMailConfig();
 
     try {
+        const user = process.env.MAIL_USER || process.env.EMAIL_USER;
+        console.log(`Attempting to send email via Port 587... (from: ${user}, to: ${mailOptions.to})`);
         return await transporter.sendMail(mailOptions);
     } catch (error) {
         console.error('❌ Mail send failed:', error.message);
