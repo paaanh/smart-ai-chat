@@ -10,6 +10,7 @@ import MessageInput from './MessageInput';
 import AIToggle from './AIToggle';
 import ForwardModal from './ForwardModal';
 import PollCreator from './PollCreator';
+import { format } from 'date-fns';
 import {
     Phone,
     Video,
@@ -21,10 +22,11 @@ import {
     Ban,
     Pin,
     BarChart3,
+    Lock,
 } from 'lucide-react';
 
 export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled, onAIToggle, autoTranslate }) {
-    const { user } = useAuth();
+    const { user, updateLockStatus } = useAuth();
     const { onlineUsers, on, off, emit } = useSocket();
     const { initiateCall } = useCall();
     const { messages, loading, hasMore, typingUsers, sendMessage, sendLocation, deleteMessage, loadMore, startTyping, reactToMessage } = useChat(roomId);
@@ -33,6 +35,8 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
     const [room, setRoom] = useState(null);
     const [iBlockedThem, setIBlockedThem] = useState(false);
     const [theyBlockedMe, setTheyBlockedMe] = useState(false);
+    const [lockOverlay, setLockOverlay] = useState(false);
+    const [localMessages, setLocalMessages] = useState([]);
     const [localTranslations, setLocalTranslations] = useState({});
     const messagesEndRef = useRef(null);
     const containerRef = useRef(null);
@@ -125,6 +129,47 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
         on('user:block-updated', handleBlockUpdated);
         return () => off('user:block-updated', handleBlockUpdated);
     }, [room, user, on, off]);
+
+    // Listen for account:locked — show overlay immediately
+    useEffect(() => {
+        const handleLocked = () => setLockOverlay(true);
+        on('account:locked', handleLocked);
+        return () => off('account:locked', handleLocked);
+    }, [on, off]);
+
+    // Dismiss overlay when lock expires (status updated to active)
+    useEffect(() => {
+        if (user?.accountStatus === 'active') {
+            setLockOverlay(false);
+        }
+    }, [user?.accountStatus]);
+
+    // Clear local messages when switching rooms
+    useEffect(() => {
+        setLocalMessages([]);
+    }, [roomId]);
+
+    // Wrapper: inject local system message when user is locked
+    const handleSendMessage = useCallback((content, type, fileData) => {
+        const nowLocked =
+            user?.accountStatus === 'locked' &&
+            user?.lockUntil &&
+            new Date(user.lockUntil) > new Date();
+        if (nowLocked) {
+            setLocalMessages((prev) => [
+                ...prev,
+                {
+                    _id: `local_blocked_${Date.now()}`,
+                    type: 'system',
+                    content: '🚫 Tin nhắn không được gửi. Bạn đang trong thời gian bị khóa.',
+                    createdAt: new Date().toISOString(),
+                    local: true,
+                },
+            ]);
+            return;
+        }
+        sendMessage(content, type, fileData);
+    }, [user, sendMessage]);
 
     // Auto-scroll
     useEffect(() => {
@@ -298,7 +343,7 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
     }
 
     return (
-        <div className="flex-1 flex flex-col h-full bg-white">
+        <div className="flex-1 flex flex-col h-full bg-white relative">
             {/* Header */}
             <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 bg-white">
                 {/* Back button (mobile) */}
@@ -444,8 +489,10 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                             </div>
                         )}
 
-                        {/* Messages list */}
-                        {messages.map((msg) => (
+                        {/* Messages list — merge server messages with local-only system messages */}
+                        {[...messages, ...localMessages]
+                            .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+                            .map((msg) => (
                             <MessageBubble
                                 key={msg._id}
                                 message={msg}
@@ -509,10 +556,16 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                 </div>
             ) : (
                 <MessageInput
-                    onSend={sendMessage}
+                    onSend={handleSendMessage}
                     onSendLocation={sendLocation}
                     onTyping={startTyping}
                     disabled={!room}
+                    lockUntil={
+                        user?.accountStatus === 'locked' && user?.lockUntil
+                            ? user.lockUntil
+                            : null
+                    }
+                    onLockExpire={() => updateLockStatus('active', null)}
                 />
             )}
 
@@ -531,6 +584,31 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                     onSend={handleSendPoll}
                     onClose={() => setShowPollCreator(false)}
                 />
+            )}
+
+            {/* Lock Overlay — shown when admin locks this account in real time */}
+            {lockOverlay && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 rounded-none">
+                    <div className="bg-white rounded-2xl shadow-2xl p-6 mx-6 max-w-sm w-full text-center">
+                        <div className="flex items-center justify-center w-14 h-14 rounded-full bg-orange-100 mx-auto mb-4">
+                            <Lock size={28} className="text-orange-500" />
+                        </div>
+                        <h3 className="text-lg font-bold text-gray-900 mb-2">Tài khoản bị khóa</h3>
+                        <p className="text-sm text-gray-600 mb-1">
+                            Tài khoản của bạn đã bị khóa
+                            {user?.lockUntil
+                                ? ` đến ${format(new Date(user.lockUntil), 'HH:mm - dd/MM/yyyy')}`
+                                : ''}.
+                        </p>
+                        <p className="text-xs text-gray-400 mb-5">Bạn sẽ bị hạn chế tính năng trong thời gian này.</p>
+                        <button
+                            onClick={() => setLockOverlay(false)}
+                            className="w-full py-2 rounded-xl bg-orange-500 text-white font-semibold hover:bg-orange-600 transition"
+                        >
+                            Đã hiểu
+                        </button>
+                    </div>
+                </div>
             )}
         </div>
     );

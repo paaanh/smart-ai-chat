@@ -4,7 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import { SocketContext } from '.';
 
 export function SocketProvider({ children }) {
-    const { token, user } = useAuth();
+    const { token, user, updateLockStatus } = useAuth();
     const [connected, setConnected] = useState(false);
     const [onlineUsers, setOnlineUsers] = useState([]);
     const [socketReady, setSocketReady] = useState(false);
@@ -47,6 +47,11 @@ export function SocketProvider({ children }) {
         // Maintenance mode force logout
         socket.on('system:maintenance', () => {
             window.dispatchEvent(new Event('system:maintenance'));
+        });
+
+        // Real-time lock/unlock status from admin
+        socket.on('user:status-updated', ({ accountStatus, lockUntil }) => {
+            updateLockStatus(accountStatus, lockUntil);
         });
 
         return () => {

@@ -25,6 +25,9 @@ const initializeSocket = (io) => {
 
         console.log(`🟢 ${user.username} connected (socket: ${socket.id})`);
 
+        // Join personal room so admin can target user by userId
+        socket.join(user._id.toString());
+
         // Cập nhật trạng thái online & socketId
         await User.findByIdAndUpdate(user._id, {
             status: 'online',

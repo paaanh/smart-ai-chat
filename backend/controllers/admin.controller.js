@@ -191,6 +191,14 @@ const unbanUser = async (req, res) => {
         user.lockUntil = null;
         await user.save();
 
+        const io = req.app.get('io');
+        if (io) {
+            io.to(user._id.toString()).emit('user:status-updated', {
+                accountStatus: 'active',
+                lockUntil: null,
+            });
+        }
+
         await logAction(req.user._id, 'unban_user', user._id, `Unbanned ${user.username}`, req.ip);
         res.json({ message: `Đã gỡ ban user ${user.username}`, user });
     } catch (error) {
@@ -217,8 +225,13 @@ const lockUser = async (req, res) => {
         await user.save();
 
         const io = req.app.get('io');
-        if (user.socketId && io) {
-            io.to(user.socketId).emit('account:locked', {
+        if (io) {
+            // Target by userId room (each socket joins room named after userId on connect)
+            io.to(user._id.toString()).emit('user:status-updated', {
+                accountStatus: 'locked',
+                lockUntil: user.lockUntil,
+            });
+            io.to(user._id.toString()).emit('account:locked', {
                 message: `Tài khoản bị khóa tạm thời ${duration} phút`,
                 lockUntil: user.lockUntil,
             });

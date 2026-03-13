@@ -87,8 +87,17 @@ export function AuthProvider({ children }) {
         localStorage.setItem('user', JSON.stringify(updated));
     }, []);
 
+    const updateLockStatus = useCallback((accountStatus, lockUntil) => {
+        setUser((prev) => {
+            if (!prev) return prev;
+            const updated = { ...prev, accountStatus, lockUntil: lockUntil || null };
+            localStorage.setItem('user', JSON.stringify(updated));
+            return updated;
+        });
+    }, []);
+
     return (
-        <AuthContext.Provider value={{ user, token, loading, login, loginWithGoogle, register, logout, updateUser }}>
+        <AuthContext.Provider value={{ user, token, loading, login, loginWithGoogle, register, logout, updateUser, updateLockStatus }}>
             {children}
         </AuthContext.Provider>
     );

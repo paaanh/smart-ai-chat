@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { Send, Paperclip, Smile, X, Loader2, MapPin, Mic, Square, ThumbsUp } from 'lucide-react';
+import { Send, Paperclip, Smile, X, Loader2, MapPin, Mic, Square, ThumbsUp, Lock } from 'lucide-react';
 import { uploadAPI } from '../../services/api';
+import { useLockCountdown } from '../../hooks/useLockCountdown';
 
-export default function MessageInput({ onSend, onSendLocation, onTyping, disabled }) {
+export default function MessageInput({ onSend, onSendLocation, onTyping, disabled, lockUntil, onLockExpire }) {
+    const { isLocked, timeDisplay } = useLockCountdown(lockUntil);
     const [text, setText] = useState('');
     const [file, setFile] = useState(null);
     const [uploading, setUploading] = useState(false);
@@ -180,6 +182,13 @@ export default function MessageInput({ onSend, onSendLocation, onTyping, disable
         };
     }, [cancelRecording]);
 
+    // Auto re-enable when lock expires
+    useEffect(() => {
+        if (!isLocked && lockUntil) {
+            onLockExpire?.();
+        }
+    }, [isLocked]); // eslint-disable-line react-hooks/exhaustive-deps
+
     const formatRecordTime = (sec) => {
         const m = Math.floor(sec / 60);
         const s = sec % 60;
@@ -188,6 +197,18 @@ export default function MessageInput({ onSend, onSendLocation, onTyping, disable
 
     return (
         <div className="border-t border-gray-200 bg-white p-3">
+            {/* Lock countdown banner */}
+            {isLocked && (
+                <div className="flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-xl px-4 py-3">
+                    <Lock size={16} className="text-orange-500 shrink-0" />
+                    <p className="text-sm text-orange-700 flex-1">
+                        Bạn bị khóa. Thời gian còn lại:{' '}
+                        <span className="font-mono font-bold">{timeDisplay}</span>
+                    </p>
+                </div>
+            )}
+            {!isLocked && (
+            <>
             {/* File preview */}
             {file && (
                 <div className="flex items-center gap-2 mb-2 bg-gray-50 px-3 py-2 rounded-lg">
@@ -330,6 +351,8 @@ export default function MessageInput({ onSend, onSendLocation, onTyping, disable
                         </button>
                     )}
                 </form>
+            )}
+            </>
             )}
         </div>
     );
