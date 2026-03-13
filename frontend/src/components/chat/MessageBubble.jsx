@@ -300,6 +300,18 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                 </p>
                             )}
 
+                            {/* Reply to Note quote */}
+                            {message.replyToNote && (
+                                <div className="mb-1.5">
+                                    <p className={`text-[10px] mb-1 ${isOwn ? 'text-white/60' : 'text-gray-400'}`}>
+                                        Bạn đã trả lời ghi chú của họ
+                                    </p>
+                                    <div className={`px-3 py-1.5 rounded-lg text-xs ${isOwn ? 'bg-white/15 text-white/80' : 'bg-gray-200/70 text-gray-600'}`}>
+                                        {message.replyToNote}
+                                    </div>
+                                </div>
+                            )}
+
                             {displayText && message.type !== 'location' && (
                                 <p className="text-sm whitespace-pre-wrap wrap-break-word">{displayText}</p>
                             )}
