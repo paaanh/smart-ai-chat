@@ -10,6 +10,7 @@ import MessageInput from './MessageInput';
 import AIToggle from './AIToggle';
 import ForwardModal from './ForwardModal';
 import PollCreator from './PollCreator';
+import PinnedHeader from './PinnedHeader';
 import { format } from 'date-fns';
 import {
     Phone,
@@ -44,6 +45,7 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
     const translatedIdsRef = useRef(new Set());
     const [forwardMsg, setForwardMsg] = useState(null);
     const [showPollCreator, setShowPollCreator] = useState(false);
+    const [pinnedMessages, setPinnedMessages] = useState([]);
 
     // Load room info
     useEffect(() => {
@@ -52,6 +54,10 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
             try {
                 const { data } = await roomAPI.getById(roomId);
                 setRoom(data.room);
+                // Set pinned messages from populated room data
+                setPinnedMessages(
+                    (data.room.pinnedMessages || []).filter(m => m && m._id)
+                );
                 // Check if AI bot is enabled for current user
                 const myMember = data.room.members?.find(
                     (m) => (m.user?._id || m.user) === user?._id
@@ -330,6 +336,34 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
         return () => off('poll:updated', handlePollUpdated);
     }, [roomId, on, off]);
 
+    // Listen for real-time pin/unpin events
+    useEffect(() => {
+        if (!roomId) return;
+        const handlePinnedEvent = ({ messageId, roomId: eventRoomId, pinned, message: msg }) => {
+            if (eventRoomId !== roomId) return;
+            if (pinned && msg) {
+                setPinnedMessages((prev) => {
+                    if (prev.some((m) => m._id === messageId)) return prev;
+                    return [...prev, msg];
+                });
+            } else {
+                setPinnedMessages((prev) => prev.filter((m) => m._id !== messageId));
+            }
+        };
+        on('message:pinned', handlePinnedEvent);
+        return () => off('message:pinned', handlePinnedEvent);
+    }, [roomId, on, off]);
+
+    // Scroll to a specific message by ID
+    const scrollToMessage = useCallback((messageId) => {
+        const el = containerRef.current?.querySelector(`[data-message-id="${messageId}"]`);
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.classList.add('bg-amber-100/50');
+            setTimeout(() => el.classList.remove('bg-amber-100/50'), 2000);
+        }
+    }, []);
+
     if (!roomId) {
         return (
             <div className="flex-1 flex items-center justify-center bg-gray-50">
@@ -428,6 +462,12 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                     </button>
                 </div>
             </div>
+            {/* Pinned Messages Bar */}
+            <PinnedHeader
+                pinnedMessages={pinnedMessages}
+                onScrollToMessage={scrollToMessage}
+                onUnpin={handlePinMessage}
+            />
 
             {/* Messages */}
             <div
@@ -493,8 +533,8 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                         {[...messages, ...localMessages]
                             .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
                             .map((msg) => (
+                            <div key={msg._id} data-message-id={msg._id} className="transition-colors duration-500">   
                             <MessageBubble
-                                key={msg._id}
                                 message={msg}
                                 nicknames={room?.nicknames}
                                 isOwn={
@@ -509,6 +549,7 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                                 onPinMessage={handlePinMessage}
                                 onVotePoll={handleVotePoll}
                             />
+                            </div>
                         ))}
                     </>
                 )}
