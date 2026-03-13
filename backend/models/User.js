@@ -124,9 +124,13 @@ const userSchema = new mongoose.Schema({
         enum: ['active', 'banned', 'locked'],
         default: 'active',
     },
-    lockUntil: {
+    lock_until: {
         type: Date,
         default: null,
+    },
+    is_locked: {
+        type: Boolean,
+        default: false,
     },
 
 
@@ -165,7 +169,20 @@ const userSchema = new mongoose.Schema({
         enum: ['user', 'sub_admin', 'super_admin'],
         default: 'user',
     },
-}, { timestamps: true });
+}, {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+});
+
+// Backward compatibility: existing code can still use user.lockUntil
+userSchema.virtual('lockUntil')
+    .get(function () {
+        return this.lock_until;
+    })
+    .set(function (value) {
+        this.lock_until = value;
+    });
 
 // ─── Pre-save: Hash password ─────────────────────────────────────────
 userSchema.pre('save', async function () {

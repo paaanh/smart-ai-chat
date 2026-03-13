@@ -166,17 +166,27 @@ const banUser = async (req, res) => {
         if (!user) return res.status(404).json({ error: 'Không tìm thấy user' });
 
         user.accountStatus = 'banned';
+        user.status = 'offline';
+        user.is_locked = true;
+        user.lock_until = null;
         await user.save();
 
-        // Disconnect user's socket if online
-        const io = req.app.get('io');
-        if (user.socketId && io) {
+        const io = req.io || req.app.get('io');
+        if (io && user.socketId) {
             io.to(user.socketId).emit('account:banned', { message: 'Tài khoản đã bị khóa bởi Admin' });
+        }
+        if (io) {
+            io.to(user._id.toString()).emit('user:status-updated', {
+                accountStatus: 'banned',
+                lockUntil: null,
+                isLocked: true,
+            });
         }
 
         await logAction(req.user._id, 'ban_user', user._id, `Banned ${user.username}`, req.ip);
-        res.json({ message: `Đã ban user ${user.username}`, user });
+        return res.status(200).json({ message: `Đã ban user ${user.username}`, user });
     } catch (error) {
+        console.error('Lock/Ban Error:', error.message);
         res.status(500).json({ error: 'Lỗi khi ban user' });
     }
 };
@@ -188,19 +198,21 @@ const unbanUser = async (req, res) => {
         if (!user) return res.status(404).json({ error: 'Không tìm thấy user' });
 
         user.accountStatus = 'active';
-        user.lockUntil = null;
+        user.is_locked = false;
+        user.lock_until = null;
         await user.save();
 
-        const io = req.app.get('io');
+        const io = req.io || req.app.get('io');
         if (io) {
             io.to(user._id.toString()).emit('user:status-updated', {
                 accountStatus: 'active',
                 lockUntil: null,
+                isLocked: false,
             });
         }
 
         await logAction(req.user._id, 'unban_user', user._id, `Unbanned ${user.username}`, req.ip);
-        res.json({ message: `Đã gỡ ban user ${user.username}`, user });
+        return res.status(200).json({ message: `Đã gỡ ban user ${user.username}`, user });
     } catch (error) {
         res.status(500).json({ error: 'Lỗi khi unban user' });
     }
@@ -212,8 +224,8 @@ const lockUser = async (req, res) => {
         if (req.params.id === req.user._id.toString()) {
             return res.status(400).json({ error: 'Không thể khóa chính mình' });
         }
-        const { duration } = req.body; // duration in minutes
-        if (!duration || duration < 1) {
+        const minutes = Number(req.body.minutes ?? req.body.duration);
+        if (!Number.isFinite(minutes) || minutes < 1) {
             return res.status(400).json({ error: 'Cần chỉ định thời gian khóa (phút)' });
         }
 
@@ -221,25 +233,29 @@ const lockUser = async (req, res) => {
         if (!user) return res.status(404).json({ error: 'Không tìm thấy user' });
 
         user.accountStatus = 'locked';
-        user.lockUntil = new Date(Date.now() + duration * 60000);
+        user.status = 'offline';
+        user.is_locked = true;
+        user.lock_until = new Date(Date.now() + minutes * 60000);
         await user.save();
 
-        const io = req.app.get('io');
+        const io = req.io || req.app.get('io');
         if (io) {
             // Target by userId room (each socket joins room named after userId on connect)
             io.to(user._id.toString()).emit('user:status-updated', {
                 accountStatus: 'locked',
-                lockUntil: user.lockUntil,
+                lockUntil: user.lock_until,
+                isLocked: true,
             });
             io.to(user._id.toString()).emit('account:locked', {
-                message: `Tài khoản bị khóa tạm thời ${duration} phút`,
-                lockUntil: user.lockUntil,
+                message: `Tài khoản bị khóa tạm thời ${minutes} phút`,
+                lockUntil: user.lock_until,
             });
         }
 
-        await logAction(req.user._id, 'lock_user', user._id, `Locked ${user.username} for ${duration} minutes`, req.ip);
-        res.json({ message: `Đã khóa user ${user.username} trong ${duration} phút`, user });
+        await logAction(req.user._id, 'lock_user', user._id, `Locked ${user.username} for ${minutes} minutes`, req.ip);
+        return res.status(200).json({ message: `Đã khóa user ${user.username} trong ${minutes} phút`, user });
     } catch (error) {
+        console.error('Lock/Ban Error:', error.message);
         res.status(500).json({ error: 'Lỗi khi khóa user' });
     }
 };
