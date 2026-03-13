@@ -353,27 +353,35 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                             </div>
                         )}
 
-                        {/* Delete action */}
-                        {isOwn && showActions && (
-                            <button
-                                onClick={() => onDelete?.(message._id)}
-                                className="absolute -left-8 bottom-1 p-1 text-gray-400 hover:text-red-500 transition opacity-0 group-hover:opacity-100"
-                                title="Xóa"
-                            >
-                                <Trash2 size={14} />
-                            </button>
-                        )}
-
-                        {/* Forward & Pin actions */}
+                        {/* Message actions */}
                         {showActions && message.type !== 'system' && (
-                            <div className={`absolute ${isOwn ? '-left-16 bottom-1' : '-right-16 bottom-1'} flex gap-0.5 opacity-0 group-hover:opacity-100 transition`}>
+                            <div
+                                className={`absolute ${isOwn ? '-left-24' : '-right-20'} bottom-1 flex items-center gap-1 rounded-full bg-white/95 px-1 py-0.5 shadow-sm ring-1 ring-black/5 opacity-0 group-hover:opacity-100 transition`}
+                            >
+                                {isOwn && onDelete && (
+                                    <button
+                                        onClick={() => onDelete?.(message._id)}
+                                        className="p-1 text-gray-400 hover:text-red-500 transition"
+                                        title="Xóa"
+                                    >
+                                        <Trash2 size={14} />
+                                    </button>
+                                )}
                                 {onForward && (
-                                    <button onClick={() => onForward?.(message)} className="p-1 text-gray-400 hover:text-blue-500 transition" title="Chuyển tiếp">
+                                    <button
+                                        onClick={() => onForward?.(message)}
+                                        className="p-1 text-gray-400 hover:text-blue-500 transition"
+                                        title="Chuyển tiếp"
+                                    >
                                         <Forward size={14} />
                                     </button>
                                 )}
                                 {onPinMessage && (
-                                    <button onClick={() => onPinMessage?.(message)} className="p-1 text-gray-400 hover:text-orange-500 transition" title={message.pinned ? 'Bỏ ghim' : 'Ghim'}>
+                                    <button
+                                        onClick={() => onPinMessage?.(message)}
+                                        className="p-1 text-gray-400 hover:text-orange-500 transition"
+                                        title={message.pinned ? 'Bỏ ghim' : 'Ghim'}
+                                    >
                                         <Pin size={14} />
                                     </button>
                                 )}
