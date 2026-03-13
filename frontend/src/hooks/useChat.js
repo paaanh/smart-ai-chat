@@ -100,6 +100,12 @@ export function useChat(roomId) {
             );
         };
 
+        const handlePinned = ({ messageId, pinned }) => {
+            setMessages((prev) =>
+                prev.map((m) => (m._id === messageId ? { ...m, pinned } : m))
+            );
+        };
+
         on('message:received', handleNewMessage);
         on('message:deleted', handleDeleted);
         on('room:typing', handleTyping);
@@ -107,6 +113,7 @@ export function useChat(roomId) {
         on('message:translated', handleTranslation);
         on('message:reacted', handleReacted);
         on('poll:updated', handlePollUpdated);
+        on('message:pinned', handlePinned);
 
         // Join room
         emit('room:join', { roomId });
@@ -119,6 +126,7 @@ export function useChat(roomId) {
             off('message:translated', handleTranslation);
             off('message:reacted', handleReacted);
             off('poll:updated', handlePollUpdated);
+            off('message:pinned', handlePinned);
             emit('room:leave', { roomId });
         };
     }, [roomId, connected, on, off, emit]);

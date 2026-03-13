@@ -80,7 +80,11 @@ exports.getRoomById = async (req, res, next) => {
     try {
         const room = await Room.findById(req.params.id)
             .populate('members.user', 'username avatar googlePicture status preferredLanguage preferredLanguageLabel')
-            .populate('lastMessage');
+            .populate('lastMessage')
+            .populate({
+                path: 'pinnedMessages',
+                populate: { path: 'sender', select: 'username avatar googlePicture' },
+            });
 
         if (!room) {
             return res.status(404).json({ error: 'Room không tồn tại' });
@@ -568,9 +572,13 @@ exports.pinMessage = async (req, res, next) => {
         const populatedSystemMsg = await Message.findById(systemMsg._id)
             .populate('sender', 'username avatar googlePicture preferredLanguage');
 
+        const populatedPinnedMsg = await Message.findById(messageId)
+            .populate('sender', 'username avatar googlePicture')
+            .lean();
+
         const io = req.app.get('io');
         io.to(id).emit('message:received', { message: populatedSystemMsg });
-        io.to(id).emit('message:pinned', { messageId, roomId: id, pinned: true });
+        io.to(id).emit('message:pinned', { messageId, roomId: id, pinned: true, message: populatedPinnedMsg });
 
         res.json({ message: 'Đã ghim tin nhắn' });
     } catch (error) {
