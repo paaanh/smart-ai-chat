@@ -122,19 +122,15 @@ app.get('/api/ice-servers', async (req, res) => {
 
         // Fallback: Open Relay free TURN servers (static auth)
         if (!hasTurn) {
-            const crypto = require('crypto');
-            const unixTimestamp = Math.floor(Date.now() / 1000) + 24 * 3600;
-            const username = `${unixTimestamp}:openrelayproject`;
-            const hmac = crypto.createHmac('sha1', 'openrelayprojectsecret');
-            hmac.update(username);
-            const credential = hmac.digest('base64');
+            const username = 'openrelayproject';
+            const credential = 'openrelayproject';
 
             iceServers.push(
-                { urls: 'stun:stun.relay.metered.ca:80' },
-                { urls: 'turn:global.relay.metered.ca:80', username, credential },
-                { urls: 'turn:global.relay.metered.ca:80?transport=tcp', username, credential },
-                { urls: 'turn:global.relay.metered.ca:443', username, credential },
-                { urls: 'turns:global.relay.metered.ca:443?transport=tcp', username, credential }
+                { urls: 'stun:openrelay.metered.ca:80' },
+                { urls: 'turn:openrelay.metered.ca:80', username, credential },
+                { urls: 'turn:openrelay.metered.ca:80?transport=tcp', username, credential },
+                { urls: 'turn:openrelay.metered.ca:443', username, credential },
+                { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username, credential }
             );
             hasTurn = true;
             console.log('✅ Using Open Relay free TURN servers (static auth)');

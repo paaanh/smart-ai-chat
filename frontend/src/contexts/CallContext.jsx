@@ -28,6 +28,19 @@ export function CallProvider({ children }) {
     // Ref to track isGroup for use in socket handlers (avoids stale closure)
     const isGroupRef = useRef(false);
 
+    const safePeerSignal = useCallback((peer, signalData, label = 'signal') => {
+        if (!peer || peer.destroyed || !signalData) {
+            return false;
+        }
+        try {
+            peer.signal(signalData);
+            return true;
+        } catch (err) {
+            console.warn(`[Call] Ignored ${label} on invalid peer:`, err.message);
+            return false;
+        }
+    }, []);
+
     const [callState, setCallState] = useState({
         active: false,
         incoming: false,
@@ -287,12 +300,12 @@ export function CallProvider({ children }) {
         const pending = pendingSignalsGroupRef.current[targetId];
         if (pending?.length) {
             console.log(`[GroupCall] Flushing ${pending.length} pending signals for ${targetId}`);
-            pending.forEach(sig => peer.signal(sig));
+            pending.forEach(sig => safePeerSignal(peer, sig, 'pending-group-signal'));
             delete pendingSignalsGroupRef.current[targetId];
         }
 
         return peer;
-    }, [emit]);
+    }, [emit, safePeerSignal]);
 
     // ---- Socket listeners ----
     useEffect(() => {
@@ -345,7 +358,7 @@ export function CallProvider({ children }) {
                 setCallState((prev) => ({ ...prev, active: true }));
                 const peer = await createPeer(true, stream);
                 while (pendingSignalsRef.current.length > 0) {
-                    peer.signal(pendingSignalsRef.current.shift());
+                    safePeerSignal(peer, pendingSignalsRef.current.shift(), 'pending-accepted-signal');
                 }
             } catch (err) {
                 console.error('[Call] handleAccepted failed:', err);
@@ -404,9 +417,10 @@ export function CallProvider({ children }) {
         // ── WebRTC signaling (works for both 1-1 and group) ──
         const handleOffer = async ({ fromUserId, sdp }) => {
             console.log('[Call] Received offer from', fromUserId);
+            if (!sdp) return;
             // For group calls or if we have a peer for this user
             if (peersRef.current[fromUserId]) {
-                peersRef.current[fromUserId].signal(sdp);
+                safePeerSignal(peersRef.current[fromUserId], sdp, 'group-offer-existing-peer');
                 return;
             }
 
@@ -416,7 +430,7 @@ export function CallProvider({ children }) {
                 const stream = localStreamRef.current;
                 if (stream) {
                     const peer = await createPeerForUser(fromUserId, false, stream);
-                    peer.signal(sdp);
+                    safePeerSignal(peer, sdp, 'group-offer-new-peer');
                 }
                 return;
             }
@@ -427,9 +441,9 @@ export function CallProvider({ children }) {
                 const stream = localStreamRef.current;
                 if (!stream) { cleanup(); return; }
                 const peer = await createPeer(false, stream);
-                peer.signal(sdp);
+                safePeerSignal(peer, sdp, 'one-to-one-offer');
                 while (pendingSignalsRef.current.length > 0) {
-                    peer.signal(pendingSignalsRef.current.shift());
+                    safePeerSignal(peer, pendingSignalsRef.current.shift(), 'pending-offer-signal');
                 }
             } catch (err) {
                 console.error('[Call] handleOffer failed:', err);
@@ -440,28 +454,30 @@ export function CallProvider({ children }) {
 
         const handleAnswer = ({ fromUserId, sdp }) => {
             console.log('[Call] Received answer from', fromUserId);
+            if (!sdp) return;
             // Group: route to specific peer
             if (peersRef.current[fromUserId]) {
-                peersRef.current[fromUserId].signal(sdp);
+                safePeerSignal(peersRef.current[fromUserId], sdp, 'group-answer');
                 return;
             }
             // 1-1
             if (peerRef.current) {
-                peerRef.current.signal(sdp);
+                safePeerSignal(peerRef.current, sdp, 'one-to-one-answer');
             } else {
                 pendingSignalsRef.current.push(sdp);
             }
         };
 
         const handleICE = ({ fromUserId, candidate }) => {
+            if (!candidate) return;
             // Group: route to specific peer
             if (peersRef.current[fromUserId]) {
-                peersRef.current[fromUserId].signal(candidate);
+                safePeerSignal(peersRef.current[fromUserId], candidate, 'group-ice');
                 return;
             }
             // 1-1
             if (peerRef.current) {
-                peerRef.current.signal(candidate);
+                safePeerSignal(peerRef.current, candidate, 'one-to-one-ice');
             } else {
                 // Buffer for group peer that hasn't been created yet
                 if (fromUserId) {
@@ -510,7 +526,7 @@ export function CallProvider({ children }) {
             off('screen-share:status', handleRemoteScreenShare);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [on, off, user, cleanup, getMediaStream, createPeer, createPeerForUser, callState.isGroup]);
+    }, [on, off, user, cleanup, getMediaStream, createPeer, createPeerForUser, callState.isGroup, safePeerSignal]);
 
     // ---- Actions ----
     const initiateCall = useCallback(async (roomId, targetUserId, callType = 'video', targetUserName = '', options = {}) => {
