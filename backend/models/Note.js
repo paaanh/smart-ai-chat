@@ -11,16 +11,6 @@ const noteSchema = new mongoose.Schema({
         required: true,
         maxlength: [60, 'Note không được vượt quá 60 ký tự'],
     },
-    music: {
-        type: String,
-        default: '',
-    },
-    // Replies từ bạn bè
-    replies: [{
-        user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-        content: { type: String, maxlength: 200 },
-        createdAt: { type: Date, default: Date.now },
-    }],
     expiresAt: {
         type: Date,
         required: true,

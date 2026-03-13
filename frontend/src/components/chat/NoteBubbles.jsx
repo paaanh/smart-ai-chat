@@ -1,17 +1,16 @@
 import { useState, useEffect } from 'react';
-import { Plus, Music, X, Loader2 } from 'lucide-react';
+import { Plus, X, Loader2 } from 'lucide-react';
 import { noteAPI, resolveMediaUrl } from '../../services/api';
 import { useAuth } from '../../hooks/useAuth';
 import { useSocket } from '../../hooks/useSocket';
 
-export default function NoteBubbles() {
+export default function NoteBubbles({ onSelectRoom }) {
     const { user } = useAuth();
     const { on, off } = useSocket();
     const [notes, setNotes] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showCreate, setShowCreate] = useState(false);
     const [content, setContent] = useState('');
-    const [music, setMusic] = useState('');
     const [creating, setCreating] = useState(false);
     const [selectedNote, setSelectedNote] = useState(null);
     const [replyText, setReplyText] = useState('');
@@ -39,9 +38,8 @@ export default function NoteBubbles() {
         if (!content.trim()) return;
         setCreating(true);
         try {
-            await noteAPI.create({ content: content.trim(), music: music.trim() || undefined });
+            await noteAPI.create({ content: content.trim() });
             setContent('');
-            setMusic('');
             setShowCreate(false);
             fetchNotes();
         } catch (err) {
@@ -54,9 +52,12 @@ export default function NoteBubbles() {
     const handleReply = async () => {
         if (!selectedNote || !replyText.trim()) return;
         try {
-            await noteAPI.reply(selectedNote._id, replyText.trim());
+            const { data } = await noteAPI.reply(selectedNote._id, replyText.trim());
             setReplyText('');
             setSelectedNote(null);
+            if (data.roomId && onSelectRoom) {
+                onSelectRoom(data.roomId);
+            }
         } catch (err) {
             console.error(err);
         }
@@ -90,11 +91,6 @@ export default function NoteBubbles() {
                                         {author?.username?.charAt(0).toUpperCase() || '?'}
                                     </div>
                                 )}
-                                {note.music && (
-                                    <div className="absolute bottom-0 right-0 w-4 h-4 bg-white rounded-full flex items-center justify-center shadow">
-                                        <Music size={8} className="text-purple-500" />
-                                    </div>
-                                )}
                             </div>
                             <span className="text-[10px] text-gray-600 max-w-[60px] truncate text-center">
                                 {isOwn ? 'Bạn' : author?.username}
@@ -118,9 +114,6 @@ export default function NoteBubbles() {
                                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm resize-none" />
                             <p className="text-xs text-gray-400 text-right">{content.length}/60</p>
                         </div>
-                        <input type="text" value={music} onChange={e => setMusic(e.target.value)}
-                            placeholder="🎵 Tên bài hát (tùy chọn)" maxLength={100}
-                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
                         <div className="flex gap-3">
                             <button onClick={() => setShowCreate(false)} className="flex-1 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50">Hủy</button>
                             <button onClick={handleCreate} disabled={!content.trim() || creating}
@@ -151,11 +144,6 @@ export default function NoteBubbles() {
                         </div>
                         <p className="text-sm text-white/70 mb-2">{selectedNote.author?.username}</p>
                         <p className="text-xl font-bold mb-3">{selectedNote.content}</p>
-                        {selectedNote.music && (
-                            <p className="text-sm text-white/80 flex items-center justify-center gap-1 mb-4">
-                                <Music size={14} /> {selectedNote.music}
-                            </p>
-                        )}
 
                         {/* Reply */}
                         {selectedNote.author?._id !== user?._id && (
@@ -168,18 +156,6 @@ export default function NoteBubbles() {
                                     className="px-4 py-2 bg-white/30 rounded-lg text-sm font-medium hover:bg-white/40 disabled:opacity-50">
                                     Gửi
                                 </button>
-                            </div>
-                        )}
-
-                        {/* Replies */}
-                        {selectedNote.replies?.length > 0 && (
-                            <div className="mt-4 space-y-2 max-h-40 overflow-y-auto">
-                                {selectedNote.replies.map((reply, idx) => (
-                                    <div key={idx} className="bg-white/10 rounded-lg px-3 py-2 text-left text-sm">
-                                        <span className="font-medium">{reply.user?.username || 'Ai đó'}: </span>
-                                        {reply.content}
-                                    </div>
-                                ))}
                             </div>
                         )}
                     </div>

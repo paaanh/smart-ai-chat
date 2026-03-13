@@ -1,5 +1,7 @@
 const Note = require('../models/Note');
 const Friendship = require('../models/Friendship');
+const Room = require('../models/Room');
+const Message = require('../models/Message');
 
 // ─── Lấy notes của bạn bè (chưa hết hạn) ────────────────────────────
 exports.getFriendNotes = async (req, res, next) => {
@@ -33,7 +35,7 @@ exports.getFriendNotes = async (req, res, next) => {
 // ─── Tạo note mới ────────────────────────────────────────────────────
 exports.createNote = async (req, res, next) => {
     try {
-        const { content, music } = req.body;
+        const { content } = req.body;
         if (!content || !content.trim()) {
             return res.status(400).json({ error: 'Nội dung note không được trống' });
         }
@@ -47,7 +49,6 @@ exports.createNote = async (req, res, next) => {
         const note = await Note.create({
             author: req.user._id,
             content: content.trim(),
-            music: music || '',
         });
 
         const populated = await Note.findById(note._id)
@@ -81,7 +82,7 @@ exports.deleteNote = async (req, res, next) => {
     }
 };
 
-// ─── Reply note ──────────────────────────────────────────────────────
+// ─── Reply note → send as direct message ─────────────────────────────
 exports.replyNote = async (req, res, next) => {
     try {
         const { content } = req.body;
@@ -92,13 +93,62 @@ exports.replyNote = async (req, res, next) => {
         const note = await Note.findById(req.params.id);
         if (!note) return res.status(404).json({ error: 'Note không tồn tại' });
 
-        note.replies.push({
-            user: req.user._id,
+        const replierId = req.user._id;
+        const noteOwnerId = note.author;
+
+        // Prevent replying to own note
+        if (replierId.toString() === noteOwnerId.toString()) {
+            return res.status(400).json({ error: 'Không thể trả lời note của chính mình' });
+        }
+
+        // Find or create direct room between replier and note owner
+        let room = await Room.findDirectRoom(replierId, noteOwnerId);
+        if (!room) {
+            room = await Room.create({
+                type: 'direct',
+                members: [
+                    { user: replierId, role: 'admin' },
+                    { user: noteOwnerId, role: 'member' },
+                ],
+            });
+        }
+
+        // Create message in that room
+        const message = await Message.create({
+            room: room._id,
+            sender: replierId,
+            type: 'text',
             content: content.trim(),
         });
-        await note.save();
 
-        res.json({ message: 'Đã reply note' });
+        const populatedMessage = await Message.findById(message._id)
+            .populate('sender', 'username avatar googlePicture preferredLanguage');
+
+        // Update lastMessage on the room
+        await Room.findByIdAndUpdate(room._id, { lastMessage: message._id });
+
+        // Emit to the room via socket
+        const io = req.app.get('io');
+        if (io) {
+            io.to(room._id.toString()).emit('message:received', { message: populatedMessage });
+
+            // Notify room members for sidebar update
+            const populatedRoom = await Room.findById(room._id).populate('members.user', 'socketId');
+            if (populatedRoom) {
+                for (const member of populatedRoom.members) {
+                    if (member.user._id.toString() === replierId.toString()) continue;
+                    if (member.user.socketId) {
+                        io.to(member.user.socketId).emit('room:new-message', {
+                            roomId: room._id.toString(),
+                            lastMessage: populatedMessage,
+                            senderId: replierId.toString(),
+                        });
+                    }
+                }
+            }
+        }
+
+        res.json({ roomId: room._id });
     } catch (error) {
         next(error);
     }

@@ -138,7 +138,7 @@ export default function ChatPage() {
                 {/* Room list or Friend panel — both always mounted for socket listeners */}
                 <div className="flex-1 overflow-hidden">
                     <div className={sidebarTab === 'chats' ? 'h-full flex flex-col' : 'hidden'}>
-                        <NoteBubbles />
+                        <NoteBubbles onSelectRoom={handleSelectRoom} />
                         <div className="flex-1 overflow-hidden">
                             <RoomList activeRoomId={activeRoomId} onSelectRoom={handleSelectRoom} />
                         </div>
