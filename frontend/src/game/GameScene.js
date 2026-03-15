@@ -5,6 +5,8 @@ const TILE_SIZE = 32;
 const PLAYER_SPEED = 160;
 const SPRITE_SIZE = 32;
 const FRAME_RATE = 8;
+const FLOOR_TILE_INDEX = 2;          // Tiled index for walkable floor tiles
+const MOVEMENT_EMIT_INTERVAL = 50;   // Client-side throttle interval (~20fps)
 
 /**
  * GameScene — Phaser 3 Scene for the Virtual Office.
@@ -24,6 +26,7 @@ export default class GameScene extends Phaser.Scene {
         this.username = '';
         this.officeId = 'main-office';
         this.lastAnim = 'idle-down';
+        this._lastEmitTime = 0;  // client-side movement throttle
     }
 
     /**
@@ -54,8 +57,8 @@ export default class GameScene extends Phaser.Scene {
         const tileset = map.addTilesetImage('office-tileset', 'office-tileset');
         const floorLayer = map.createLayer('Floor', tileset, 0, 0);
 
-        // Set collision on wall tiles (tile index 1)
-        floorLayer.setCollisionByExclusion([2]);
+        // Set collision on all tiles except walkable floor tiles
+        floorLayer.setCollisionByExclusion([FLOOR_TILE_INDEX]);
 
         // Create animations
         this._createAnimations();
@@ -144,14 +147,25 @@ export default class GameScene extends Phaser.Scene {
             this.localPlayer.y - SPRITE_SIZE * 0.6
         );
 
-        // Send movement to server (server-side throttles)
+        // Update remote player name labels in the main loop
+        this.remotePlayers.forEach((remote) => {
+            if (remote.sprite.active) {
+                remote.nameLabel.setPosition(remote.sprite.x, remote.sprite.y - SPRITE_SIZE * 0.6);
+            }
+        });
+
+        // Send movement to server with client-side throttle (~20fps)
         if (vx !== 0 || vy !== 0) {
-            this.socketEmit('office:player-movement', {
-                officeId: this.officeId,
-                x: Math.round(this.localPlayer.x),
-                y: Math.round(this.localPlayer.y),
-                anim,
-            });
+            const now = Date.now();
+            if (now - this._lastEmitTime >= MOVEMENT_EMIT_INTERVAL) {
+                this._lastEmitTime = now;
+                this.socketEmit('office:player-movement', {
+                    officeId: this.officeId,
+                    x: Math.round(this.localPlayer.x),
+                    y: Math.round(this.localPlayer.y),
+                    anim,
+                });
+            }
         }
     }
 
@@ -214,13 +228,6 @@ export default class GameScene extends Phaser.Scene {
             padding: { x: 4, y: 2 },
             resolution: 2,
         }).setOrigin(0.5, 1).setDepth(20);
-
-        // Update label position each frame via scene event
-        this.events.on('update', () => {
-            if (sprite.active) {
-                nameLabel.setPosition(sprite.x, sprite.y - SPRITE_SIZE * 0.6);
-            }
-        });
 
         this.remotePlayers.set(id, { sprite, nameLabel });
     }

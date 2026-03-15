@@ -1,13 +1,24 @@
 const Player = require('../models/Player');
 
-// Throttle helper: limits how often a callback can fire (per socket)
-const throttleMap = new Map();
-function throttle(socketId, fn, limitMs) {
-    const key = socketId;
-    if (throttleMap.has(key)) return;
-    throttleMap.set(key, true);
-    setTimeout(() => throttleMap.delete(key), limitMs);
+// Throttle helper: rate-limits emissions, queuing the latest update to send after the interval
+const throttleTimers = new Map();
+const throttlePending = new Map();
+
+function throttledEmit(socketId, fn, limitMs) {
+    if (throttleTimers.has(socketId)) {
+        // Store the latest call to fire after the interval
+        throttlePending.set(socketId, fn);
+        return;
+    }
     fn();
+    throttleTimers.set(socketId, setTimeout(() => {
+        throttleTimers.delete(socketId);
+        const pending = throttlePending.get(socketId);
+        if (pending) {
+            throttlePending.delete(socketId);
+            throttledEmit(socketId, pending, limitMs);
+        }
+    }, limitMs));
 }
 
 module.exports = (io, socket) => {
@@ -53,8 +64,8 @@ module.exports = (io, socket) => {
 
     // ─── office:player-movement ──────────────────────────────────────
     socket.on('office:player-movement', ({ officeId = 'main-office', x, y, anim }) => {
-        // Throttle to ~20fps (50ms interval)
-        throttle(socket.id, () => {
+        // Throttle to ~20fps (50ms interval), queuing the latest position
+        throttledEmit(socket.id, () => {
             const socketRoom = `office:${officeId}`;
 
             // Broadcast to all others in the room
@@ -94,6 +105,10 @@ module.exports = (io, socket) => {
     // ─── disconnect — clean up player from all offices ───────────────
     socket.on('disconnect', async () => {
         try {
+            // Clean up throttle state
+            throttleTimers.delete(socket.id);
+            throttlePending.delete(socket.id);
+
             const players = await Player.find({ userId: user._id });
             for (const p of players) {
                 const socketRoom = `office:${p.officeId}`;
