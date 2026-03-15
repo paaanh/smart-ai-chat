@@ -6,6 +6,7 @@ const webrtcHandler = require('./webrtc.handler');
 const aiHandler = require('./ai.handler');
 const messageHandler = require('./message.handler');
 const friendHandler = require('./friend.handler');
+const officeHandler = require('./office.handler');
 
 const initializeSocket = (io) => {
     // ─── Middleware xác thực Socket ────────────────────────────────────
@@ -44,6 +45,7 @@ const initializeSocket = (io) => {
         webrtcHandler(io, socket);
         aiHandler(io, socket);
         friendHandler(io, socket);
+        officeHandler(io, socket);
 
         // ─── Disconnect ────────────────────────────────────────────────
         socket.on('disconnect', async () => {
