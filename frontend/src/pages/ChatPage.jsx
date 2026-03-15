@@ -8,7 +8,7 @@ import FriendPanel from '../components/friend/FriendPanel';
 import MiniAIChatBox from '../components/chat/MiniAIChatBox';
 import NoteBubbles from '../components/chat/NoteBubbles';
 // CallModal + IncomingCallModal are now rendered globally in App.jsx
-import { LogOut, Settings, MessageCircle, Users, ShieldCheck } from 'lucide-react';
+import { LogOut, Settings, MessageCircle, Users, ShieldCheck, Building2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function ChatPage() {
@@ -77,6 +77,13 @@ export default function ChatPage() {
                             <ShieldCheck size={18} />
                         </button>
                     )}
+                    <button
+                        onClick={() => navigate('/office')}
+                        className="p-1.5 hover:bg-gray-100 rounded-full text-gray-400 transition"
+                        title="Virtual Office"
+                    >
+                        <Building2 size={18} />
+                    </button>
                     <button
                         onClick={() => navigate('/settings')}
                         className="p-1.5 hover:bg-gray-100 rounded-full text-gray-400 transition"
