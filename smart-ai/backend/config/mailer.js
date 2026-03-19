@@ -7,7 +7,7 @@ if (typeof dns.setDefaultResultOrder === 'function') {
 
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 587,
+    port: 465,
     secure: false,
     family: 4,
     auth: {
