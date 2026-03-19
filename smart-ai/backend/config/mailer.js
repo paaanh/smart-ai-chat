@@ -8,7 +8,7 @@ if (typeof dns.setDefaultResultOrder === 'function') {
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
     port: 465,
-    secure: false,
+    secure: true,
     family: 4,
     auth: {
         user: process.env.MAIL_USER || process.env.EMAIL_USER,
@@ -37,7 +37,7 @@ const sendMail = async (mailOptions) => {
 
     try {
         const user = process.env.MAIL_USER || process.env.EMAIL_USER;
-        console.log(`Attempting to send email via Port 587... (from: ${user}, to: ${mailOptions.to})`);
+        console.log(`Attempting to send email via Port 465... (from: ${user}, to: ${mailOptions.to})`);
         return await transporter.sendMail(mailOptions);
     } catch (error) {
         console.error('❌ Mail send failed:', error.message);
