@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "groq": "^5.17.1"
+  }
+}

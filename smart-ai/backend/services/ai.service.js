@@ -50,15 +50,15 @@ const rateLimiter = {
 
 // ─── Init AI ──────────────────────────────────────────────────────────
 const initAI = () => {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
-        console.error('❌ [AI Init] GEMINI_API_KEY is MISSING. AI features will be disabled.');
-        console.error('❌ [AI Init] Set GEMINI_API_KEY in Render Environment Variables.');
+        console.error('❌ [AI Init] GROQ_API_KEY is MISSING. AI features will be disabled.');
+        console.error('❌ [AI Init] Set GROQ_API_KEY in Render Environment Variables.');
         return;
     }
 
     // Log key prefix để verify đúng key (không log toàn bộ)
-    console.log(`🔑 [AI Init] GEMINI_API_KEY found (starts with: ${apiKey.substring(0, 8)}..., length: ${apiKey.length})`);
+    console.log(`🔑 [AI Init] GROQ_API_KEY found (starts with: ${apiKey.substring(0, 8)}..., length: ${apiKey.length})`);
 
     try {
         genAI = new GoogleGenerativeAI(apiKey);
@@ -272,7 +272,7 @@ No markdown, no code blocks, no explanations.`;
 // ─── AI Bot: Trả lời câu hỏi dựa trên context ───────────────────────
 const generateAIResponse = async (userMessage, roomId) => {
     if (!chatModel) {
-        console.error('❌ [AI Chat] chatModel is null — GEMINI_API_KEY missing or initAI() failed');
+        console.error('❌ [AI Chat] chatModel is null — GROQ_API_KEY missing or initAI() failed');
         return '⚠️ AI chưa được khởi tạo. Vui lòng kiểm tra cấu hình server.';
     }
 
@@ -341,7 +341,7 @@ Hãy phản hồi hữu ích, ngắn gọn (tối đa 150 từ). Nếu tin nhắ
 // ─── AI Bot: Tóm tắt cuộc trò chuyện ─────────────────────────────────
 const summarizeConversation = async (roomId, messageCount = 50) => {
     if (!chatModel) {
-        console.error('❌ [AI Summarize] chatModel is null — GEMINI_API_KEY missing or initAI() failed');
+        console.error('❌ [AI Summarize] chatModel is null — GROQ_API_KEY missing or initAI() failed');
         return '⚠️ AI chưa được khởi tạo. Vui lòng kiểm tra cấu hình server.';
     }
 

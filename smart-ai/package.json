@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "cors": "^2.8.6",
+    "groq": "^5.17.1",
     "resend": "^6.9.4"
   }
 }

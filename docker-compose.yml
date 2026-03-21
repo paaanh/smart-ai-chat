@@ -18,7 +18,7 @@ services:
       - NODE_ENV=production
       - MONGODB_URI=mongodb://mongo:27017/smart-ai-chat
       - JWT_SECRET=${JWT_SECRET:-smart-ai-jwt-secret-key-2026}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
       - CORS_ORIGINS=http://localhost:80,http://localhost,http://localhost:3000
       - MAIL_USER=${MAIL_USER:-}
       - MAIL_APP_PASSWORD=${MAIL_APP_PASSWORD:-}
