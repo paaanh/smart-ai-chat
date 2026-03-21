@@ -1,10 +1,8 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const Groq = require('groq-sdk');
 const Message = require('../models/Message');
 
-// ─── Khởi tạo Gemini AI ──────────────────────────────────────────────
-let genAI = null;
-let chatModel = null;
-let translationModel = null;
+// ─── Khởi tạo Groq AI ──────────────────────────────────────────────
+let groq = null;
 
 // ─── Translation Cache (in-memory, tránh gọi API trùng lặp) ──────────
 const translationCache = new Map();
@@ -14,8 +12,8 @@ const MAX_CACHE_SIZE = 500;
 // ─── Rate Limiter (đơn giản, tránh 429) ───────────────────────────────
 const rateLimiter = {
     requests: [],
-    maxPerMinute: 15,       // Gemini free tier: 15 RPM
-    maxPerDay: 1500,        // Gemini free tier: 1500 RPD
+    maxPerMinute: 30,       // Groq free tier: 30 RPM
+    maxPerDay: 14400,       // Groq free tier: 14400 RPD
     dailyRequests: 0,
     lastDayReset: Date.now(),
 
@@ -48,12 +46,25 @@ const rateLimiter = {
     }
 };
 
+// ─── Groq chat helper ─────────────────────────────────────────────────
+const CHAT_MODEL = 'llama-3.3-70b-versatile';
+const TRANSLATION_MODEL = 'llama-3.3-70b-versatile';
+
+const SYSTEM_PROMPT = `Bạn là "Smart AI Assistant" - trợ lý thông minh trong nhóm chat. Quy tắc:
+
+1. TRẢ LỜI ngắn gọn, lịch sự, đúng trọng tâm theo ngữ cảnh cuộc trò chuyện.
+2. TÓM TẮT: Khi được yêu cầu "tóm tắt" / "summary", tổng hợp lịch sử chat thành gạch đầu dòng.
+3. HỖ TRỢ: Giúp nhóm trả lời câu hỏi, giải thích, gợi ý, viết nội dung.
+4. NGÔN NGỮ: Trả lời bằng ngôn ngữ mà người dùng sử dụng.
+5. KHÔNG bịa đặt thông tin, nếu không biết hãy nói rõ.
+6. Format tin nhắn dễ đọc, dùng emoji khi phù hợp.`;
+
 // ─── Init AI ──────────────────────────────────────────────────────────
 const initAI = () => {
     const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
         console.error('❌ [AI Init] GROQ_API_KEY is MISSING. AI features will be disabled.');
-        console.error('❌ [AI Init] Set GROQ_API_KEY in Render Environment Variables.');
+        console.error('❌ [AI Init] Set GROQ_API_KEY in environment variables.');
         return;
     }
 
@@ -61,33 +72,24 @@ const initAI = () => {
     console.log(`🔑 [AI Init] GROQ_API_KEY found (starts with: ${apiKey.substring(0, 8)}..., length: ${apiKey.length})`);
 
     try {
-        genAI = new GoogleGenerativeAI(apiKey);
-
-        // Model cho chat/bot responses
-        chatModel = genAI.getGenerativeModel({
-            model: 'gemini-2.5-flash',
-            systemInstruction: `Bạn là "Smart AI Assistant" - trợ lý thông minh trong nhóm chat. Quy tắc:
-
-1. TRẢ LỜI ngắn gọn, lịch sự, đúng trọng tâm theo ngữ cảnh cuộc trò chuyện.
-2. TÓM TẮT: Khi được yêu cầu "tóm tắt" / "summary", tổng hợp lịch sử chat thành gạch đầu dòng.
-3. HỖ TRỢ: Giúp nhóm trả lời câu hỏi, giải thích, gợi ý, viết nội dung.
-4. NGÔN NGỮ: Trả lời bằng ngôn ngữ mà người dùng sử dụng.
-5. KHÔNG bịa đặt thông tin, nếu không biết hãy nói rõ.
-6. Format tin nhắn dễ đọc, dùng emoji khi phù hợp.`,
-        });
-
-        // Model riêng cho translation (lightweight, không cần system instruction nặng)
-        translationModel = genAI.getGenerativeModel({
-            model: 'gemini-2.5-flash',
-        });
-
-        console.log('✅ [AI Init] Gemini AI initialized successfully (model: gemini-2.5-flash)');
+        groq = new Groq({ apiKey });
+        console.log(`✅ [AI Init] Groq AI initialized successfully (model: ${CHAT_MODEL})`);
     } catch (error) {
-        console.error('❌ [AI Init] Failed to initialize Gemini AI:', error.message);
+        console.error('❌ [AI Init] Failed to initialize Groq AI:', error.message);
         console.error('❌ [AI Init] Stack:', error.stack);
-        chatModel = null;
-        translationModel = null;
+        groq = null;
     }
+};
+
+// ─── Groq chat completion helper ──────────────────────────────────────
+const chatCompletion = async (messages, model = CHAT_MODEL) => {
+    const response = await groq.chat.completions.create({
+        model,
+        messages,
+        temperature: 0.7,
+        max_tokens: 1024,
+    });
+    return response.choices[0]?.message?.content?.trim() || '';
 };
 
 // ─── Cache helpers ────────────────────────────────────────────────────
@@ -151,7 +153,7 @@ const callWithRetry = async (fn, maxRetries = 2) => {
 
 // ─── Dịch văn bản sang ngôn ngữ đích ─────────────────────────────────
 const translateText = async (text, targetLanguage, sourceLanguage = null) => {
-    if (!translationModel) {
+    if (!groq) {
         throw new Error('AI model chưa được khởi tạo');
     }
 
@@ -177,20 +179,20 @@ const translateText = async (text, targetLanguage, sourceLanguage = null) => {
         return cached;
     }
 
-    const prompt = `Translate the following text from ${sourceLangName} to ${targetLangName}.
+    const result = await callWithRetry(async () => {
+        return await chatCompletion([
+            {
+                role: 'system',
+                content: `You are a translator. Translate text from ${sourceLangName} to ${targetLangName}.
 Rules:
 - ONLY return the translated text, nothing else.
 - No explanations, no quotes, no extra formatting.
 - Keep proper nouns, brand names, technical terms as-is.
 - If the text is already in ${targetLangName}, return it unchanged.
-- Preserve line breaks and formatting.
-
-Text:
-${text}`;
-
-    const result = await callWithRetry(async () => {
-        const res = await translationModel.generateContent(prompt);
-        return res.response.text().trim();
+- Preserve line breaks and formatting.`
+            },
+            { role: 'user', content: text }
+        ], TRANSLATION_MODEL);
     });
 
     // Cache kết quả
@@ -200,7 +202,7 @@ ${text}`;
 
 // ─── Dịch song song cho nhiều ngôn ngữ ────────────────────────────────
 const translateBatch = async (text, targetLanguages, sourceLanguage = null) => {
-    if (!translationModel || targetLanguages.length === 0) return [];
+    if (!groq || targetLanguages.length === 0) return [];
 
     // Tối ưu: nếu chỉ 1-2 ngôn ngữ, gọi riêng; nếu 3+, gọi batch prompt
     if (targetLanguages.length <= 2) {
@@ -227,19 +229,21 @@ const translateBatchSingleCall = async (text, targetLanguages, sourceLanguage) =
 
     const langList = targetLanguages.map(l => `${l}: ${langNames[l] || l}`).join(', ');
 
-    const prompt = `Translate the following text into these languages: ${langList}
-
-Source text (${sourceLanguage ? langNames[sourceLanguage] : 'auto-detect'}):
-"${text}"
-
-Return ONLY a JSON object with language codes as keys and translations as values.
-Example format: {"en": "Hello", "ja": "こんにちは"}
-No markdown, no code blocks, no explanations.`;
-
     try {
         const result = await callWithRetry(async () => {
-            const res = await translationModel.generateContent(prompt);
-            return res.response.text().trim();
+            return await chatCompletion([
+                {
+                    role: 'system',
+                    content: `You are a translator. Translate the given text into multiple languages.
+Return ONLY a JSON object with language codes as keys and translations as values.
+Example format: {"en": "Hello", "ja": "こんにちは"}
+No markdown, no code blocks, no explanations.`
+                },
+                {
+                    role: 'user',
+                    content: `Translate into these languages: ${langList}\n\nSource text (${sourceLanguage ? langNames[sourceLanguage] : 'auto-detect'}):\n"${text}"`
+                }
+            ], TRANSLATION_MODEL);
         });
 
         // Parse JSON response
@@ -271,8 +275,8 @@ No markdown, no code blocks, no explanations.`;
 
 // ─── AI Bot: Trả lời câu hỏi dựa trên context ───────────────────────
 const generateAIResponse = async (userMessage, roomId) => {
-    if (!chatModel) {
-        console.error('❌ [AI Chat] chatModel is null — GROQ_API_KEY missing or initAI() failed');
+    if (!groq) {
+        console.error('❌ [AI Chat] groq is null — GROQ_API_KEY missing or initAI() failed');
         return '⚠️ AI chưa được khởi tạo. Vui lòng kiểm tra cấu hình server.';
     }
 
@@ -296,26 +300,27 @@ const generateAIResponse = async (userMessage, roomId) => {
             .limit(20)
             .lean();
 
-        const context = recentMessages
-            .reverse()
-            .map(m => {
-                const prefix = m.aiMetadata?.isAIResponse ? '🤖 AI' : (m.sender?.username || 'Unknown');
-                return `${prefix}: ${m.content}`;
-            })
-            .join('\n');
+        // Build messages array for Groq
+        const messages = [{ role: 'system', content: SYSTEM_PROMPT }];
 
-        const prompt = `Lịch sử cuộc trò chuyện gần đây:
----
-${context}
----
+        recentMessages.reverse().forEach(m => {
+            const isAI = m.aiMetadata?.isAIResponse;
+            messages.push({
+                role: isAI ? 'assistant' : 'user',
+                content: isAI ? m.content : `${m.sender?.username || 'Unknown'}: ${m.content}`,
+            });
+        });
 
-Tin nhắn mới nhất từ người dùng: "${userMessage}"
+        // Add the current user message
+        messages.push({
+            role: 'user',
+            content: `Tin nhắn mới nhất từ người dùng: "${userMessage}"
 
-Hãy phản hồi hữu ích, ngắn gọn (tối đa 150 từ). Nếu tin nhắn là câu hỏi, trả lời trực tiếp. Nếu là "tóm tắt" / "summary", tóm tắt cuộc trò chuyện thành gạch đầu dòng.`;
+Hãy phản hồi hữu ích, ngắn gọn (tối đa 150 từ). Nếu tin nhắn là câu hỏi, trả lời trực tiếp. Nếu là "tóm tắt" / "summary", tóm tắt cuộc trò chuyện thành gạch đầu dòng.`
+        });
 
         const result = await callWithRetry(async () => {
-            const res = await chatModel.generateContent(prompt);
-            return res.response.text().trim();
+            return await chatCompletion(messages);
         });
 
         console.log(`✅ [AI Chat] Response generated (${result.length} chars)`);
@@ -331,17 +336,14 @@ Hãy phản hồi hữu ích, ngắn gọn (tối đa 150 từ). Nếu tin nhắ
         if (error.status === 403 || error.message?.includes('403') || error.message?.includes('API key')) {
             return '⚠️ API key không hợp lệ hoặc đã bị vô hiệu hóa. Liên hệ admin.';
         }
-        if (error.message?.includes('SAFETY')) {
-            return '⚠️ Nội dung bị chặn bởi bộ lọc an toàn. Hãy thử câu hỏi khác.';
-        }
         return '⚠️ AI gặp lỗi, vui lòng thử lại sau.';
     }
 };
 
 // ─── AI Bot: Tóm tắt cuộc trò chuyện ─────────────────────────────────
 const summarizeConversation = async (roomId, messageCount = 50) => {
-    if (!chatModel) {
-        console.error('❌ [AI Summarize] chatModel is null — GROQ_API_KEY missing or initAI() failed');
+    if (!groq) {
+        console.error('❌ [AI Summarize] groq is null — GROQ_API_KEY missing or initAI() failed');
         return '⚠️ AI chưa được khởi tạo. Vui lòng kiểm tra cấu hình server.';
     }
 
@@ -368,15 +370,14 @@ const summarizeConversation = async (roomId, messageCount = 50) => {
             .map(m => `${m.sender?.username || 'Unknown'}: ${m.content}`)
             .join('\n');
 
-        const prompt = `Tóm tắt cuộc trò chuyện sau thành các điểm chính (gạch đầu dòng, ngắn gọn, dễ hiểu):
-
-${context}
-
-Tóm tắt:`;
-
         const result = await callWithRetry(async () => {
-            const res = await chatModel.generateContent(prompt);
-            return res.response.text().trim();
+            return await chatCompletion([
+                { role: 'system', content: SYSTEM_PROMPT },
+                {
+                    role: 'user',
+                    content: `Tóm tắt cuộc trò chuyện sau thành các điểm chính (gạch đầu dòng, ngắn gọn, dễ hiểu):\n\n${context}\n\nTóm tắt:`
+                }
+            ]);
         });
 
         return result;
@@ -394,7 +395,7 @@ Tóm tắt:`;
 
 // ─── Lấy stats ────────────────────────────────────────────────────────
 const getAIStats = () => ({
-    isInitialized: !!chatModel,
+    isInitialized: !!groq,
     cacheSize: translationCache.size,
     rateLimiter: {
         requestsInLastMinute: rateLimiter.requests.filter(t => Date.now() - t < 60000).length,
@@ -406,8 +407,8 @@ const getAIStats = () => ({
 
 // ─── AI: Tóm tắt cuộc gọi từ audio ──────────────────────────────────
 const summarizeCallAudio = async (audioBase64, mimeType = 'audio/webm') => {
-    if (!chatModel) {
-        console.error('❌ [AI Call] chatModel is null');
+    if (!groq) {
+        console.error('❌ [AI Call] groq is null');
         return '⚠️ AI chưa được khởi tạo.';
     }
 
@@ -418,40 +419,20 @@ const summarizeCallAudio = async (audioBase64, mimeType = 'audio/webm') => {
     try {
         console.log(`🎙️ [AI Call] Summarizing call audio (${Math.round(audioBase64.length / 1024)}KB)`);
 
-        const result = await callWithRetry(async () => {
-            const res = await chatModel.generateContent([
-                {
-                    inlineData: {
-                        data: audioBase64,
-                        mimeType,
-                    },
-                },
-                {
-                    text: `Đây là bản ghi âm một cuộc gọi giữa hai người. Hãy:
-1. Tóm tắt nội dung chính của cuộc gọi thành các gạch đầu dòng ngắn gọn.
-2. Ghi nhận các quyết định hoặc hành động được thống nhất (nếu có).
-3. Trả lời bằng ngôn ngữ mà người nói sử dụng trong cuộc gọi.
-Nếu không nghe rõ hoặc audio quá ngắn, hãy ghi chú rõ ràng.`,
-                },
-            ]);
-            return res.response.text().trim();
-        });
-
-        console.log(`✅ [AI Call] Summary generated (${result.length} chars)`);
-        return result;
+        // Groq hiện không hỗ trợ audio input trực tiếp như Gemini
+        // Trả về thông báo phù hợp
+        console.warn('⚠️ [AI Call] Audio summarization not supported with Groq. Skipping.');
+        return '⚠️ Tính năng tóm tắt cuộc gọi tạm thời không khả dụng với Groq API.';
     } catch (error) {
         console.error('❌ [AI Call] Error:', error.message);
-        if (error.status === 429 || error.message?.includes('429')) {
-            return '⚠️ AI đang bận, thử lại sau nhé!';
-        }
         return null;
     }
 };
 
 // ─── AI: Phân tích ảnh chụp màn hình ──────────────────────────────────────────
 const analyzeScreenImage = async (imageBase64) => {
-    if (!chatModel) {
-        console.error('❌ [AI Screen] chatModel is null');
+    if (!groq) {
+        console.error('❌ [AI Screen] groq is null');
         return '⚠️ AI chưa được khởi tạo.';
     }
 
@@ -463,23 +444,34 @@ const analyzeScreenImage = async (imageBase64) => {
         console.log(`💻 [AI Screen] Analyzing screen image (${Math.round(imageBase64.length / 1024)}KB)`);
 
         const result = await callWithRetry(async () => {
-            const res = await chatModel.generateContent([
-                {
-                    inlineData: {
-                        data: imageBase64,
-                        mimeType: 'image/jpeg',
-                    },
-                },
-                {
-                    text: `Đây là ảnh chụp màn hình đang được chia sẻ trong cuộc gọi video. Hãy:
+            const response = await groq.chat.completions.create({
+                model: 'llama-3.2-90b-vision-preview',
+                messages: [
+                    {
+                        role: 'user',
+                        content: [
+                            {
+                                type: 'image_url',
+                                image_url: {
+                                    url: `data:image/jpeg;base64,${imageBase64}`,
+                                },
+                            },
+                            {
+                                type: 'text',
+                                text: `Đây là ảnh chụp màn hình đang được chia sẻ trong cuộc gọi video. Hãy:
 1. Mô tả ngắn gọn nội dung hiển thị trên màn hình.
 2. Nếu có văn bản, hãy trích xuất và tóm tắt các điểm chính.
 3. Nếu có code, hãy nhận diện ngôn ngữ và mô tả chức năng.
 4. Nếu có bảng biểu/đồ thị, hãy tóm tắt dữ liệu chính.
 5. Trả lời bằng ngôn ngữ Việt Nam, dễ hiểu, ngắn gọn.`,
-                },
-            ]);
-            return res.response.text().trim();
+                            },
+                        ],
+                    },
+                ],
+                temperature: 0.5,
+                max_tokens: 1024,
+            });
+            return response.choices[0]?.message?.content?.trim() || '';
         });
 
         console.log(`✅ [AI Screen] Analysis done (${result.length} chars)`);

@@ -18,8 +18,20 @@ const transporter = nodemailer.createTransport({
     },
 });
 
-// ✅ dùng resend
-const resend = new Resend(process.env.RESEND_API_KEY);
+// ✅ dùng resend — lazy init để không crash khi thiếu key
+let resend = null;
+
+const getResend = () => {
+    if (!resend) {
+        if (!process.env.RESEND_API_KEY) {
+            const error = new Error('Thiếu RESEND_API_KEY.');
+            error.statusCode = 500;
+            throw error;
+        }
+        resend = new Resend(process.env.RESEND_API_KEY);
+    }
+    return resend;
+};
 
 const ensureMailConfig = () => {
     if (!process.env.RESEND_API_KEY) {
@@ -36,7 +48,7 @@ const sendMail = async (mailOptions) => {
         console.log(`📧 Sending email via Resend (to: ${mailOptions.to})`);
 
         // ✅ CHỈ SỬA ĐOẠN NÀY (core fix)
-        return await resend.emails.send({
+        return await getResend().emails.send({
             from: mailOptions.from || 'onboarding@resend.dev',
             to: mailOptions.to,
             subject: mailOptions.subject,
