@@ -23,9 +23,13 @@ const getTransporter = () => {
         transporter = nodemailer.createTransport({
             host: 'smtp.gmail.com',
             port: 465,
-            secure: true,
-            family: 4,
+            secure: true, // dùng SSL
+            family: 4,    // ép dùng IPv4
             auth: { user, pass },
+            // Thêm cấu hình này để tránh lỗi handshake khi mạng chập chờn
+            connectionTimeout: 10000,
+            greetingTimeout: 5000,
+            socketTimeout: 10000,
         });
 
         console.log(`✅ [Mailer] Nodemailer configured (user: ${user})`);
