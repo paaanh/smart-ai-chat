@@ -1,62 +1,68 @@
 const dns = require('dns');
 const nodemailer = require('nodemailer');
-const { Resend } = require('resend'); // ✅ thêm
 
 if (typeof dns.setDefaultResultOrder === 'function') {
     dns.setDefaultResultOrder('ipv4first');
 }
 
-// ❗ giữ transporter nhưng KHÔNG dùng nữa (để không phá code cũ)
-const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    family: 4,
-    auth: {
-        user: process.env.MAIL_USER || process.env.EMAIL_USER,
-        pass: process.env.MAIL_APP_PASSWORD || process.env.EMAIL_PASS,
-    },
-});
+// ─── Nodemailer transporter (Gmail SMTP) ────────────────────────────
+let transporter = null;
 
-// ✅ dùng resend — lazy init để không crash khi thiếu key
-let resend = null;
+const getTransporter = () => {
+    if (!transporter) {
+        const user = process.env.MAIL_USER || process.env.EMAIL_USER;
+        const pass = process.env.MAIL_APP_PASSWORD || process.env.EMAIL_PASS;
 
-const getResend = () => {
-    if (!resend) {
-        if (!process.env.RESEND_API_KEY) {
-            const error = new Error('Thiếu RESEND_API_KEY.');
+        if (!user || !pass) {
+            console.error('❌ [Mailer] MAIL_USER hoặc MAIL_APP_PASSWORD chưa được cấu hình.');
+            const error = new Error('Thiếu cấu hình email (MAIL_USER / MAIL_APP_PASSWORD).');
             error.statusCode = 500;
             throw error;
         }
-        resend = new Resend(process.env.RESEND_API_KEY);
+
+        transporter = nodemailer.createTransport({
+            host: 'smtp.gmail.com',
+            port: 465,
+            secure: true,
+            family: 4,
+            auth: { user, pass },
+        });
+
+        console.log(`✅ [Mailer] Nodemailer configured (user: ${user})`);
     }
-    return resend;
+    return transporter;
 };
 
+// ─── Kiểm tra cấu hình ─────────────────────────────────────────────
 const ensureMailConfig = () => {
-    if (!process.env.RESEND_API_KEY) {
-        const error = new Error('Thiếu RESEND_API_KEY.');
+    const user = process.env.MAIL_USER || process.env.EMAIL_USER;
+    const pass = process.env.MAIL_APP_PASSWORD || process.env.EMAIL_PASS;
+    if (!user || !pass) {
+        const error = new Error('Thiếu cấu hình email (MAIL_USER / MAIL_APP_PASSWORD).');
         error.statusCode = 500;
         throw error;
     }
 };
 
+// ─── Gửi mail chung ────────────────────────────────────────────────
 const sendMail = async (mailOptions) => {
     ensureMailConfig();
 
     try {
-        console.log(`📧 Sending email via Resend (to: ${mailOptions.to})`);
+        const from = mailOptions.from || `"Smart AI Chat" <${process.env.MAIL_USER}>`;
+        console.log(`📧 [Mailer] Sending email via Gmail SMTP (to: ${mailOptions.to})`);
 
-        // ✅ CHỈ SỬA ĐOẠN NÀY (core fix)
-        return await getResend().emails.send({
-            from: mailOptions.from || 'onboarding@resend.dev',
+        const info = await getTransporter().sendMail({
+            from,
             to: mailOptions.to,
             subject: mailOptions.subject,
             html: mailOptions.html,
         });
 
+        console.log(`✅ [Mailer] Email sent (messageId: ${info.messageId})`);
+        return info;
     } catch (error) {
-        console.error('❌ Mail send failed:', error);
+        console.error('❌ [Mailer] Send failed:', error.message);
 
         const mailError = new Error('Không thể gửi mã OTP qua email. Vui lòng thử lại sau.');
         mailError.statusCode = 500;
@@ -68,40 +74,45 @@ const sendMail = async (mailOptions) => {
  * Gửi email OTP reset password
  */
 async function sendOTPEmail(toEmail, otp) {
-    const mailOptions = {
-        from: `"Smart AI Chat" <onboarding@resend.dev>`, // ⚠️ đổi domain resend
+    await sendMail({
         to: toEmail,
         subject: 'Mã xác nhận đặt lại mật khẩu - Smart AI Chat',
         html: `
             <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; border: 1px solid #e5e7eb; border-radius: 16px;">
-                <h2>Smart AI Chat</h2>
-                <p>Mã OTP của bạn:</p>
-                <h1>${otp}</h1>
+                <h2 style="color: #6366f1;">🔒 Smart AI Chat</h2>
+                <p>Xin chào,</p>
+                <p>Bạn vừa yêu cầu đặt lại mật khẩu. Đây là mã xác nhận của bạn:</p>
+                <div style="text-align: center; margin: 24px 0;">
+                    <span style="display: inline-block; padding: 16px 32px; background: #6366f1; color: white; font-size: 28px; font-weight: bold; border-radius: 12px; letter-spacing: 6px;">${otp}</span>
+                </div>
+                <p style="color: #6b7280; font-size: 13px;">⏳ Mã có hiệu lực trong 5 phút. Không chia sẻ mã này với bất kỳ ai.</p>
+                <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;">
+                <p style="color: #9ca3af; font-size: 12px;">Nếu bạn không yêu cầu đặt lại mật khẩu, hãy bỏ qua email này.</p>
             </div>
         `,
-    };
-
-    await sendMail(mailOptions);
+    });
 }
 
 /**
  * Gửi email OTP xác thực đăng ký
  */
 async function sendRegistrationOTPEmail(toEmail, otp) {
-    const mailOptions = {
-        from: `"Smart AI Chat" <onboarding@resend.dev>`,
+    await sendMail({
         to: toEmail,
         subject: 'Xác thực email đăng ký - Smart AI Chat',
         html: `
-            <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
-                <h2>Smart AI Chat</h2>
-                <p>Mã OTP của bạn:</p>
-                <h1>${otp}</h1>
+            <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; border: 1px solid #e5e7eb; border-radius: 16px;">
+                <h2 style="color: #6366f1;">🎉 Chào mừng đến Smart AI Chat!</h2>
+                <p>Cảm ơn bạn đã đăng ký. Nhập mã bên dưới để xác thực email:</p>
+                <div style="text-align: center; margin: 24px 0;">
+                    <span style="display: inline-block; padding: 16px 32px; background: #10b981; color: white; font-size: 28px; font-weight: bold; border-radius: 12px; letter-spacing: 6px;">${otp}</span>
+                </div>
+                <p style="color: #6b7280; font-size: 13px;">⏳ Mã có hiệu lực trong 5 phút. Không chia sẻ mã này với bất kỳ ai.</p>
+                <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;">
+                <p style="color: #9ca3af; font-size: 12px;">Nếu bạn không đăng ký tài khoản, hãy bỏ qua email này.</p>
             </div>
         `,
-    };
-
-    await sendMail(mailOptions);
+    });
 }
 
 /**
@@ -113,9 +124,9 @@ async function sendSMSOTP(phoneNumber, otp) {
 }
 
 module.exports = {
-    transporter, // giữ nguyên
+    transporter: { sendMail }, // backward-compatible
     sendOTPEmail,
     sendRegistrationOTPEmail,
     sendSMSOTP,
-    ensureMailConfig
+    ensureMailConfig,
 };
