@@ -21,8 +21,6 @@ services:
       - MONGODB_URI=mongodb://mongo:27017/smart-ai-chat
       - JWT_SECRET=${JWT_SECRET:-smart-ai-jwt-secret-key-2026}
       - CORS_ORIGINS=http://localhost:80,http://localhost,http://localhost:3000
-      - MAIL_USER=${MAIL_USER:-}
-      - MAIL_APP_PASSWORD=${MAIL_APP_PASSWORD:-}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - METERED_API_KEY=${METERED_API_KEY:-}

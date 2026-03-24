@@ -1,81 +1,111 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
+import { useLanguage } from '../hooks/useLanguage';
 import { userAPI } from '../services/api';
 import { ArrowLeft, Loader2, Check, Palette, Phone } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-
-const LANGUAGES = [
-    { code: 'vi', label: 'Tiếng Việt' },
-    { code: 'en', label: 'English' },
-    { code: 'ja', label: '日本語' },
-    { code: 'ko', label: '한국어' },
-    { code: 'zh', label: '中文' },
-    { code: 'fr', label: 'Français' },
-    { code: 'de', label: 'Deutsch' },
-    { code: 'es', label: 'Español' },
-    { code: 'th', label: 'ไทย' },
-    { code: 'ru', label: 'Русский' },
-    { code: 'pt', label: 'Português' },
-    { code: 'ar', label: 'العربية' },
-];
+import { motion } from 'framer-motion';
 
 export default function SettingsPage() {
     const { user, updateUser, logout } = useAuth();
     const { themeId, changeTheme, themes } = useTheme();
+    const { t } = useLanguage();
     const navigate = useNavigate();
     const [form, setForm] = useState({
         username: user?.username || '',
         phoneNumber: user?.phoneNumber || '',
-        preferredLanguage: localStorage.getItem('preferredLanguage') || user?.preferredLanguage || 'vi',
     });
     const [loading, setLoading] = useState(false);
     const [saved, setSaved] = useState(false);
     const [error, setError] = useState('');
+    const [pendingThemeId, setPendingThemeId] = useState(null);
+    const [pressedThemeId, setPressedThemeId] = useState(null);
+    const themeSwitchTimerRef = useRef(null);
 
-    const handleLanguageChange = async (langCode) => {
-        setForm({ ...form, preferredLanguage: langCode });
-        localStorage.setItem('preferredLanguage', langCode);
-        // Persist to backend immediately so translation service uses correct language
-        const langObj = LANGUAGES.find((l) => l.code === langCode);
-        try {
-            const { data } = await userAPI.updateProfile({
-                preferredLanguage: langCode,
-                preferredLanguageLabel: langObj?.label,
-            });
-            updateUser(data.user);
-        } catch (err) {
-            console.error('Language update error:', err);
+    useEffect(() => {
+        return () => {
+            if (themeSwitchTimerRef.current) {
+                clearTimeout(themeSwitchTimerRef.current);
+            }
+        };
+    }, []);
+
+    const hexToRgba = (hex, alpha = 0.4) => {
+        if (!hex) return `rgba(99, 102, 241, ${alpha})`;
+        let value = hex.replace('#', '').trim();
+        if (value.length === 3) {
+            value = value.split('').map((c) => c + c).join('');
         }
+        if (!/^[0-9a-fA-F]{6}$/.test(value)) {
+            return `rgba(99, 102, 241, ${alpha})`;
+        }
+        const parsed = Number.parseInt(value, 16);
+        const r = (parsed >> 16) & 255;
+        const g = (parsed >> 8) & 255;
+        const b = parsed & 255;
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    };
+
+    const getThemeAccent = (theme) => {
+        if (theme.id === 'light') return '#6366f1';
+        if (theme.id === 'dark') return '#818cf8';
+        if (theme.id === 'pixel-art') return '#f59e0b';
+        if (theme.id === 'neon-night') return '#22d3ee';
+        return theme.color || '#6366f1';
+    };
+
+    const getThemePreviewBackground = (theme) => {
+        if (theme.id === 'dark') return 'linear-gradient(135deg, #1e293b, #0f172a)';
+        if (theme.id === 'light') return 'linear-gradient(135deg, #f8fafc, #e2e8f0)';
+        if (theme.id === 'pixel-art') return 'linear-gradient(135deg, #f59e0b, #ef4444)';
+        if (theme.id === 'neon-night') return 'linear-gradient(135deg, #22d3ee, #fb7185)';
+        return theme.color;
     };
 
     const handleSave = async () => {
         setError('');
         setLoading(true);
         try {
-            const langObj = LANGUAGES.find((l) => l.code === form.preferredLanguage);
             const { data } = await userAPI.updateProfile({
                 username: form.username,
                 phoneNumber: form.phoneNumber,
-                preferredLanguage: form.preferredLanguage,
-                preferredLanguageLabel: langObj?.label,
+                preferredLanguage: 'vi',
+                preferredLanguageLabel: 'Tiếng Việt',
                 preferredTheme: themeId,
             });
             updateUser(data.user);
-            localStorage.setItem('preferredLanguage', form.preferredLanguage);
+            localStorage.setItem('preferredLanguage', 'vi');
             setSaved(true);
             setTimeout(() => setSaved(false), 2000);
         } catch (err) {
-            setError(err.response?.data?.error || 'Cập nhật thất bại');
+            setError(err.response?.data?.error || t('settings.saveFailed'));
         } finally {
             setLoading(false);
         }
     };
 
     const handleThemeChange = (newThemeId) => {
-        changeTheme(newThemeId);
-        // Also persist to backend silently
-        userAPI.updateProfile({ preferredTheme: newThemeId }).catch(() => { });
+        if (pendingThemeId === newThemeId) return;
+
+        if (themeSwitchTimerRef.current) {
+            clearTimeout(themeSwitchTimerRef.current);
+        }
+
+        setPressedThemeId(newThemeId);
+        setPendingThemeId(newThemeId);
+
+        themeSwitchTimerRef.current = setTimeout(() => {
+            changeTheme(newThemeId);
+            // Also persist to backend silently
+            userAPI.updateProfile({ preferredTheme: newThemeId }).catch(() => { });
+            setPendingThemeId(null);
+            themeSwitchTimerRef.current = null;
+        }, 320);
+
+        setTimeout(() => {
+            setPressedThemeId((prev) => (prev === newThemeId ? null : prev));
+        }, 420);
     };
 
     return (
@@ -83,24 +113,24 @@ export default function SettingsPage() {
             {/* Header */}
             <div className="bg-white border-b">
                 <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
-                    <button onClick={() => navigate('/')} className="p-1 hover:bg-gray-100 rounded-full">
+                    <button onClick={() => navigate('/')} className="p-1 hover:bg-gray-100 rounded-full" title={t('settings.backToChat')}>
                         <ArrowLeft size={20} />
                     </button>
-                    <h1 className="text-lg font-semibold">Cài đặt</h1>
+                    <h1 className="text-lg font-semibold">{t('settings.title')}</h1>
                 </div>
             </div>
 
             <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
                 {/* Profile section */}
                 <div className="bg-white rounded-xl p-6 shadow-sm space-y-4">
-                    <h2 className="font-semibold text-gray-900">Hồ sơ</h2>
+                    <h2 className="font-semibold text-gray-900">{t('settings.profileSection')}</h2>
 
                     {error && (
                         <div className="bg-red-50 text-red-600 px-3 py-2 rounded-lg text-sm">{error}</div>
                     )}
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Tên hiển thị</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.displayName')}</label>
                         <input
                             type="text"
                             value={form.username}
@@ -110,7 +140,7 @@ export default function SettingsPage() {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.email')}</label>
                         <input
                             type="email"
                             value={user?.email || ''}
@@ -120,7 +150,7 @@ export default function SettingsPage() {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Số điện thoại</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.phoneNumber')}</label>
                         <div className="relative">
                             <input
                                 type="tel"
@@ -133,24 +163,6 @@ export default function SettingsPage() {
                         </div>
                     </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Ngôn ngữ ưu tiên</label>
-                        <p className="text-xs text-gray-400 mb-2">
-                            Tin nhắn từ người khác sẽ được dịch sang ngôn ngữ này
-                        </p>
-                        <select
-                            value={form.preferredLanguage}
-                            onChange={(e) => handleLanguageChange(e.target.value)}
-                            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary-ring)] focus:border-[var(--color-primary-ring)] outline-none transition bg-white"
-                        >
-                            {LANGUAGES.map((l) => (
-                                <option key={l.code} value={l.code}>
-                                    {l.label}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-
                     <button
                         onClick={handleSave}
                         disabled={loading}
@@ -161,10 +173,10 @@ export default function SettingsPage() {
                         ) : saved ? (
                             <>
                                 <Check size={16} />
-                                Đã lưu!
+                                {t('common.saved')}
                             </>
                         ) : (
-                            'Lưu thay đổi'
+                            t('common.save')
                         )}
                     </button>
                 </div>
@@ -173,44 +185,82 @@ export default function SettingsPage() {
                 <div className="bg-[var(--bg-card)] rounded-xl p-6 shadow-sm space-y-4">
                     <div className="flex items-center gap-2">
                         <Palette size={18} className="text-[var(--color-primary)]" />
-                        <h2 className="font-semibold text-[var(--text-primary)]">Giao diện</h2>
+                        <h2 className="font-semibold text-[var(--text-primary)]">{t('settings.appearanceSection')}</h2>
                     </div>
                     <p className="text-xs text-[var(--text-tertiary)]">
-                        Chọn màu chủ đạo cho ứng dụng. Thay đổi sẽ áp dụng ngay lập tức.
+                        {t('settings.appearanceHelp')}
                     </p>
                     <div className="flex flex-wrap gap-3">
-                        {themes.map((t) => (
-                            <button
-                                key={t.id}
-                                onClick={() => handleThemeChange(t.id)}
-                                title={t.name}
-                                className={`relative w-12 h-12 rounded-full transition-all duration-200 border-2 flex items-center justify-center
-                                    ${themeId === t.id
-                                        ? 'border-[var(--color-primary)] scale-110 shadow-lg'
-                                        : 'border-transparent hover:scale-105 hover:shadow-md'}
+                        {themes.map((theme) => {
+                            const isActive = themeId === theme.id;
+                            const isPending = pendingThemeId === theme.id;
+                            const accent = getThemeAccent(theme);
+
+                            return (
+                                <motion.button
+                                key={theme.id}
+                                type="button"
+                                onClick={() => handleThemeChange(theme.id)}
+                                title={theme.name}
+                                whileHover={{
+                                    scale: isActive ? 1.12 : 1.08,
+                                    boxShadow: `0 0 0 4px ${hexToRgba(accent, 0.25)}, 0 0 24px ${hexToRgba(accent, 0.45)}`,
+                                }}
+                                whileTap={{ scale: 0.9 }}
+                                animate={pressedThemeId === theme.id
+                                    ? {
+                                        scale: [1, 0.9, isActive ? 1.14 : 1.1, isActive ? 1.1 : 1],
+                                        transition: { duration: 0.38, times: [0, 0.28, 0.68, 1] },
+                                    }
+                                    : {
+                                        scale: isActive ? 1.1 : 1,
+                                        transition: { duration: 0.2, ease: 'easeOut' },
+                                    }}
+                                className={`relative w-12 h-12 rounded-full transition-colors duration-200 border-2 flex items-center justify-center
+                                    ${isActive || isPending
+                                        ? 'border-[var(--color-primary)]'
+                                        : 'border-transparent'}
                                 `}
                                 style={{
-                                    background: t.id === 'dark'
-                                        ? 'linear-gradient(135deg, #1e293b, #0f172a)'
-                                        : t.id === 'light'
-                                            ? 'linear-gradient(135deg, #f8fafc, #e2e8f0)'
-                                            : t.color,
+                                    background: getThemePreviewBackground(theme),
+                                    boxShadow: isActive
+                                        ? `0 8px 18px ${hexToRgba(accent, 0.45)}`
+                                        : `0 4px 10px ${hexToRgba(accent, 0.18)}`,
                                 }}
                             >
-                                {themeId === t.id && (
-                                    <Check size={18} className={t.id === 'light' ? 'text-gray-800' : 'text-white'} />
+                                {isPending && (
+                                    <span
+                                        className="pointer-events-none absolute -inset-1.5 rounded-full border-2 border-transparent animate-spin"
+                                        style={{
+                                            borderTopColor: accent,
+                                            borderRightColor: hexToRgba(accent, 0.5),
+                                        }}
+                                    />
                                 )}
-                            </button>
-                        ))}
+
+                                {isActive && !isPending && (
+                                    <Check size={18} className={theme.id === 'light' ? 'text-gray-800' : 'text-white'} />
+                                )}
+
+                                {isPending && (
+                                    <Loader2
+                                        size={14}
+                                        className={`absolute animate-spin ${theme.id === 'light' ? 'text-gray-800' : 'text-white'}`}
+                                    />
+                                )}
+                            </motion.button>
+                            );
+                        })}
                     </div>
                     <p className="text-sm text-[var(--text-secondary)]">
-                        Đang dùng: <span className="font-medium text-[var(--color-primary)]">{themes.find(t => t.id === themeId)?.name}</span>
+                        {t('settings.usingTheme')} <span className="font-medium text-[var(--color-primary)]">{themes.find((theme) => theme.id === (pendingThemeId || themeId))?.name}</span>
                     </p>
+
                 </div>
 
                 {/* Danger zone */}
                 <div className="bg-white rounded-xl p-6 shadow-sm">
-                    <h2 className="font-semibold text-red-600 mb-3">Đăng xuất</h2>
+                    <h2 className="font-semibold text-red-600 mb-3">{t('settings.logoutSection')}</h2>
                     <button
                         onClick={() => {
                             logout();
@@ -218,7 +268,7 @@ export default function SettingsPage() {
                         }}
                         className="w-full bg-red-50 text-red-600 hover:bg-red-100 font-medium py-2.5 rounded-lg transition"
                     >
-                        Đăng xuất khỏi tài khoản
+                        {t('settings.logoutButton')}
                     </button>
                 </div>
             </div>

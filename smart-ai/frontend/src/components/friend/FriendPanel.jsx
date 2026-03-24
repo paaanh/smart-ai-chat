@@ -2,6 +2,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { friendAPI, userAPI, roomAPI } from '../../services/api';
 import { useSocket } from '../../hooks/useSocket';
 import { useAuth } from '../../hooks/useAuth';
+import { useTheme } from '../../hooks/useTheme';
+import { useLanguage } from '../../hooks/useLanguage';
+import { AnimatePresence, motion } from 'framer-motion';
+import Skeleton from 'react-loading-skeleton';
+import 'react-loading-skeleton/dist/skeleton.css';
 import {
     UserPlus,
     UserCheck,
@@ -19,6 +24,8 @@ import { useNavigate } from 'react-router-dom';
 
 export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
     const { user } = useAuth();
+    const { themeId } = useTheme();
+    const { t } = useLanguage();
     const { on, off, onlineUsers } = useSocket();
     const navigate = useNavigate();
     const [tab, setTab] = useState('friends'); // friends | requests | search
@@ -225,12 +232,28 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
     };
 
     const requestCount = requests.length;
+    const isGlassTheme = themeId === 'glassmorphism' || themeId === 'neon-night';
+    const isPixelTheme = themeId === 'pixel-art';
+
+    const renderLoadingSkeleton = () => (
+        <div className="p-4 space-y-3">
+            {[1, 2, 3, 4, 5].map((idx) => (
+                <div key={idx} className="flex items-center gap-3">
+                    <Skeleton circle width={40} height={40} baseColor="var(--bg-secondary)" highlightColor="var(--bg-hover)" />
+                    <div className="flex-1">
+                        <Skeleton width="60%" height={12} baseColor="var(--bg-secondary)" highlightColor="var(--bg-hover)" />
+                        <Skeleton width="40%" height={10} baseColor="var(--bg-secondary)" highlightColor="var(--bg-hover)" />
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
 
     return (
-        <div className="h-full flex flex-col bg-white border-r border-gray-200">
+        <div className={`h-full flex flex-col border-r border-gray-200 ${isGlassTheme ? 'glass-panel' : 'bg-white'} ${isPixelTheme ? 'font-pixel' : ''}`}>
             {/* Header */}
-            <div className="p-4 border-b border-gray-100">
-                <h2 className="text-xl font-bold text-gray-900 mb-3">Bạn bè</h2>
+            <div className={`p-4 border-b border-gray-100 ${isGlassTheme ? 'bg-white/5 backdrop-blur-xl' : ''}`}>
+                <h2 className="text-xl font-bold text-gray-900 mb-3">{t('friendPanel.title')}</h2>
 
                 {/* Tabs */}
                 <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
@@ -242,7 +265,7 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
                             }`}
                     >
                         <Users size={14} className="inline mr-1" />
-                        Bạn bè
+                        {t('friendPanel.tabFriends')}
                     </button>
                     <button
                         onClick={() => setTab('requests')}
@@ -252,11 +275,16 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
                             }`}
                     >
                         <Bell size={14} className="inline mr-1" />
-                        Lời mời
+                        {t('friendPanel.tabRequests')}
                         {requestCount > 0 && (
-                            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center">
+                            <motion.span
+                                className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center"
+                                initial={{ scale: 0.85 }}
+                                animate={{ scale: [1, 1.08, 1] }}
+                                transition={{ duration: 0.6, repeat: Infinity, repeatDelay: 2.2 }}
+                            >
                                 {requestCount}
-                            </span>
+                            </motion.span>
                         )}
                     </button>
                     <button
@@ -267,7 +295,7 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
                             }`}
                     >
                         <UserPlus size={14} className="inline mr-1" />
-                        Thêm
+                        {t('friendPanel.tabAdd')}
                     </button>
                 </div>
             </div>
@@ -275,9 +303,12 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
             {/* Content */}
             <div className="flex-1 overflow-y-auto scrollbar-thin">
                 {loading && (
-                    <div className="p-8 text-center text-gray-400">
-                        <Loader2 size={24} className="animate-spin mx-auto" />
-                    </div>
+                    <>
+                        <div className="sr-only">
+                            <Loader2 size={24} className="animate-spin mx-auto" />
+                        </div>
+                        {renderLoadingSkeleton()}
+                    </>
                 )}
 
                 {/* ── Friends List ── */}
@@ -286,27 +317,29 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
                         {friends.length === 0 ? (
                             <div className="p-8 text-center text-gray-400">
                                 <Users size={40} className="mx-auto mb-2 opacity-50" />
-                                <p className="text-sm">Chưa có bạn bè</p>
+                                <p className="text-sm">{t('friendPanel.noFriends')}</p>
                                 <button
                                     onClick={() => setTab('search')}
                                     className="mt-2 text-sm text-[var(--color-primary)] hover:text-[var(--color-primary-hover)]"
                                 >
-                                    Tìm kiếm bạn bè
+                                    {t('friendPanel.searchFriends')}
                                 </button>
                             </div>
                         ) : (
                             friends.map((friend) => {
                                 const isOnline = onlineUsers.includes(friend._id);
                                 return (
-                                    <div
+                                    <motion.div
                                         key={friend._id}
-                                        className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition"
+                                        className={`flex items-center gap-3 px-4 py-3 transition ${isGlassTheme ? 'hover:bg-cyan-400/10 rounded-xl mx-1.5 my-0.5 border border-transparent hover:border-cyan-300/30' : 'hover:bg-gray-50'}`}
+                                        whileHover={{ x: 2, scale: 1.01 }}
+                                        transition={{ type: 'spring', stiffness: 310, damping: 22 }}
                                     >
                                         <div className="relative shrink-0">
                                             <div
                                                 className="w-10 h-10 rounded-full bg-[var(--color-primary)] flex items-center justify-center text-white font-semibold cursor-pointer hover:ring-2 hover:ring-[var(--color-primary-ring)] transition overflow-hidden"
                                                 onClick={() => navigate(`/profile/${friend._id}`)}
-                                                title="Xem trang cá nhân"
+                                                title={t('friendPanel.viewProfile')}
                                             >
                                                 {friend.avatar ? (
                                                     <img src={friend.avatar} alt={friend.username} className="w-full h-full object-cover" />
@@ -323,17 +356,17 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
                                                 {friend.username}
                                             </p>
                                             <p className="text-xs text-gray-400">
-                                                {isOnline ? 'Đang hoạt động' : 'Offline'}
+                                                {isOnline ? t('common.online') : t('common.offline')}
                                             </p>
                                         </div>
                                         <button
                                             onClick={() => handleStartChat(friend._id)}
-                                            className="p-2 hover:bg-[var(--color-primary-light)] rounded-full text-[var(--color-primary)] transition"
-                                            title="Nhắn tin"
+                                            className={`p-2 rounded-full text-[var(--color-primary)] transition ${isGlassTheme ? 'hover:bg-cyan-400/20' : 'hover:bg-[var(--color-primary-light)]'}`}
+                                            title={t('friendPanel.message')}
                                         >
                                             <MessageCircle size={18} />
                                         </button>
-                                    </div>
+                                    </motion.div>
                                 );
                             })
                         )}
@@ -347,7 +380,7 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
                         {requests.length > 0 && (
                             <div>
                                 <p className="px-4 pt-3 pb-1 text-xs font-semibold text-gray-400 uppercase">
-                                    Lời mời nhận được
+                                    {t('friendPanel.incomingRequests')}
                                 </p>
                                 {requests.map((req) => (
                                     <div
@@ -361,14 +394,14 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
                                             <p className="font-medium text-gray-900 text-sm truncate">
                                                 {req.requester?.username}
                                             </p>
-                                            <p className="text-xs text-gray-400">Muốn kết bạn</p>
+                                            <p className="text-xs text-gray-400">{t('friendPanel.wantsToConnect')}</p>
                                         </div>
                                         <div className="flex gap-1.5">
                                             <button
                                                 onClick={() => handleAccept(req._id)}
                                                 disabled={actionLoading === req._id}
                                                 className="p-1.5 bg-green-500 hover:bg-green-600 text-white rounded-full transition disabled:opacity-50"
-                                                title="Chấp nhận"
+                                                title={t('friendPanel.accept')}
                                             >
                                                 {actionLoading === req._id ? (
                                                     <Loader2 size={14} className="animate-spin" />
@@ -380,7 +413,7 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
                                                 onClick={() => handleReject(req._id)}
                                                 disabled={actionLoading === req._id}
                                                 className="p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full transition disabled:opacity-50"
-                                                title="Từ chối"
+                                                title={t('friendPanel.reject')}
                                             >
                                                 <X size={14} />
                                             </button>
@@ -388,7 +421,7 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
                                                 onClick={() => handleCancelRequest(req._id)}
                                                 disabled={actionLoading === req._id}
                                                 className="p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full transition disabled:opacity-50"
-                                                title="Xóa lời mời"
+                                                title={t('friendPanel.deleteRequest')}
                                             >
                                                 <X size={14} />
                                             </button>
@@ -402,7 +435,7 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
                         {sentRequests.length > 0 && (
                             <div>
                                 <p className="px-4 pt-3 pb-1 text-xs font-semibold text-gray-400 uppercase">
-                                    Lời mời đã gửi
+                                    {t('friendPanel.sentRequests')}
                                 </p>
                                 {sentRequests.map((req) => (
                                     <div
@@ -418,14 +451,14 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
                                             </p>
                                             <div className="flex items-center gap-1 text-xs text-yellow-600">
                                                 <Clock size={12} />
-                                                <span>Đang chờ</span>
+                                                <span>{t('friendPanel.pending')}</span>
                                             </div>
                                         </div>
                                         <button
                                             onClick={() => handleCancelRequest(req._id)}
                                             disabled={actionLoading === req._id}
                                             className="p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full transition disabled:opacity-50"
-                                            title="Hủy lời mời"
+                                            title={t('friendPanel.cancelRequest')}
                                         >
                                             {actionLoading === req._id ? (
                                                 <Loader2 size={14} className="animate-spin" />
@@ -441,7 +474,7 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
                         {requests.length === 0 && sentRequests.length === 0 && (
                             <div className="p-8 text-center text-gray-400">
                                 <Bell size={40} className="mx-auto mb-2 opacity-50" />
-                                <p className="text-sm">Không có lời mời kết bạn</p>
+                                <p className="text-sm">{t('friendPanel.noRequests')}</p>
                             </div>
                         )}
                     </>
@@ -459,7 +492,7 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
                                 type="text"
                                 value={searchQuery}
                                 onChange={(e) => handleSearch(e.target.value)}
-                                placeholder="Tìm theo tên hoặc email..."
+                                placeholder={t('friendPanel.searchPlaceholder')}
                                 className="w-full pl-9 pr-4 py-2 bg-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-ring)]"
                             />
                         </div>
@@ -470,10 +503,15 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
                             </div>
                         )}
 
-                        {searchResults.map((u) => (
-                            <div
+                        <AnimatePresence>
+                            {searchResults.map((u) => (
+                            <motion.div
                                 key={u._id}
-                                className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-50"
+                                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg ${isGlassTheme ? 'hover:bg-cyan-400/10 border border-transparent hover:border-cyan-300/25' : 'hover:bg-gray-50'}`}
+                                initial={{ opacity: 0, y: 8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -6 }}
+                                transition={{ duration: 0.18, ease: 'easeOut' }}
                             >
                                 <div className="w-10 h-10 rounded-full bg-[var(--color-primary)] flex items-center justify-center text-white font-medium shrink-0">
                                     {u.username.charAt(0).toUpperCase()}
@@ -489,7 +527,7 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
                                 {u.friendStatus === 'accepted' ? (
                                     <span className="inline-flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">
                                         <UserCheck size={12} />
-                                        Bạn bè
+                                        {t('friendPanel.alreadyFriend')}
                                     </span>
                                 ) : u.friendStatus === 'pending' ? (
                                     u.isRequester ? (
@@ -497,19 +535,19 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
                                             onClick={() => handleCancelRequest(u.friendshipId)}
                                             disabled={actionLoading === u.friendshipId}
                                             className="inline-flex items-center gap-1 text-xs text-red-600 bg-red-50 hover:bg-red-100 px-2.5 py-1.5 rounded-full transition disabled:opacity-50"
-                                            title="Hủy lời mời"
+                                            title={t('friendPanel.cancelRequest')}
                                         >
                                             {actionLoading === u.friendshipId ? (
                                                 <Loader2 size={12} className="animate-spin" />
                                             ) : (
                                                 <X size={12} />
                                             )}
-                                            Hủy
+                                            {t('common.cancel')}
                                         </button>
                                     ) : (
                                         <span className="inline-flex items-center gap-1 text-xs text-yellow-600 bg-yellow-50 px-2 py-1 rounded-full">
                                             <Clock size={12} />
-                                            Chờ bạn
+                                            {t('friendPanel.waitingForYou')}
                                         </span>
                                     )
                                 ) : (
@@ -523,21 +561,22 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
                                         ) : (
                                             <UserPlus size={12} />
                                         )}
-                                        Kết bạn
+                                        {t('friendPanel.addFriend')}
                                     </button>
                                 )}
-                            </div>
+                            </motion.div>
                         ))}
+                        </AnimatePresence>
 
                         {!searching && searchQuery.length >= 2 && searchResults.length === 0 && (
                             <p className="text-center text-sm text-gray-400 py-4">
-                                Không tìm thấy người dùng
+                                {t('friendPanel.noUsersFound')}
                             </p>
                         )}
 
                         {searchQuery.length < 2 && (
                             <p className="text-center text-sm text-gray-400 py-4">
-                                Nhập ít nhất 2 ký tự để tìm kiếm
+                                {t('friendPanel.atLeastTwoChars')}
                             </p>
                         )}
                     </div>

@@ -62,7 +62,13 @@ export function ThemeProvider({ children }) {
     }, []);
 
     return (
-        <ThemeContext.Provider value={{ themeId, changeTheme, themes: THEMES }}>
+        <ThemeContext.Provider
+            value={{
+                themeId,
+                changeTheme,
+                themes: THEMES,
+            }}
+        >
             {children}
         </ThemeContext.Provider>
     );

@@ -6,6 +6,7 @@ import { useSocket } from '../../hooks/useSocket';
 import { useCall } from '../../hooks/useCall';
 import { useChat } from '../../hooks/useChat';
 import { useAI } from '../../hooks/useAI';
+import { AnimatePresence, motion } from 'framer-motion';
 import MessageBubble from './MessageBubble';
 import MessageInput from './MessageInput';
 import AIToggle from './AIToggle';
@@ -485,7 +486,7 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
             <div
                 ref={containerRef}
                 onScroll={handleScroll}
-                className="flex-1 overflow-y-auto px-4 py-3 scrollbar-thin bg-gray-50"
+                className="flex-1 overflow-y-auto px-4 py-3 scrollbar-thin bg-gray-50 conversation-bg"
             >
                 {/* Empty conversation — Profile Header */}
                 {!loading && messages.length === 0 ? (
@@ -542,27 +543,38 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                         )}
 
                         {/* Messages list — merge server messages with local-only system messages */}
-                        {[...messages, ...localMessages]
-                            .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
-                            .map((msg) => (
-                            <div key={msg._id} data-message-id={msg._id} className="transition-colors duration-500">   
-                            <MessageBubble
-                                message={msg}
-                                nicknames={room?.nicknames}
-                                isOwn={
-                                    (msg.sender?._id || msg.sender) === user?._id &&
-                                    msg.type !== 'system' &&
-                                    !msg.aiMetadata?.isAIResponse
-                                }
-                                localTranslation={localTranslations[msg._id]}
-                                onDelete={deleteMessage}
-                                onReact={reactToMessage}
-                                onForward={(msg) => setForwardMsg(msg)}
-                                onPinMessage={handlePinMessage}
-                                onVotePoll={handleVotePoll}
-                            />
-                            </div>
-                        ))}
+                        <AnimatePresence initial={false}>
+                            {[...messages, ...localMessages]
+                                .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+                                .map((msg) => (
+                                    <motion.div
+                                        key={msg._id}
+                                        data-message-id={msg._id}
+                                        className="transition-colors duration-500"
+                                        layout
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -8 }}
+                                        transition={{ duration: 0.18, ease: 'easeOut' }}
+                                    >
+                                        <MessageBubble
+                                            message={msg}
+                                            nicknames={room?.nicknames}
+                                            isOwn={
+                                                (msg.sender?._id || msg.sender) === user?._id &&
+                                                msg.type !== 'system' &&
+                                                !msg.aiMetadata?.isAIResponse
+                                            }
+                                            localTranslation={localTranslations[msg._id]}
+                                            onDelete={deleteMessage}
+                                            onReact={reactToMessage}
+                                            onForward={(msg) => setForwardMsg(msg)}
+                                            onPinMessage={handlePinMessage}
+                                            onVotePoll={handleVotePoll}
+                                        />
+                                    </motion.div>
+                                ))}
+                        </AnimatePresence>
                     </>
                 )}
 

@@ -7,6 +7,8 @@
  */
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
+import { useLocation } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useAuth } from '../hooks/useAuth';
 import { Loader2 } from 'lucide-react';
 
@@ -47,99 +49,112 @@ function PublicRoute({ children }) {
 
 // ── Route table ────────────────────────────────────────────────
 export default function AppRoutes() {
+    const location = useLocation();
+
     return (
         <Suspense fallback={<LoadingScreen />}>
-            <Routes>
-                <Route
-                    path="/login"
-                    element={
-                        <PublicRoute>
-                            <LoginPage />
-                        </PublicRoute>
-                    }
-                />
-                <Route
-                    path="/register"
-                    element={
-                        <PublicRoute>
-                            <RegisterPage />
-                        </PublicRoute>
-                    }
-                />
-                <Route
-                    path="/forgot-password"
-                    element={
-                        <PublicRoute>
-                            <ForgotPasswordPage />
-                        </PublicRoute>
-                    }
-                />
-                <Route
-                    path="/verify-otp"
-                    element={
-                        <PublicRoute>
-                            <VerifyOTPPage />
-                        </PublicRoute>
-                    }
-                />
-                <Route
-                    path="/reset-password"
-                    element={
-                        <PublicRoute>
-                            <ResetPasswordPage />
-                        </PublicRoute>
-                    }
-                />
-                <Route
-                    path="/settings"
-                    element={
-                        <PrivateRoute>
-                            <SettingsPage />
-                        </PrivateRoute>
-                    }
-                />
-                <Route
-                    path="/profile/:id"
-                    element={
-                        <PrivateRoute>
-                            <ProfilePage />
-                        </PrivateRoute>
-                    }
-                />
-                <Route
-                    path="/group/:id"
-                    element={
-                        <PrivateRoute>
-                            <GroupProfilePage />
-                        </PrivateRoute>
-                    }
-                />
-                <Route
-                    path="/admin"
-                    element={
-                        <PrivateRoute>
-                            <AdminPage />
-                        </PrivateRoute>
-                    }
-                />
-                <Route
-                    path="/office"
-                    element={
-                        <PrivateRoute>
-                            <OfficePage />
-                        </PrivateRoute>
-                    }
-                />
-                <Route
-                    path="/"
-                    element={
-                        <PrivateRoute>
-                            <ChatPage />
-                        </PrivateRoute>
-                    }
-                />
-                <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+            <AnimatePresence mode="wait" initial={false}>
+                <motion.div
+                    key={location.pathname}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.2, ease: 'easeOut' }}
+                    className="h-full"
+                >
+                    <Routes location={location}>
+                        <Route
+                            path="/login"
+                            element={
+                                <PublicRoute>
+                                    <LoginPage />
+                                </PublicRoute>
+                            }
+                        />
+                        <Route
+                            path="/register"
+                            element={
+                                <PublicRoute>
+                                    <RegisterPage />
+                                </PublicRoute>
+                            }
+                        />
+                        <Route
+                            path="/forgot-password"
+                            element={
+                                <PublicRoute>
+                                    <ForgotPasswordPage />
+                                </PublicRoute>
+                            }
+                        />
+                        <Route
+                            path="/verify-otp"
+                            element={
+                                <PublicRoute>
+                                    <VerifyOTPPage />
+                                </PublicRoute>
+                            }
+                        />
+                        <Route
+                            path="/reset-password"
+                            element={
+                                <PublicRoute>
+                                    <ResetPasswordPage />
+                                </PublicRoute>
+                            }
+                        />
+                        <Route
+                            path="/settings"
+                            element={
+                                <PrivateRoute>
+                                    <SettingsPage />
+                                </PrivateRoute>
+                            }
+                        />
+                        <Route
+                            path="/profile/:id"
+                            element={
+                                <PrivateRoute>
+                                    <ProfilePage />
+                                </PrivateRoute>
+                            }
+                        />
+                        <Route
+                            path="/group/:id"
+                            element={
+                                <PrivateRoute>
+                                    <GroupProfilePage />
+                                </PrivateRoute>
+                            }
+                        />
+                        <Route
+                            path="/admin"
+                            element={
+                                <PrivateRoute>
+                                    <AdminPage />
+                                </PrivateRoute>
+                            }
+                        />
+                        <Route
+                            path="/office"
+                            element={
+                                <PrivateRoute>
+                                    <OfficePage />
+                                </PrivateRoute>
+                            }
+                        />
+                        <Route
+                            path="/"
+                            element={
+                                <PrivateRoute>
+                                    <ChatPage />
+                                </PrivateRoute>
+                            }
+                        />
+                        <Route path="*" element={<Navigate to="/" replace />} />
+                    </Routes>
+                </motion.div>
+            </AnimatePresence>
         </Suspense>
     );
 }

@@ -3,10 +3,12 @@ import { format } from 'date-fns';
 import { Bot, Trash2, Globe, ChevronDown, ChevronUp, FileText, FileArchive, FileSpreadsheet, FileImage, FileVideo, FileAudio, File, Download, SmilePlus, Forward, Pin } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import ImageModal from './ImageModal';
 import LocationMessage from './LocationMessage';
 import VoiceMessage from './VoiceMessage';
 import { resolveMediaUrl } from '../../services/api';
+import { useTheme } from '../../hooks/useTheme';
 
 const avatarColors = [
     'bg-red-500', 'bg-[var(--color-primary)]', 'bg-green-500', 'bg-yellow-500',
@@ -21,13 +23,16 @@ function getAvatarColor(id) {
 
 export default function MessageBubble({ message, isOwn, onDelete, onReact, nicknames, localTranslation, onForward, onPinMessage, onVotePoll }) {
     const { user } = useAuth();
+    const { themeId } = useTheme();
     const navigate = useNavigate();
     const [showTranslation, setShowTranslation] = useState(false);
     const [showActions, setShowActions] = useState(false);
     const [lightbox, setLightbox] = useState(null);
     const [imgError, setImgError] = useState(false);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    const [shouldShake, setShouldShake] = useState(false);
     const emojiPickerRef = useRef(null);
+    const bubbleRef = useRef(null);
 
     const REACTION_EMOJIS = ['👍', '❤️', '😂', '😯', '😢', '😡'];
 
@@ -43,6 +48,39 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
         document.addEventListener('mousedown', handleClick);
         return () => document.removeEventListener('mousedown', handleClick);
     }, [showEmojiPicker]);
+
+    // Subtle nudge for newly arrived incoming messages.
+    useEffect(() => {
+        if (isOwn || message.type === 'system') return;
+        setShouldShake(true);
+        const timeout = setTimeout(() => setShouldShake(false), 480);
+        return () => clearTimeout(timeout);
+    }, [message._id, message.createdAt, message.type, isOwn]);
+
+    const isPixelTheme = themeId === 'pixel-art';
+    const isNeonTheme = themeId === 'neon-night';
+
+    const triggerReactionEffect = async (emoji) => {
+        if (!['❤️', '👍', '😂', '😯'].includes(emoji)) return;
+        try {
+            const { default: confetti } = await import('canvas-confetti');
+            const rect = bubbleRef.current?.getBoundingClientRect();
+            const x = rect ? (rect.left + rect.width / 2) / window.innerWidth : 0.5;
+            const y = rect ? (rect.top + rect.height / 2) / window.innerHeight : 0.5;
+
+            confetti({
+                particleCount: emoji === '❤️' ? 30 : 18,
+                spread: emoji === '❤️' ? 78 : 54,
+                startVelocity: 24,
+                gravity: 1,
+                scalar: emoji === '❤️' ? 0.9 : 0.72,
+                origin: { x, y },
+                colors: ['#22d3ee', '#f59e0b', '#fb7185', '#a3e635', '#f8fafc'],
+            });
+        } catch {
+            // Ignore if confetti cannot be loaded in constrained environments.
+        }
+    };
 
     if (message.deleted) {
         return (
@@ -239,10 +277,13 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                     onClose={() => setLightbox(null)}
                 />
             )}
-            <div
+            <motion.div
                 className={`flex items-end gap-2 ${isOwn ? 'justify-end' : 'justify-start'} mb-2 group`}
                 onMouseEnter={() => setShowActions(true)}
                 onMouseLeave={() => { if (!showEmojiPicker) setShowActions(false); }}
+                initial={{ opacity: 0, y: 14, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ duration: 0.22, ease: 'easeOut' }}
             >
                 {/* Avatar for other's messages */}
                 {!isOwn && (
@@ -275,7 +316,8 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                 <div className={`max-w-[75%]`}>
                     <div className="relative">
                         {/* Main bubble */}
-                        <div
+                        <motion.div
+                            ref={bubbleRef}
                             className={`rounded-2xl ${message.type === 'location'
                                 ? 'overflow-hidden'
                                 : 'px-4 py-2.5'
@@ -284,7 +326,9 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                     : isOwn
                                         ? 'bg-[var(--color-primary)] text-white'
                                         : 'bg-gray-100 text-gray-900'
-                                }`}
+                                } ${isPixelTheme ? 'pixel-bubble font-pixel' : ''} ${isNeonTheme ? 'neon-bubble' : ''}`}
+                            animate={shouldShake ? { x: [0, -2, 2, -1, 1, 0] } : { x: 0 }}
+                            transition={{ duration: 0.36, ease: 'easeInOut' }}
                         >
                             {/* Forward indicator */}
                             {message.forwardedFrom && (
@@ -329,7 +373,7 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                             >
                                 {format(new Date(message.createdAt), 'HH:mm')}
                             </p>
-                        </div>
+                        </motion.div>
 
                         {/* Show original text when translation is being displayed */}
                         {hasTranslation && (
@@ -414,10 +458,15 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                 </button>
 
                                 {/* Emoji picker popover */}
-                                {showEmojiPicker && (
-                                    <div
+                                <AnimatePresence>
+                                    {showEmojiPicker && (
+                                        <motion.div
                                         className={`absolute ${isOwn ? 'right-0' : 'left-0'} bottom-full mb-1 flex items-center gap-1 bg-white rounded-full shadow-lg border border-gray-200 px-2 py-1.5 z-[9999]`}
                                         onClick={(e) => e.stopPropagation()}
+                                        initial={{ opacity: 0, y: 8, scale: 0.9 }}
+                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                        exit={{ opacity: 0, y: 8, scale: 0.9 }}
+                                        transition={{ duration: 0.16, ease: 'easeOut' }}
                                     >
                                         {REACTION_EMOJIS.map((emoji) => (
                                             <button
@@ -425,6 +474,7 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     onReact?.(message._id, emoji);
+                                                    triggerReactionEffect(emoji);
                                                     setShowEmojiPicker(false);
                                                     setShowActions(false);
                                                 }}
@@ -433,8 +483,9 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                                 {emoji}
                                             </button>
                                         ))}
-                                    </div>
-                                )}
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
                             </div>
                         )}
                     </div>
@@ -470,7 +521,7 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                         );
                     })()}
                 </div>
-            </div>
+            </motion.div>
         </>
     );
 }
