@@ -74,9 +74,9 @@ export default function ChatPage() {
                             user?.username?.charAt(0).toUpperCase()
                         )}
                     </div>
-                    <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate" style={{ color: 'var(--text-primary)' }}>{user?.username}</p>
-                        <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>{user?.preferredLanguageLabel || user?.preferredLanguage}</p>
+                    <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                        <p className="font-medium text-sm truncate leading-tight" style={{ color: 'var(--text-primary)' }}>{user?.username}</p>
+                        <p className="text-xs leading-tight" style={{ color: 'var(--text-secondary)' }}>{user?.preferredLanguageLabel || user?.preferredLanguage}</p>
                     </div>
                     {user?.role && user.role !== 'user' && (
                         <button
