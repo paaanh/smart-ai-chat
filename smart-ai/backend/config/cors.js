@@ -1,7 +1,10 @@
 const DEFAULT_ORIGINS = [
+    'http://localhost:3000',
     'http://localhost:5173',
     'http://localhost:80',
     'http://localhost',
+    'https://smart-ai-chat.me',
+    'https://www.smart-ai-chat.me',
     'https://p-chater-q.vercel.app',
 ].join(',');
 const DEFAULT_ORIGIN_PATTERNS = 'https://*.vercel.app';
