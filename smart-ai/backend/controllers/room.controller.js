@@ -531,6 +531,10 @@ exports.deleteChat = async (req, res, next) => {
             { $addToSet: { deletedFor: userId } },
         );
 
+        await Room.findByIdAndUpdate(id, {
+            $addToSet: { hiddenFor: userId },
+        });
+
         res.json({ message: 'Đã xóa lịch sử trò chuyện' });
     } catch (error) {
         next(error);

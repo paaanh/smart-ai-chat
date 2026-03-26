@@ -72,6 +72,12 @@ const roomSchema = new mongoose.Schema({
         ref: 'User',
     }],
 
+    // Danh sách user đã ẩn cuộc trò chuyện này khỏi sidebar
+    hiddenFor: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+    }],
+
     lastMessage: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Message',
@@ -109,7 +115,7 @@ roomSchema.statics.findDirectRoom = async function (userId1, userId2) {
 
 // ─── Static: Lấy tất cả room của 1 user ─────────────────────────────
 roomSchema.statics.getUserRooms = async function (userId) {
-    return this.find({ 'members.user': userId })
+    return this.find({ 'members.user': userId, hiddenFor: { $ne: userId } })
         .populate('members.user', 'username avatar googlePicture status preferredLanguage preferredLanguageLabel')
         .populate('lastMessage')
         .sort({ updatedAt: -1 });
