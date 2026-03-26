@@ -23,11 +23,21 @@ const patternToRegex = (pattern) => new RegExp(
     'i'
 );
 
-const allowedOrigins = parseCsv(process.env.CORS_ORIGINS || DEFAULT_ORIGINS)
-    .map(normalizeOrigin);
+const allowedOrigins = Array.from(
+    new Set([
+        ...parseCsv(DEFAULT_ORIGINS),
+        ...parseCsv(process.env.CORS_ORIGINS),
+    ].map(normalizeOrigin))
+);
 
 const allowedOriginPatterns = parseCsv(process.env.CORS_ORIGIN_PATTERNS || DEFAULT_ORIGIN_PATTERNS)
     .map(patternToRegex);
+
+console.log('🌐 CORS allowed origins:', allowedOrigins);
+console.log(
+    '🌐 CORS allowed origin patterns:',
+    allowedOriginPatterns.map((pattern) => pattern.toString())
+);
 
 const isOriginAllowed = (origin) => {
     const normalizedOrigin = normalizeOrigin(origin);
@@ -48,6 +58,11 @@ const corsOptions = {
             callback(null, true);
         } else {
             console.warn(`⚠️ CORS blocked origin: ${origin}`);
+            console.warn('⚠️ Allowed origins snapshot:', allowedOrigins);
+            console.warn(
+                '⚠️ Allowed patterns snapshot:',
+                allowedOriginPatterns.map((pattern) => pattern.toString())
+            );
             callback(new Error('Not allowed by CORS'));
         }
     },
