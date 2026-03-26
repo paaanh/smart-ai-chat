@@ -19,7 +19,7 @@ const sendMail = async ({ to, subject, html }) => {
         console.log(`📧 [Mailer] Sending email via Resend (to: ${to})`);
 
         const data = await resend.emails.send({
-            from: process.env.MAIL_FROM || 'onboarding@resend.dev',
+            from: process.env.MAIL_FROM || 'Smart AI Chat <no-reply@smart-ai-chat.me>',
             to,
             subject,
             html,
