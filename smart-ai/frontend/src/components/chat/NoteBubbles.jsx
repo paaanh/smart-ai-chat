@@ -81,16 +81,27 @@ export default function NoteBubbles({ onSelectRoom }) {
                     const author = note.author;
                     const isOwn = author?._id === user?._id;
                     return (
-                        <div key={note._id} className="flex flex-col items-center gap-1 shrink-0 cursor-pointer"
+                        <div key={note._id} className="group flex flex-col items-center gap-1 shrink-0 cursor-pointer"
                             onClick={() => setSelectedNote(note)}>
-                            <div className={`w-14 h-14 rounded-full border-2 ${isOwn ? 'border-blue-400' : 'border-purple-400'} flex items-center justify-center overflow-hidden relative`}>
-                                {author?.avatar ? (
-                                    <img src={resolveMediaUrl(author.avatar)} alt="" className="w-full h-full object-cover" />
-                                ) : (
-                                    <div className="w-full h-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white text-sm font-bold">
-                                        {author?.username?.charAt(0).toUpperCase() || '?'}
+                            <div className="relative flex flex-col items-center">
+                                {note?.content && (
+                                    <div className="absolute -top-9 left-1/2 -translate-x-1/2 z-20 transition-opacity duration-200 opacity-100 group-hover:opacity-100">
+                                        <div className="max-w-[130px] bg-gray-800 text-white text-[11px] px-3 py-1 rounded-2xl shadow-md relative whitespace-nowrap overflow-hidden text-ellipsis">
+                                            {note.content}
+                                            <div className="absolute left-1/2 -bottom-1 -translate-x-1/2 w-2 h-2 bg-gray-800 rotate-45" />
+                                        </div>
                                     </div>
                                 )}
+
+                                <div className={`w-14 h-14 rounded-full border-2 ${isOwn ? 'border-blue-400' : 'border-purple-400'} flex items-center justify-center overflow-hidden relative`}>
+                                    {author?.avatar ? (
+                                        <img src={resolveMediaUrl(author.avatar)} alt="" className="w-full h-full object-cover" />
+                                    ) : (
+                                        <div className="w-full h-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white text-sm font-bold">
+                                            {author?.username?.charAt(0).toUpperCase() || '?'}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                             <span className="text-[10px] text-gray-600 max-w-[60px] truncate text-center">
                                 {isOwn ? 'Bạn' : author?.username}
