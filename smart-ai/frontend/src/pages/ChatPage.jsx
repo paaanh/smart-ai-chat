@@ -8,6 +8,7 @@ import FriendPanel from '../components/friend/FriendPanel';
 import MiniAIChatBox from '../components/chat/MiniAIChatBox';
 import NoteBubbles from '../components/chat/NoteBubbles';
 import ThemedSurface from '../components/ui/ThemedSurface';
+import SkeletonBlock from '../components/ui/SkeletonBlock';
 // CallModal + IncomingCallModal are now rendered globally in App.jsx
 import { LogOut, Settings, MessageCircle, Users, ShieldCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -32,7 +33,7 @@ export default function ChatPage() {
         setSidebarTab('chats');
         setInfoRoom(null);
         // On mobile, hide sidebar when room selected
-        if (window.innerWidth < 1024) {
+        if (window.innerWidth < 768) {
             setShowSidebar(false);
         }
     };
@@ -48,11 +49,11 @@ export default function ChatPage() {
     };
 
     return (
-        <div className="h-screen flex bg-gray-100 theme-page-enter">
+        <div className="h-dvh min-h-0 flex bg-gray-100 theme-page-enter overflow-hidden">
             {/* Sidebar */}
             <ThemedSurface
                 className={`${showSidebar ? 'flex' : 'hidden'
-                    } lg:flex flex-col w-full lg:w-80 xl:w-96 shrink-0`}
+                    } md:flex flex-col w-full md:w-80 xl:w-96 shrink-0 min-h-0`}
                 elevated
             >
                 {/* User bar */}
@@ -63,21 +64,33 @@ export default function ChatPage() {
                         borderColor: 'var(--border-color)',
                     }}
                 >
-                    <div
-                        className="w-9 h-9 rounded-full bg-[var(--color-primary)] flex items-center justify-center text-white font-semibold text-sm cursor-pointer hover:ring-2 hover:ring-[var(--color-primary-ring)] transition overflow-hidden shrink-0"
-                        onClick={() => navigate(`/profile/${user?._id}`)}
-                        title={t('common.profile')}
-                    >
-                        {user?.avatar ? (
-                            <img src={user.avatar} alt={user.username} className="w-full h-full object-cover" />
-                        ) : (
-                            user?.username?.charAt(0).toUpperCase()
-                        )}
-                    </div>
-                    <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                        <p className="font-medium text-sm truncate leading-tight" style={{ color: 'var(--text-primary)' }}>{user?.username}</p>
-                        <p className="text-xs leading-tight" style={{ color: 'var(--text-secondary)' }}>{user?.preferredLanguageLabel || user?.preferredLanguage}</p>
-                    </div>
+                    {user ? (
+                        <>
+                            <div
+                                className="w-9 h-9 rounded-full bg-[var(--color-primary)] flex items-center justify-center text-white font-semibold text-sm cursor-pointer hover:ring-2 hover:ring-[var(--color-primary-ring)] transition overflow-hidden shrink-0"
+                                onClick={() => navigate(`/profile/${user?._id}`)}
+                                title={t('common.profile')}
+                            >
+                                {user?.avatar ? (
+                                    <img src={user.avatar} alt={user.username} className="w-full h-full object-cover" />
+                                ) : (
+                                    user?.username?.charAt(0).toUpperCase()
+                                )}
+                            </div>
+                            <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                                <p className="font-medium text-sm truncate leading-tight" style={{ color: 'var(--text-primary)' }}>{user?.username}</p>
+                                <p className="text-xs leading-tight" style={{ color: 'var(--text-secondary)' }}>{user?.preferredLanguageLabel || user?.preferredLanguage}</p>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <SkeletonBlock className="w-9 h-9 rounded-full shrink-0" />
+                            <div className="flex-1 min-w-0 space-y-1">
+                                <SkeletonBlock className="h-3.5 w-28 rounded-md" />
+                                <SkeletonBlock className="h-3 w-16 rounded-md" />
+                            </div>
+                        </>
+                    )}
                     {user?.role && user.role !== 'user' && (
                         <button
                             onClick={() => navigate('/admin')}
@@ -157,7 +170,7 @@ export default function ChatPage() {
                 )}
 
                 {/* Room list or Friend panel — both always mounted for socket listeners */}
-                <div className="flex-1 overflow-hidden">
+                <div className="flex-1 min-h-0 overflow-hidden">
                     <div className={sidebarTab === 'chats' ? 'h-full flex flex-col' : 'hidden'}>
                         <NoteBubbles onSelectRoom={handleSelectRoom} />
                         <div className="flex-1 overflow-hidden">
@@ -173,7 +186,7 @@ export default function ChatPage() {
             {/* Chat area */}
             <div
                 className={`${!showSidebar ? 'flex' : 'hidden'
-                    } lg:flex flex-1 min-w-0`}
+                    } md:flex flex-1 min-w-0 min-h-0`}
             >
                 <ChatWindow roomId={activeRoomId} onBack={handleBack} onToggleInfo={handleToggleInfo} aiBotEnabled={aiBotEnabled} onAIToggle={setAiBotEnabled} autoTranslate={autoTranslate} />
 

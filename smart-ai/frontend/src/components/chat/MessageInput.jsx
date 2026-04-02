@@ -2,14 +2,17 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Send, Paperclip, Smile, X, Loader2, MapPin, Mic, Square, ThumbsUp, Lock } from 'lucide-react';
 import { uploadAPI } from '../../services/api';
 import { useLockCountdown } from '../../hooks/useLockCountdown';
+import { emitToast } from '../../utils/toast';
 
-export default function MessageInput({ onSend, onSendLocation, onTyping, disabled, lockUntil, onLockExpire }) {
+export default function MessageInput({ onSend, onSendLocation, onTyping, disabled, lockUntil, onLockExpire, replyContext, onCancelReply }) {
     const { isLocked, timeDisplay } = useLockCountdown(lockUntil);
     const [text, setText] = useState('');
     const [file, setFile] = useState(null);
     const [uploading, setUploading] = useState(false);
+    const [isDraggingFile, setIsDraggingFile] = useState(false);
     const fileInputRef = useRef(null);
     const inputRef = useRef(null);
+    const dragDepthRef = useRef(0);
 
     // Voice recording state
     const [recording, setRecording] = useState(false);
@@ -62,8 +65,10 @@ export default function MessageInput({ onSend, onSendLocation, onTyping, disable
                         ? 'video'
                         : 'file';
                 onSend(trimmed || fileData.name, type, fileData);
+                emitToast('Upload file thành công.', { type: 'success' });
             } catch (err) {
                 console.error('Upload error:', err);
+                emitToast('Upload file thất bại. Vui lòng thử lại.', { type: 'error' });
             } finally {
                 setUploading(false);
                 setFile(null);
@@ -88,15 +93,54 @@ export default function MessageInput({ onSend, onSendLocation, onTyping, disable
         onTyping?.();
     };
 
+    const applySelectedFile = useCallback((selectedFile) => {
+        if (!selectedFile) return;
+        if (selectedFile.size > 50 * 1024 * 1024) {
+            emitToast('File tối đa 50MB.', { type: 'error' });
+            return;
+        }
+        setFile(selectedFile);
+    }, []);
+
     const handleFileSelect = (e) => {
         const f = e.target.files?.[0];
-        if (f) {
-            if (f.size > 50 * 1024 * 1024) {
-                alert('File tối đa 50MB');
-                return;
-            }
-            setFile(f);
+        applySelectedFile(f);
+    };
+
+    const hasFilePayload = (event) => Array.from(event.dataTransfer?.types || []).includes('Files');
+
+    const handleDragEnter = (e) => {
+        if (!hasFilePayload(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        dragDepthRef.current += 1;
+        setIsDraggingFile(true);
+    };
+
+    const handleDragOver = (e) => {
+        if (!hasFilePayload(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+    };
+
+    const handleDragLeave = (e) => {
+        if (!hasFilePayload(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+        if (dragDepthRef.current === 0) {
+            setIsDraggingFile(false);
         }
+    };
+
+    const handleDrop = (e) => {
+        if (!hasFilePayload(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        dragDepthRef.current = 0;
+        setIsDraggingFile(false);
+        const droppedFile = e.dataTransfer?.files?.[0];
+        applySelectedFile(droppedFile);
     };
 
     // ── Voice recording helpers ────────────────────────────────────
@@ -166,8 +210,10 @@ export default function MessageInput({ onSend, onSendLocation, onTyping, disable
                 formData.append('file', blob, `voice_${Date.now()}.webm`);
                 const { data } = await uploadAPI.uploadFile(formData);
                 onSend(data.file.name, 'file', data.file);
+                emitToast('Đã gửi ghi âm thành công.', { type: 'success' });
             } catch (err) {
                 console.error('Voice upload error:', err);
+                emitToast('Gửi ghi âm thất bại. Vui lòng thử lại.', { type: 'error' });
             } finally {
                 setUploading(false);
             }
@@ -189,6 +235,12 @@ export default function MessageInput({ onSend, onSendLocation, onTyping, disable
         }
     }, [isLocked]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    useEffect(() => {
+        if (replyContext) {
+            inputRef.current?.focus();
+        }
+    }, [replyContext]);
+
     const formatRecordTime = (sec) => {
         const m = Math.floor(sec / 60);
         const s = sec % 60;
@@ -209,6 +261,28 @@ export default function MessageInput({ onSend, onSendLocation, onTyping, disable
             )}
             {!isLocked && (
             <>
+            {/* Quick reply banner */}
+            {replyContext && (
+                <div className="flex items-start gap-2 mb-2 bg-[var(--color-primary-light)] border border-[var(--color-primary-medium)] px-3 py-2 rounded-lg">
+                    <div className="flex-1 min-w-0">
+                        <p className="text-xs text-[var(--color-primary)] font-semibold">
+                            Trả lời {replyContext.senderName}
+                        </p>
+                        <p className="text-xs text-[var(--color-primary-dark)] truncate">
+                            {replyContext.preview}
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onCancelReply}
+                        className="text-[var(--color-primary)] hover:text-[var(--color-primary-hover)]"
+                        title="Hủy trả lời"
+                    >
+                        <X size={15} />
+                    </button>
+                </div>
+            )}
+
             {/* File preview */}
             {file && (
                 <div className="flex items-center gap-2 mb-2 bg-gray-50 px-3 py-2 rounded-lg">
@@ -252,7 +326,19 @@ export default function MessageInput({ onSend, onSendLocation, onTyping, disable
                     </button>
                 </div>
             ) : (
-                <form onSubmit={handleSubmit} className="flex items-end gap-2">
+                <form
+                    onSubmit={handleSubmit}
+                    className={`relative flex items-end gap-2 rounded-2xl transition ${isDraggingFile ? 'ring-2 ring-[var(--color-primary-ring)] bg-[var(--color-primary-light)]/40 p-1.5' : ''}`}
+                    onDragEnter={handleDragEnter}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                >
+                    {isDraggingFile && (
+                        <div className="absolute inset-0 z-20 flex items-center justify-center rounded-2xl border-2 border-dashed border-[var(--color-primary)] bg-white/90 text-sm font-medium text-[var(--color-primary)] pointer-events-none">
+                            Thả file vào đây để gửi
+                        </div>
+                    )}
                     {/* File button */}
                     <button
                         type="button"
@@ -318,7 +404,7 @@ export default function MessageInput({ onSend, onSendLocation, onTyping, disable
                             onChange={handleChange}
                             onKeyDown={handleKeyDown}
                             onPaste={handlePaste}
-                            placeholder="Nhập tin nhắn..."
+                            placeholder={replyContext ? `Trả lời ${replyContext.senderName}...` : 'Nhập tin nhắn...'}
                             disabled={disabled}
                             rows={1}
                             className="w-full resize-none px-4 py-2.5 bg-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-ring)] transition max-h-32 disabled:opacity-50"

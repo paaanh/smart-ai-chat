@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { roomAPI, resolveMediaUrl } from '../../services/api';
 import { useAuth } from '../../hooks/useAuth';
 import { useSocket } from '../../hooks/useSocket';
+import { emitToast } from '../../utils/toast';
 import { formatDistanceToNow } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { Plus, Search, MessageCircle, Users, MoreVertical, Trash2 } from 'lucide-react';
 import CreateRoomModal from './CreateRoomModal';
+import SkeletonBlock from '../ui/SkeletonBlock';
 
 export default function RoomList({ activeRoomId, onSelectRoom }) {
     const { user } = useAuth();
@@ -21,6 +23,12 @@ export default function RoomList({ activeRoomId, onSelectRoom }) {
     const [deleteLoading, setDeleteLoading] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [deleteConfirmRoomId, setDeleteConfirmRoomId] = useState(null);
+    const searchInputRef = useRef(null);
+    const roomsRef = useRef([]);
+
+    useEffect(() => {
+        roomsRef.current = rooms;
+    }, [rooms]);
 
     useEffect(() => {
         loadRooms();
@@ -95,6 +103,22 @@ export default function RoomList({ activeRoomId, onSelectRoom }) {
                     ...prev,
                     [msgRoomId]: (prev[msgRoomId] || 0) + 1,
                 }));
+
+                const targetRoom = roomsRef.current.find((room) => room._id === msgRoomId);
+                let roomName = 'cuộc trò chuyện';
+                if (targetRoom?.type === 'group') {
+                    roomName = targetRoom.name || roomName;
+                } else if (targetRoom?.members?.length) {
+                    const other = targetRoom.members.find((m) => (m.user?._id || m.user) !== user?._id);
+                    const otherUser = other?.user;
+                    roomName = targetRoom.nicknames?.[otherUser?._id] || otherUser?.username || roomName;
+                }
+
+                const preview = (lastMessage?.content || '').trim();
+                const text = preview
+                    ? `Tin nhắn mới từ ${roomName}: ${preview.slice(0, 90)}`
+                    : `Bạn có tin nhắn mới từ ${roomName}.`;
+                emitToast(text, { type: 'message' });
             }
         };
 
@@ -132,11 +156,49 @@ export default function RoomList({ activeRoomId, onSelectRoom }) {
         };
     };
 
-    const filtered = rooms.filter((r) => {
+    const filtered = useMemo(() => rooms.filter((r) => {
         if (!search) return true;
         const display = getRoomDisplay(r);
         return display.name.toLowerCase().includes(search.toLowerCase());
-    });
+    }), [rooms, search]);
+
+    const focusSearch = useCallback(() => {
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+    }, []);
+
+    const navigateRoomsByShortcut = useCallback((direction) => {
+        if (!filtered.length) return;
+
+        const currentIndex = filtered.findIndex((room) => room._id === activeRoomId);
+        let nextIndex = currentIndex;
+
+        if (currentIndex < 0) {
+            nextIndex = direction === 'up' ? filtered.length - 1 : 0;
+        } else {
+            nextIndex = direction === 'up'
+                ? (currentIndex - 1 + filtered.length) % filtered.length
+                : (currentIndex + 1) % filtered.length;
+        }
+
+        onSelectRoom(filtered[nextIndex]._id);
+    }, [filtered, activeRoomId, onSelectRoom]);
+
+    useEffect(() => {
+        const handleFocusSearch = () => focusSearch();
+        const handleNavigate = (event) => {
+            const direction = event.detail?.direction === 'up' ? 'up' : 'down';
+            navigateRoomsByShortcut(direction);
+        };
+
+        window.addEventListener('roomlist:focus-search', handleFocusSearch);
+        window.addEventListener('roomlist:navigate', handleNavigate);
+
+        return () => {
+            window.removeEventListener('roomlist:focus-search', handleFocusSearch);
+            window.removeEventListener('roomlist:navigate', handleNavigate);
+        };
+    }, [focusSearch, navigateRoomsByShortcut]);
 
     const handleCreated = (newRoom) => {
         setRooms((prev) => [newRoom, ...prev]);
@@ -191,10 +253,11 @@ export default function RoomList({ activeRoomId, onSelectRoom }) {
                 <div className="relative">
                     <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                     <input
+                        ref={searchInputRef}
                         type="text"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        placeholder="Tìm kiếm..."
+                        placeholder="Tìm kiếm... (Ctrl+K)"
                         className="w-full pl-9 pr-4 py-2 bg-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-ring)] transition"
                     />
                 </div>
@@ -203,8 +266,17 @@ export default function RoomList({ activeRoomId, onSelectRoom }) {
             {/* Room List */}
             <div className="flex-1 overflow-y-auto scrollbar-thin">
                 {loading && (
-                    <div className="p-8 text-center text-gray-400">
-                        <div className="animate-spin w-6 h-6 border-2 border-[var(--color-primary-ring)] border-t-transparent rounded-full mx-auto" />
+                    <div className="p-4 space-y-3">
+                        {Array.from({ length: 6 }).map((_, idx) => (
+                            <div key={`room-skeleton-${idx}`} className="flex items-center gap-3 px-1 py-1">
+                                <SkeletonBlock className="w-12 h-12 rounded-full shrink-0" />
+                                <div className="flex-1 min-w-0 space-y-2">
+                                    <SkeletonBlock className="h-3.5 w-32 rounded-md" />
+                                    <SkeletonBlock className="h-3 w-48 max-w-full rounded-md" />
+                                </div>
+                                <SkeletonBlock className="h-3 w-9 rounded-md shrink-0" />
+                            </div>
+                        ))}
                     </div>
                 )}
 

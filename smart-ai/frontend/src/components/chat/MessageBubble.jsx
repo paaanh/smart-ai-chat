@@ -1,6 +1,6 @@
 import { useAuth } from '../../hooks/useAuth';
 import { format } from 'date-fns';
-import { Bot, Trash2, Globe, ChevronDown, ChevronUp, FileText, FileArchive, FileSpreadsheet, FileImage, FileVideo, FileAudio, File, Download, SmilePlus, Forward, Pin } from 'lucide-react';
+import { Bot, Trash2, Globe, ChevronDown, ChevronUp, FileText, FileArchive, FileSpreadsheet, FileImage, FileVideo, FileAudio, File, Download, SmilePlus, Forward, Pin, Copy, Check, ExternalLink } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -21,7 +21,56 @@ function getAvatarColor(id) {
     return avatarColors[Math.abs(hash) % avatarColors.length];
 }
 
-export default function MessageBubble({ message, isOwn, onDelete, onReact, nicknames, localTranslation, onForward, onPinMessage, onVotePoll }) {
+const emojiOnlyRegex = /^(?:[\p{Extended_Pictographic}\uFE0F\u200D\s])+$/u;
+
+function getEmbeddableMedia(links = []) {
+    if (!links.length) return null;
+    const firstLink = links[0];
+    if (!firstLink?.href) return null;
+
+    try {
+        const parsedUrl = new URL(firstLink.href);
+        const host = parsedUrl.hostname.toLowerCase();
+
+        if (host.includes('youtube.com') || host.includes('youtu.be')) {
+            let videoId = '';
+
+            if (host.includes('youtu.be')) {
+                videoId = parsedUrl.pathname.slice(1).split('/')[0];
+            } else if (parsedUrl.pathname.startsWith('/shorts/')) {
+                videoId = parsedUrl.pathname.split('/shorts/')[1]?.split('/')[0] || '';
+            } else {
+                videoId = parsedUrl.searchParams.get('v') || '';
+            }
+
+            if (videoId) {
+                return {
+                    type: 'youtube',
+                    src: `https://www.youtube.com/embed/${videoId}`,
+                    title: 'YouTube video',
+                };
+            }
+        }
+
+        if (host.includes('tiktok.com')) {
+            const tiktokMatch = parsedUrl.pathname.match(/\/video\/(\d+)/);
+            const tiktokId = tiktokMatch?.[1];
+            if (tiktokId) {
+                return {
+                    type: 'tiktok',
+                    src: `https://www.tiktok.com/embed/v2/${tiktokId}`,
+                    title: 'TikTok video',
+                };
+            }
+        }
+    } catch {
+        // Ignore malformed URL.
+    }
+
+    return null;
+}
+
+export default function MessageBubble({ message, isOwn, onDelete, onReact, nicknames, localTranslation, onForward, onPinMessage, onVotePoll, selectionMode = false, isSelected = false, onToggleSelect, onQuickReply }) {
     const { user } = useAuth();
     const { themeId } = useTheme();
     const navigate = useNavigate();
@@ -32,6 +81,7 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
     const [mediaCandidateIndex, setMediaCandidateIndex] = useState(0);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [shouldShake, setShouldShake] = useState(false);
+    const [copied, setCopied] = useState(false);
     const emojiPickerRef = useRef(null);
     const bubbleRef = useRef(null);
 
@@ -65,51 +115,190 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
 
     const isPixelTheme = themeId === 'pixel-art';
     const isNeonTheme = themeId === 'neon-night';
+    const isDarkTheme = ['dark', 'midnight-purple', 'glassmorphism', 'retro-terminal', 'neon-night'].includes(themeId);
 
-    const renderLinkedText = (text, linkClassName = '') => {
-        if (text == null || text === '') return null;
+    const trailingPunctuationRegex = /[)\].,!?;:]+$/;
 
-        const input = String(text);
+    const normalizeUrlCandidate = (raw) => {
+        const trailingMatch = raw.match(trailingPunctuationRegex);
+        const trailing = trailingMatch ? trailingMatch[0] : '';
+        const clean = trailing ? raw.slice(0, -trailing.length) : raw;
+        const href = clean.startsWith('www.') ? `https://${clean}` : clean;
+        return { clean, href, trailing };
+    };
+
+    const extractLinks = (text) => {
+        if (!text) return [];
+        const seen = new Set();
+        const links = [];
         const urlRegex = /((?:https?:\/\/|www\.)[^\s<]+)/gi;
-        const trailingPunctuationRegex = /[)\].,!?;:]+$/;
+        const source = String(text);
+        let match;
+        while ((match = urlRegex.exec(source)) !== null) {
+            const { clean, href } = normalizeUrlCandidate(match[1]);
+            if (!clean || seen.has(href)) continue;
+            seen.add(href);
+            links.push({ text: clean, href });
+            if (links.length >= 3) break;
+        }
+        return links;
+    };
+
+    const renderInlineTokens = (text, style = {}) => {
+        if (!text) return null;
+        const tokenRegex = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(\*[^*\n]+\*)|(@[a-zA-Z0-9_.]{2,32})|((?:https?:\/\/|www\.)[^\s<]+)|([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})|((?:\+?\d[\d\s().-]{7,}\d))/gi;
         const nodes = [];
         let lastIndex = 0;
+        let tokenIndex = 0;
 
-        input.replace(urlRegex, (match, _group, offset) => {
+        text.replace(tokenRegex, (fullMatch, inlineCode, bold, italic, mention, url, email, phone, offset) => {
             if (offset > lastIndex) {
-                nodes.push(input.slice(lastIndex, offset));
+                nodes.push(text.slice(lastIndex, offset));
             }
 
-            const trailingMatch = match.match(trailingPunctuationRegex);
-            const trailing = trailingMatch ? trailingMatch[0] : '';
-            const linkText = trailing ? match.slice(0, -trailing.length) : match;
-            const href = linkText.startsWith('www.') ? `https://${linkText}` : linkText;
-
-            nodes.push(
-                <a
-                    key={`${offset}-${linkText}`}
-                    href={href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`underline underline-offset-2 break-all hover:opacity-90 ${linkClassName}`.trim()}
-                >
-                    {linkText}
-                </a>
-            );
-
-            if (trailing) {
-                nodes.push(trailing);
+            if (inlineCode) {
+                nodes.push(
+                    <code
+                        key={`code-${tokenIndex}`}
+                        className={`px-1 py-0.5 rounded text-[0.85em] ${style.inlineCodeClassName || 'bg-black/10'}`}
+                    >
+                        {inlineCode.slice(1, -1)}
+                    </code>
+                );
+            } else if (bold) {
+                nodes.push(<strong key={`bold-${tokenIndex}`}>{bold.slice(2, -2)}</strong>);
+            } else if (italic) {
+                nodes.push(<em key={`italic-${tokenIndex}`}>{italic.slice(1, -1)}</em>);
+            } else if (mention) {
+                nodes.push(
+                    <motion.span
+                        key={`mention-${tokenIndex}`}
+                        className={style.mentionClassName || 'font-semibold text-sky-600'}
+                        whileHover={{ scale: 1.04 }}
+                        transition={{ duration: 0.12 }}
+                    >
+                        {mention}
+                    </motion.span>
+                );
+            } else if (url) {
+                const { clean, href, trailing } = normalizeUrlCandidate(url);
+                nodes.push(
+                    <motion.a
+                        key={`url-${tokenIndex}`}
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`underline underline-offset-2 break-all hover:opacity-90 ${style.linkClassName || ''}`.trim()}
+                        whileHover={{ y: -1, scale: 1.01 }}
+                        whileTap={{ scale: 0.98 }}
+                        transition={{ duration: 0.1 }}
+                    >
+                        {clean}
+                    </motion.a>
+                );
+                if (trailing) nodes.push(trailing);
+            } else if (email) {
+                nodes.push(
+                    <motion.a
+                        key={`email-${tokenIndex}`}
+                        href={`mailto:${email}`}
+                        className={`underline underline-offset-2 break-all hover:opacity-90 ${style.linkClassName || ''}`.trim()}
+                        whileHover={{ y: -1, scale: 1.01 }}
+                        whileTap={{ scale: 0.98 }}
+                        transition={{ duration: 0.1 }}
+                    >
+                        {email}
+                    </motion.a>
+                );
+            } else if (phone) {
+                const phoneText = phone.trim();
+                const phoneHref = phoneText.replace(/[^\d+]/g, '');
+                nodes.push(
+                    <motion.a
+                        key={`phone-${tokenIndex}`}
+                        href={`tel:${phoneHref}`}
+                        className={`underline underline-offset-2 break-all hover:opacity-90 ${style.linkClassName || ''}`.trim()}
+                        whileHover={{ y: -1, scale: 1.01 }}
+                        whileTap={{ scale: 0.98 }}
+                        transition={{ duration: 0.1 }}
+                    >
+                        {phoneText}
+                    </motion.a>
+                );
             }
 
-            lastIndex = offset + match.length;
-            return match;
+            tokenIndex += 1;
+            lastIndex = offset + fullMatch.length;
+            return fullMatch;
         });
 
-        if (lastIndex < input.length) {
-            nodes.push(input.slice(lastIndex));
+        if (lastIndex < text.length) {
+            nodes.push(text.slice(lastIndex));
         }
 
         return nodes;
+    };
+
+    const renderRichText = (text, style = {}) => {
+        if (text == null || text === '') return null;
+        const source = String(text);
+        const blocks = [];
+        const codeBlockRegex = /```([\s\S]*?)```/g;
+        let lastIndex = 0;
+        let match;
+        let blockIndex = 0;
+
+        while ((match = codeBlockRegex.exec(source)) !== null) {
+            if (match.index > lastIndex) {
+                const segment = source.slice(lastIndex, match.index);
+                segment.split('\n').forEach((line, lineIdx) => {
+                    blocks.push(
+                        <span key={`line-${blockIndex}-${lineIdx}`}>
+                            {renderInlineTokens(line, style)}
+                            {lineIdx < segment.split('\n').length - 1 && <br />}
+                        </span>
+                    );
+                });
+            }
+
+            blocks.push(
+                <pre
+                    key={`block-${blockIndex}`}
+                    className={`my-1 rounded-lg px-2.5 py-2 overflow-x-auto text-xs ${style.codeBlockClassName || 'bg-black/10'}`}
+                >
+                    <code>{match[1].trim()}</code>
+                </pre>
+            );
+
+            blockIndex += 1;
+            lastIndex = codeBlockRegex.lastIndex;
+        }
+
+        if (lastIndex < source.length) {
+            const tail = source.slice(lastIndex);
+            const lines = tail.split('\n');
+            lines.forEach((line, lineIdx) => {
+                blocks.push(
+                    <span key={`tail-${blockIndex}-${lineIdx}`}>
+                        {renderInlineTokens(line, style)}
+                        {lineIdx < lines.length - 1 && <br />}
+                    </span>
+                );
+            });
+        }
+
+        return blocks;
+    };
+
+    const handleCopyMessage = async () => {
+        if (!message.content) return;
+        try {
+            await navigator.clipboard.writeText(message.content);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+        } catch {
+            setCopied(false);
+        }
     };
 
     const triggerReactionEffect = async (emoji) => {
@@ -165,6 +354,21 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
     // Prioritize translation for non-own messages
     const hasTranslation = !!(translation && !isOwn && message.originalLanguage && message.originalLanguage !== myLang);
     const displayText = hasTranslation ? translation.content : message.content;
+    const messageLinks = extractLinks(displayText);
+    const embeddableMedia = getEmbeddableMedia(messageLinks);
+    const emojiMatches = [...String(displayText || '').matchAll(/\p{Extended_Pictographic}/gu)];
+    const isEmojiOnlyMessage = !!displayText?.trim() && emojiOnlyRegex.test(displayText.trim()) && !message.file && message.type !== 'location';
+    const emojiSizeClass = emojiMatches.length <= 2 ? 'text-5xl leading-tight' : emojiMatches.length <= 4 ? 'text-4xl leading-tight' : 'text-3xl leading-tight';
+
+    const readByOthers = (message.readBy || []).filter((entry) => {
+        const readerId = entry?.user?._id || entry?.user;
+        const senderRef = message.sender?._id || message.sender;
+        return String(readerId || '') !== String(senderRef || '');
+    });
+    const latestReadAt = readByOthers
+        .map((entry) => entry?.readAt)
+        .filter(Boolean)
+        .sort((a, b) => new Date(b) - new Date(a))[0];
 
     const senderId = message.sender?._id;
     const senderNickname = senderId && nicknames?.[senderId];
@@ -340,6 +544,13 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                 className={`flex items-end gap-2 ${isOwn ? 'justify-end' : 'justify-start'} mb-2 group`}
                 onMouseEnter={() => setShowActions(true)}
                 onMouseLeave={() => { if (!showEmojiPicker) setShowActions(false); }}
+                onClick={(event) => {
+                    if (selectionMode) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onToggleSelect?.(message._id);
+                    }
+                }}
                 initial={{ opacity: 0, y: 14, scale: 0.98 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 transition={{ duration: 0.22, ease: 'easeOut' }}
@@ -354,7 +565,7 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                         <div
                             className="w-8 h-8 rounded-full flex-shrink-0 cursor-pointer overflow-hidden"
                             onClick={() => message.sender?._id && navigate(`/profile/${message.sender._id}`)}
-                            title={senderName}
+                            title={`${senderName} · ${format(new Date(message.createdAt), 'HH:mm - dd/MM/yyyy')}`}
                         >
                             {(message.sender?.avatar || message.sender?.googlePicture) && !imgError ? (
                                 <img
@@ -374,18 +585,47 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
 
                 <div className={`max-w-[75%]`}>
                     <div className="relative">
+                        {selectionMode && (
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onToggleSelect?.(message._id);
+                                }}
+                                className={`absolute ${isOwn ? '-left-8' : '-right-8'} top-2 z-10 w-5 h-5 rounded-full border text-[10px] font-bold transition
+                                    ${isSelected
+                                        ? 'bg-[var(--color-primary)] border-[var(--color-primary)] text-white'
+                                        : 'bg-white border-gray-300 text-transparent'
+                                    }`}
+                                title={isSelected ? 'Bỏ chọn' : 'Chọn tin nhắn'}
+                            >
+                                ✓
+                            </button>
+                        )}
+
                         {/* Main bubble */}
                         <motion.div
                             ref={bubbleRef}
                             className={`rounded-2xl ${message.type === 'location'
                                 ? 'overflow-hidden'
-                                : 'px-4 py-2.5'
-                                } ${isAI
-                                    ? 'bg-purple-50 text-purple-900 border border-purple-100'
-                                    : isOwn
-                                        ? 'bg-[var(--color-primary)] text-white'
-                                        : 'bg-gray-100 text-gray-900'
-                                } ${isPixelTheme ? 'pixel-bubble font-pixel' : ''} ${isNeonTheme ? 'neon-bubble' : ''}`}
+                                : isEmojiOnlyMessage
+                                    ? 'px-1 py-0'
+                                    : 'px-4 py-2.5'
+                                } ${isEmojiOnlyMessage
+                                    ? 'bg-transparent border-transparent shadow-none'
+                                    : isAI
+                                        ? isDarkTheme
+                                            ? 'bg-[var(--color-primary-light)] text-[var(--text-primary)] border border-gray-200'
+                                            : 'bg-purple-50 text-purple-900 border border-purple-100'
+                                        : isOwn
+                                            ? 'bg-[var(--color-primary)] text-white'
+                                            : 'bg-gray-100 text-gray-900'
+                                } ${selectionMode && isSelected ? 'ring-2 ring-[var(--color-primary)] ring-offset-1' : ''} ${isPixelTheme ? 'pixel-bubble font-pixel' : ''} ${isNeonTheme ? 'neon-bubble' : ''}`}
+                            onDoubleClick={() => {
+                                if (!selectionMode) {
+                                    onQuickReply?.(message);
+                                }
+                            }}
                             animate={shouldShake ? { x: [0, -2, 2, -1, 1, 0] } : { x: 0 }}
                             transition={{ duration: 0.36, ease: 'easeInOut' }}
                         >
@@ -409,24 +649,98 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                         Bạn đã trả lời ghi chú của họ
                                     </p>
                                     <div className={`px-3 py-1.5 rounded-lg text-xs ${isOwn ? 'bg-white/15 text-white/80' : 'bg-gray-200/70 text-gray-600'}`}>
-                                        {renderLinkedText(
+                                        {renderRichText(
                                             message.replyToNote,
-                                            isOwn ? 'text-white' : 'text-[var(--color-primary)]'
+                                            {
+                                                linkClassName: isOwn ? 'text-white' : 'text-[var(--color-primary)]',
+                                                mentionClassName: isOwn ? 'font-semibold text-white' : 'font-semibold text-sky-700',
+                                                inlineCodeClassName: isOwn ? 'bg-white/20' : 'bg-black/10',
+                                                codeBlockClassName: isOwn ? 'bg-white/15' : 'bg-black/10',
+                                            }
                                         )}
                                     </div>
                                 </div>
                             )}
                             {displayText && message.type !== 'location' && (
-                                <p className="text-sm whitespace-pre-wrap wrap-break-word">
-                                    {renderLinkedText(
+                                <p className={`${isEmojiOnlyMessage ? `${emojiSizeClass} text-center` : 'text-sm'} whitespace-pre-wrap wrap-break-word`}>
+                                    {renderRichText(
                                         displayText,
-                                        isOwn
-                                            ? 'text-white'
-                                            : isAI
-                                                ? 'text-purple-600'
-                                                : 'text-[var(--color-primary)]'
+                                        {
+                                            linkClassName: isOwn
+                                                ? 'text-white'
+                                                : isAI
+                                                    ? isDarkTheme
+                                                        ? 'text-[var(--color-primary-dark)]'
+                                                        : 'text-purple-600'
+                                                    : 'text-[var(--color-primary)]',
+                                            mentionClassName: isOwn ? 'font-semibold text-white' : 'font-semibold text-sky-700',
+                                            inlineCodeClassName: isOwn ? 'bg-white/20' : 'bg-black/10',
+                                            codeBlockClassName: isOwn ? 'bg-white/15' : 'bg-black/10',
+                                        }
                                     )}
                                 </p>
+                            )}
+                            {messageLinks.length > 0 && message.type !== 'location' && (
+                                <div className="mt-2 space-y-1.5">
+                                    {messageLinks.map((link) => {
+                                        let hostname = link.href;
+                                        let pathname = '';
+                                        try {
+                                            const parsed = new URL(link.href);
+                                            hostname = parsed.hostname;
+                                            pathname = parsed.pathname === '/' ? '' : parsed.pathname;
+                                        } catch {
+                                            // Keep fallback values.
+                                        }
+
+                                        return (
+                                            <motion.a
+                                                key={link.href}
+                                                href={link.href}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className={`flex items-center gap-2 rounded-xl px-2.5 py-2 border text-xs transition hover:opacity-90
+                                                    ${isOwn
+                                                        ? 'border-white/30 bg-white/10 text-white'
+                                                        : 'border-gray-200 bg-white text-gray-700'
+                                                    }`}
+                                                whileHover={{ y: -1, scale: 1.01 }}
+                                                whileTap={{ scale: 0.985 }}
+                                                transition={{ duration: 0.12 }}
+                                            >
+                                                <img
+                                                    src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostname)}&sz=32`}
+                                                    alt=""
+                                                    className="w-4 h-4 rounded-sm"
+                                                />
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="font-medium truncate">{hostname}</p>
+                                                    <p className={`truncate ${isOwn ? 'text-white/80' : 'text-gray-500'}`}>
+                                                        {pathname || link.text}
+                                                    </p>
+                                                </div>
+                                                <ExternalLink size={12} className={isOwn ? 'text-white/80' : 'text-gray-500'} />
+                                            </motion.a>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                            {embeddableMedia && (
+                                <motion.div
+                                    className={`mt-2 overflow-hidden rounded-xl border ${isOwn ? 'border-white/30' : 'border-gray-200'}`}
+                                    initial={{ opacity: 0, y: 8 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ duration: 0.2 }}
+                                >
+                                    <iframe
+                                        src={embeddableMedia.src}
+                                        title={embeddableMedia.title}
+                                        className="w-full"
+                                        style={{ height: embeddableMedia.type === 'tiktok' ? 470 : 230 }}
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                        allowFullScreen
+                                    />
+                                </motion.div>
                             )}
                             {message.type === 'location' && message.location && (
                                 <LocationMessage location={message.location} isOwn={isOwn} />
@@ -436,14 +750,29 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                             {/* Time */}
                             <p
                                 className={`text-[10px] mt-1 ${message.type === 'location' ? 'px-3 pb-1' : ''} ${isAI
-                                    ? 'text-purple-400'
+                                    ? isDarkTheme
+                                        ? 'text-gray-400'
+                                        : 'text-purple-400'
                                     : isOwn
                                         ? 'text-white/70'
                                         : 'text-gray-400'
                                     }`}
+                                title={format(new Date(message.createdAt), 'HH:mm:ss - dd/MM/yyyy')}
                             >
                                 {format(new Date(message.createdAt), 'HH:mm')}
                             </p>
+                            {isOwn && message.type !== 'system' && (
+                                <p
+                                    className={`text-[10px] ${isOwn ? 'text-white/70' : 'text-gray-400'}`}
+                                    title={message.pending ? 'Tin nhắn đang chờ xác nhận từ server' : 'Trạng thái xem tin nhắn'}
+                                >
+                                    {message.pending
+                                        ? 'Đang gửi...'
+                                        : readByOthers.length > 0
+                                        ? `Đã xem${readByOthers.length > 1 ? ` (${readByOthers.length})` : ''}${latestReadAt ? ` · ${format(new Date(latestReadAt), 'HH:mm')}` : ''}`
+                                        : 'Đã gửi'}
+                                </p>
+                            )}
                         </motion.div>
 
                         {/* Show original text when translation is being displayed */}
@@ -459,7 +788,12 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                 </button>
                                 {showTranslation && (
                                     <div className="bg-[var(--color-primary-light)] border border-[var(--color-primary-medium)] px-3 py-2 rounded-xl text-sm text-[var(--color-primary-dark)] ml-2">
-                                        {renderLinkedText(message.content, 'text-[var(--color-primary-dark)]')}
+                                        {renderRichText(message.content, {
+                                            linkClassName: 'text-[var(--color-primary-dark)]',
+                                            mentionClassName: 'font-semibold text-sky-700',
+                                            inlineCodeClassName: 'bg-black/10',
+                                            codeBlockClassName: 'bg-black/10',
+                                        })}
                                     </div>
                                 )}
                             </div>
@@ -468,55 +802,75 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                         {/* Local auto-translate (private, not stored in DB) */}
                         {localTranslation && !isOwn && !hasTranslation && (
                             <div className="mt-1 ml-2">
-                                <div className="flex items-center gap-1 text-[10px] text-purple-500 mb-0.5">
+                                <div className={`flex items-center gap-1 text-[10px] mb-0.5 ${isDarkTheme ? 'text-[var(--text-secondary)]' : 'text-purple-500'}`}>
                                     <Globe size={10} />
                                     <span>Dịch tự động</span>
                                 </div>
-                                <div className="bg-purple-50 border border-purple-100 px-3 py-1.5 rounded-xl text-sm text-purple-800">
-                                    {renderLinkedText(localTranslation, 'text-purple-800')}
+                                <div className={`px-3 py-1.5 rounded-xl text-sm ${isDarkTheme ? 'bg-[var(--bg-card)] border border-gray-200 text-[var(--text-primary)]' : 'bg-purple-50 border border-purple-100 text-purple-800'}`}>
+                                    {renderRichText(localTranslation, {
+                                        linkClassName: isDarkTheme ? 'text-[var(--color-primary-dark)]' : 'text-purple-800',
+                                        mentionClassName: isDarkTheme ? 'font-semibold text-[var(--color-primary-dark)]' : 'font-semibold text-purple-700',
+                                        inlineCodeClassName: isDarkTheme ? 'bg-[var(--bg-hover)]' : 'bg-purple-100',
+                                        codeBlockClassName: isDarkTheme ? 'bg-[var(--bg-hover)]' : 'bg-purple-100',
+                                    })}
                                 </div>
                             </div>
                         )}
 
                         {/* Message actions */}
-                        {showActions && message.type !== 'system' && (
+                        {showActions && !selectionMode && message.type !== 'system' && (
                             <div
-                                className={`absolute ${isOwn ? '-left-24' : '-right-20'} bottom-1 flex items-center gap-1 rounded-full bg-white/95 px-1 py-0.5 shadow-sm ring-1 ring-black/5 opacity-0 group-hover:opacity-100 transition`}
+                                className={`absolute ${isOwn ? '-left-24' : '-right-20'} bottom-1 flex items-center gap-1 rounded-full bg-white border border-gray-200 px-1 py-0.5 shadow-sm opacity-0 group-hover:opacity-100 transition`}
                             >
                                 {isOwn && onDelete && (
-                                    <button
+                                    <motion.button
                                         onClick={() => onDelete?.(message._id)}
                                         className="p-1 text-gray-400 hover:text-red-500 transition"
                                         title="Xóa"
+                                        whileHover={{ scale: 1.08 }}
+                                        whileTap={{ scale: 0.92 }}
                                     >
                                         <Trash2 size={14} />
-                                    </button>
+                                    </motion.button>
                                 )}
+                                <motion.button
+                                    onClick={handleCopyMessage}
+                                    className="p-1 text-gray-400 hover:text-emerald-500 transition"
+                                    title="Sao chép"
+                                    whileHover={{ scale: 1.08 }}
+                                    whileTap={{ scale: 0.92 }}
+                                >
+                                    {copied ? <Check size={14} /> : <Copy size={14} />}
+                                </motion.button>
                                 {onForward && (
-                                    <button
+                                    <motion.button
                                         onClick={() => onForward?.(message)}
                                         className="p-1 text-gray-400 hover:text-blue-500 transition"
                                         title="Chuyển tiếp"
+                                        whileHover={{ scale: 1.08 }}
+                                        whileTap={{ scale: 0.92 }}
                                     >
                                         <Forward size={14} />
-                                    </button>
+                                    </motion.button>
                                 )}
                                 {onPinMessage && (
-                                    <button
+                                    <motion.button
                                         onClick={() => onPinMessage?.(message)}
                                         className="p-1 text-gray-400 hover:text-orange-500 transition"
                                         title={message.pinned ? 'Bỏ ghim' : 'Ghim'}
+                                        whileHover={{ scale: 1.08 }}
+                                        whileTap={{ scale: 0.92 }}
                                     >
                                         <Pin size={14} />
-                                    </button>
+                                    </motion.button>
                                 )}
                             </div>
                         )}
 
                         {/* Reaction button */}
-                        {(showActions || showEmojiPicker) && message.type !== 'system' && (
+                        {!selectionMode && (showActions || showEmojiPicker) && message.type !== 'system' && (
                             <div className={`absolute ${isOwn ? '-left-8 top-0' : '-right-8 top-0'}`} ref={emojiPickerRef}>
-                                <button
+                                <motion.button
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         setShowEmojiPicker((v) => !v);
@@ -524,9 +878,11 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                     className={`p-1 text-gray-400 hover:text-[var(--color-primary)] transition
                                         ${showEmojiPicker ? 'opacity-100 text-[var(--color-primary)]' : 'opacity-0 group-hover:opacity-100'}`}
                                     title="Thả cảm xúc"
+                                    whileHover={{ scale: 1.08 }}
+                                    whileTap={{ scale: 0.92 }}
                                 >
                                     <SmilePlus size={14} />
-                                </button>
+                                </motion.button>
 
                                 {/* Emoji picker popover */}
                                 <AnimatePresence>
@@ -540,7 +896,7 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                         transition={{ duration: 0.16, ease: 'easeOut' }}
                                     >
                                         {REACTION_EMOJIS.map((emoji) => (
-                                            <button
+                                            <motion.button
                                                 key={emoji}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
@@ -550,9 +906,11 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                                     setShowActions(false);
                                                 }}
                                                 className="text-lg hover:scale-125 transition-transform px-0.5 cursor-pointer"
+                                                whileHover={{ scale: 1.18 }}
+                                                whileTap={{ scale: 0.88 }}
                                             >
                                                 {emoji}
-                                            </button>
+                                            </motion.button>
                                         ))}
                                         </motion.div>
                                     )}
@@ -574,7 +932,7 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                 {Object.entries(grouped).map(([emoji, users]) => {
                                     const isMine = users.includes(myId);
                                     return (
-                                        <button
+                                        <motion.button
                                             key={emoji}
                                             onClick={() => onReact?.(message._id, emoji)}
                                             className={`flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full border transition-colors
@@ -582,10 +940,12 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                                     ? 'bg-[var(--color-primary-light)] border-[var(--color-primary)] text-[var(--color-primary)]'
                                                     : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
                                                 }`}
+                                            whileHover={{ y: -1, scale: 1.03 }}
+                                            whileTap={{ scale: 0.96 }}
                                         >
                                             <span>{emoji}</span>
                                             {users.length > 1 && <span>{users.length}</span>}
-                                        </button>
+                                        </motion.button>
                                     );
                                 })}
                             </div>

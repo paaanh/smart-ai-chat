@@ -106,6 +106,24 @@ export function useChat(roomId) {
             );
         };
 
+        const handleReadUpdate = ({ messageId, userId }) => {
+            setMessages((prev) =>
+                prev.map((m) => {
+                    if (m._id !== messageId) return m;
+                    const currentReadBy = m.readBy || [];
+                    const alreadyRead = currentReadBy.some((entry) => {
+                        const reader = entry?.user?._id || entry?.user;
+                        return String(reader || '') === String(userId || '');
+                    });
+                    if (alreadyRead) return m;
+                    return {
+                        ...m,
+                        readBy: [...currentReadBy, { user: userId, readAt: new Date().toISOString() }],
+                    };
+                })
+            );
+        };
+
         on('message:received', handleNewMessage);
         on('message:deleted', handleDeleted);
         on('room:typing', handleTyping);
@@ -114,6 +132,7 @@ export function useChat(roomId) {
         on('message:reacted', handleReacted);
         on('poll:updated', handlePollUpdated);
         on('message:pinned', handlePinned);
+        on('message:read-update', handleReadUpdate);
 
         // Join room
         emit('room:join', { roomId });
@@ -127,6 +146,7 @@ export function useChat(roomId) {
             off('message:reacted', handleReacted);
             off('poll:updated', handlePollUpdated);
             off('message:pinned', handlePinned);
+            off('message:read-update', handleReadUpdate);
             emit('room:leave', { roomId });
         };
     }, [roomId, connected, on, off, emit]);

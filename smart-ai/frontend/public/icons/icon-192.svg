@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192" role="img" aria-label="Smart AI Chat icon">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1d4ed8"/>
+      <stop offset="100%" stop-color="#0891b2"/>
+    </linearGradient>
+    <linearGradient id="bubble" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.98"/>
+      <stop offset="100%" stop-color="#e2e8f0" stop-opacity="0.96"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="8" y="8" width="176" height="176" rx="46" fill="url(#bg)"/>
+  <rect x="26" y="26" width="140" height="140" rx="38" fill="#0f172a" fill-opacity="0.16"/>
+
+  <path d="M46 58c0-8.84 7.16-16 16-16h68c8.84 0 16 7.16 16 16v44c0 8.84-7.16 16-16 16H88l-20 18c-2.57 2.32-6.64.5-6.64-2.96V118H62c-8.84 0-16-7.16-16-16V58z" fill="url(#bubble)"/>
+  <circle cx="75" cy="80" r="6" fill="#2563eb"/>
+  <circle cx="96" cy="80" r="6" fill="#2563eb"/>
+  <circle cx="117" cy="80" r="6" fill="#2563eb"/>
+
+  <path d="M136 118l5.4 11.3 12.6 1.6-9.4 8.6 2.4 12.4-11-5.9-11 5.9 2.4-12.4-9.4-8.6 12.6-1.6z" fill="#fde047"/>
+</svg>

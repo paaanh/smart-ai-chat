@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { roomAPI, userActionsAPI, resolveMediaUrl } from '../../services/api';
 import { useAuth } from '../../hooks/useAuth';
@@ -13,6 +13,7 @@ import AIToggle from './AIToggle';
 import ForwardModal from './ForwardModal';
 import PollCreator from './PollCreator';
 import PinnedHeader from './PinnedHeader';
+import SkeletonBlock from '../ui/SkeletonBlock';
 import { format } from 'date-fns';
 import {
     Phone,
@@ -27,6 +28,10 @@ import {
     BarChart3,
     Lock,
     Building2,
+    CheckSquare,
+    Copy,
+    X,
+    Reply,
 } from 'lucide-react';
 
 export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled, onAIToggle, autoTranslate }) {
@@ -34,7 +39,7 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
     const { user, updateLockStatus } = useAuth();
     const { onlineUsers, on, off, emit } = useSocket();
     const { initiateCall } = useCall();
-    const { messages, loading, hasMore, typingUsers, sendMessage, sendLocation, deleteMessage, loadMore, startTyping, reactToMessage } = useChat(roomId);
+    const { messages, loading, hasMore, typingUsers, sendMessage, sendLocation, deleteMessage, loadMore, startTyping, markRead, reactToMessage } = useChat(roomId);
     const { toggleBot, summarize } = useAI(roomId);
 
     const [room, setRoom] = useState(null);
@@ -47,9 +52,17 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
     const containerRef = useRef(null);
     const [autoScroll, setAutoScroll] = useState(true);
     const translatedIdsRef = useRef(new Set());
+    const sentReadIdsRef = useRef(new Set());
+    const processedServerOwnMessagesRef = useRef(new Set());
+    const pendingQueueRef = useRef([]);
     const [forwardMsg, setForwardMsg] = useState(null);
     const [showPollCreator, setShowPollCreator] = useState(false);
     const [pinnedMessages, setPinnedMessages] = useState([]);
+    const [pendingMessages, setPendingMessages] = useState([]);
+    const [replyDraft, setReplyDraft] = useState(null);
+    const [selectionMode, setSelectionMode] = useState(false);
+    const [selectedMessageIds, setSelectedMessageIds] = useState(new Set());
+    const [copiedSelection, setCopiedSelection] = useState(false);
 
     // Load room info
     useEffect(() => {
@@ -157,6 +170,13 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
     // Clear local messages when switching rooms
     useEffect(() => {
         setLocalMessages([]);
+        sentReadIdsRef.current = new Set();
+        processedServerOwnMessagesRef.current = new Set();
+        pendingQueueRef.current = [];
+        setPendingMessages([]);
+        setReplyDraft(null);
+        setSelectionMode(false);
+        setSelectedMessageIds(new Set());
     }, [roomId]);
 
     // Wrapper: inject local system message when user is locked
@@ -178,8 +198,37 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
             ]);
             return;
         }
+
+        const tempId = `pending_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const createdAt = new Date().toISOString();
+        const pendingMessage = {
+            _id: tempId,
+            room: roomId,
+            sender: {
+                _id: user?._id,
+                username: user?.username,
+                avatar: user?.avatar,
+                googlePicture: user?.googlePicture,
+            },
+            type,
+            content: content || '',
+            file: fileData || null,
+            createdAt,
+            pending: true,
+        };
+
+        setPendingMessages((prev) => [...prev, pendingMessage]);
+        pendingQueueRef.current.push({
+            tempId,
+            type,
+            content: (content || '').trim(),
+            fileName: fileData?.name || '',
+            createdAt,
+        });
+
         sendMessage(content, type, fileData);
-    }, [user, sendMessage]);
+        setReplyDraft(null);
+    }, [user, sendMessage, roomId]);
 
     // Auto-scroll
     useEffect(() => {
@@ -187,6 +236,49 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
             messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         }
     }, [messages, autoScroll]);
+
+    // Reconcile local pending messages when server confirms own messages.
+    useEffect(() => {
+        if (!user?._id || !messages.length || pendingQueueRef.current.length === 0) return;
+
+        setPendingMessages((prev) => {
+            let next = [...prev];
+            let changed = false;
+
+            messages.forEach((msg) => {
+                const msgId = msg?._id;
+                if (!msgId || processedServerOwnMessagesRef.current.has(msgId)) return;
+
+                const senderId = msg.sender?._id || msg.sender;
+                if (String(senderId || '') !== String(user._id)) {
+                    processedServerOwnMessagesRef.current.add(msgId);
+                    return;
+                }
+
+                const normalizedContent = (msg.content || '').trim();
+                const pendingIndex = pendingQueueRef.current.findIndex((pendingItem) => {
+                    const sameType = pendingItem.type === msg.type;
+                    const sameContent = pendingItem.content === normalizedContent;
+                    const sameFile = pendingItem.fileName && pendingItem.fileName === (msg.file?.name || '');
+                    const closeInTime = Math.abs(new Date(msg.createdAt) - new Date(pendingItem.createdAt)) < 2 * 60 * 1000;
+                    return sameType && closeInTime && (sameContent || sameFile);
+                });
+
+                if (pendingIndex >= 0) {
+                    const [matchedPending] = pendingQueueRef.current.splice(pendingIndex, 1);
+                    const uiIndex = next.findIndex((pendingMsg) => pendingMsg._id === matchedPending.tempId);
+                    if (uiIndex >= 0) {
+                        next.splice(uiIndex, 1);
+                        changed = true;
+                    }
+                }
+
+                processedServerOwnMessagesRef.current.add(msgId);
+            });
+
+            return changed ? next : prev;
+        });
+    }, [messages, user?._id]);
 
     // Clear local translations when switching rooms
     useEffect(() => {
@@ -236,6 +328,26 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
             });
         }
     }, [autoTranslate, messages, user, emit, localTranslations]);
+
+    // Mark incoming messages as read when this room is open.
+    useEffect(() => {
+        if (!roomId || !user?._id || !messages.length) return;
+
+        messages.forEach((msg) => {
+            const senderId = msg.sender?._id || msg.sender;
+            if (!senderId || String(senderId) === String(user._id)) return;
+
+            const alreadyRead = (msg.readBy || []).some((entry) => {
+                const reader = entry?.user?._id || entry?.user;
+                return String(reader || '') === String(user._id);
+            });
+
+            if (!alreadyRead && !sentReadIdsRef.current.has(msg._id)) {
+                sentReadIdsRef.current.add(msg._id);
+                markRead(msg._id);
+            }
+        });
+    }, [roomId, user?._id, messages, markRead]);
 
     // Detect scroll position
     const handleScroll = useCallback(() => {
@@ -328,6 +440,88 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
         emit('poll:vote', { messageId, roomId, optionIndex });
     };
 
+    const handleQuickReply = useCallback((msg) => {
+        if (!msg || msg.type === 'system') return;
+        const senderId = msg.sender?._id || msg.sender;
+        const nickname = senderId && room?.nicknames?.[senderId];
+        const senderName = nickname || msg.sender?.username || 'Người dùng';
+        const contentPreview = msg.content?.trim() || msg.file?.name || `[${msg.type || 'text'}]`;
+
+        setReplyDraft({
+            messageId: msg._id,
+            senderName,
+            preview: contentPreview,
+        });
+    }, [room?.nicknames]);
+
+    const allRenderableMessages = useMemo(
+        () => [...messages, ...localMessages, ...pendingMessages]
+            .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)),
+        [messages, localMessages, pendingMessages]
+    );
+
+    const toggleMessageSelection = useCallback((messageId) => {
+        setSelectedMessageIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(messageId)) {
+                next.delete(messageId);
+            } else {
+                next.add(messageId);
+            }
+            return next;
+        });
+    }, []);
+
+    const clearSelectionMode = useCallback(() => {
+        setSelectionMode(false);
+        setSelectedMessageIds(new Set());
+        setCopiedSelection(false);
+    }, []);
+
+    const copySelectedMessages = useCallback(async () => {
+        const selectedRows = allRenderableMessages.filter((msg) => selectedMessageIds.has(msg._id));
+        if (!selectedRows.length) return;
+
+        const lines = selectedRows.map((msg) => {
+            const senderId = msg.sender?._id || msg.sender;
+            const nickname = senderId && room?.nicknames?.[senderId];
+            const senderName = nickname || msg.sender?.username || (senderId === user?._id ? 'Bạn' : 'Người dùng');
+            const body = msg.content || msg.file?.name || `[${msg.type || 'text'}]`;
+            return `${senderName} (${format(new Date(msg.createdAt), 'HH:mm')}): ${body}`;
+        });
+
+        try {
+            await navigator.clipboard.writeText(lines.join('\n'));
+            setCopiedSelection(true);
+            setTimeout(() => setCopiedSelection(false), 1500);
+        } catch (error) {
+            console.error('Copy selected messages error:', error);
+        }
+    }, [allRenderableMessages, selectedMessageIds, room?.nicknames, user?._id]);
+
+    useEffect(() => {
+        const handleGlobalShortcut = (event) => {
+            if (!(event.ctrlKey || event.metaKey)) return;
+
+            const key = event.key.toLowerCase();
+            if (key === 'k') {
+                event.preventDefault();
+                window.dispatchEvent(new CustomEvent('roomlist:focus-search'));
+                return;
+            }
+
+            if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+                event.preventDefault();
+                window.dispatchEvent(new CustomEvent('roomlist:navigate', {
+                    detail: { direction: event.key === 'ArrowUp' ? 'up' : 'down' },
+                }));
+            }
+        };
+
+        window.addEventListener('keydown', handleGlobalShortcut);
+        return () => window.removeEventListener('keydown', handleGlobalShortcut);
+    }, []);
+
     // Listen for poll updates
     useEffect(() => {
         if (!roomId) return;
@@ -381,13 +575,13 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
     }
 
     return (
-        <div className="flex-1 flex flex-col h-full bg-white relative">
+        <div className="flex-1 flex flex-col h-full min-h-0 bg-white relative">
             {/* Header */}
             <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 bg-white">
                 {/* Back button (mobile) */}
                 <button
                     onClick={onBack}
-                    className="lg:hidden p-1 hover:bg-gray-100 rounded-full"
+                    className="md:hidden p-1 hover:bg-gray-100 rounded-full shrink-0"
                 >
                     <ArrowLeft size={20} />
                 </button>
@@ -397,6 +591,7 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                     <div
                         className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold overflow-hidden ${display.isGroup ? 'bg-purple-500' : 'bg-[var(--color-primary)]'
                             }`}
+                        title={`${display.name}${display.subtitle ? ` - ${display.subtitle}` : ''}`}
                     >
                         {display.isGroup ? (
                             room?.groupAvatar ? (
@@ -426,7 +621,22 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 max-w-[50vw] md:max-w-none overflow-x-auto scrollbar-hide">
+                    <button
+                        onClick={() => {
+                            if (selectionMode) {
+                                clearSelectionMode();
+                            } else {
+                                setSelectionMode(true);
+                                setSelectedMessageIds(new Set());
+                            }
+                        }}
+                        className={`p-2 rounded-full transition shrink-0 ${selectionMode ? 'bg-[var(--color-primary-light)] text-[var(--color-primary)]' : 'hover:bg-gray-100 text-gray-600'}`}
+                        title="Chọn nhiều tin để sao chép"
+                    >
+                        <CheckSquare size={18} />
+                    </button>
+
                     <AIToggle
                         enabled={aiBotEnabled}
                         onToggle={handleToggleAI}
@@ -436,7 +646,7 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                     {/* Enter Office button — joins SkyOffice virtual office */}
                     <button
                         onClick={() => navigate('/office')}
-                        className="p-2 hover:bg-indigo-50 rounded-full transition text-indigo-400"
+                        className="p-2 hover:bg-indigo-50 rounded-full transition text-indigo-400 shrink-0"
                         title="Vào Virtual Office 🏢"
                     >
                         <Building2 size={18} />
@@ -445,14 +655,14 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                     {/* Call buttons - available for both 1-1 and group */}
                     <button
                         onClick={() => handleCall('audio')}
-                        className="p-2 hover:bg-gray-100 rounded-full transition text-gray-600"
+                        className="p-2 hover:bg-gray-100 rounded-full transition text-gray-600 shrink-0"
                         title="Gọi thoại"
                     >
                         <Phone size={18} />
                     </button>
                     <button
                         onClick={() => handleCall('video')}
-                        className="p-2 hover:bg-gray-100 rounded-full transition text-gray-600"
+                        className="p-2 hover:bg-gray-100 rounded-full transition text-gray-600 shrink-0"
                         title="Gọi video"
                     >
                         <Video size={18} />
@@ -460,7 +670,7 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
 
                     <button
                         onClick={() => setShowPollCreator(true)}
-                        className="p-2 hover:bg-gray-100 rounded-full transition text-gray-600"
+                        className="p-2 hover:bg-gray-100 rounded-full transition text-gray-600 shrink-0"
                         title="Tạo bình chọn"
                     >
                         <BarChart3 size={18} />
@@ -468,7 +678,7 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
 
                     <button
                         onClick={() => onToggleInfo?.(room)}
-                        className="p-2 hover:bg-gray-100 rounded-full transition text-gray-600"
+                        className="p-2 hover:bg-gray-100 rounded-full transition text-gray-600 shrink-0"
                         title="Thông tin"
                     >
                         <Info size={18} />
@@ -489,7 +699,18 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                 className="flex-1 overflow-y-auto px-4 py-3 scrollbar-thin bg-gray-50 conversation-bg"
             >
                 {/* Empty conversation — Profile Header */}
-                {!loading && messages.length === 0 ? (
+                {loading && allRenderableMessages.length === 0 ? (
+                    <div className="space-y-3 py-2">
+                        {Array.from({ length: 7 }).map((_, idx) => (
+                            <div key={`msg-skeleton-${idx}`} className={`flex ${idx % 3 === 0 ? 'justify-end' : 'justify-start'}`}>
+                                <div className="max-w-[80%] space-y-2">
+                                    <SkeletonBlock className="h-3 w-14 rounded-md" />
+                                    <SkeletonBlock className={`h-10 rounded-2xl ${idx % 2 === 0 ? 'w-44' : 'w-64 max-w-[75vw]'}`} />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : !loading && allRenderableMessages.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full animate-[fadeIn_0.5s_ease]">
                         {/* Avatar */}
                         <div
@@ -544,13 +765,12 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
 
                         {/* Messages list — merge server messages with local-only system messages */}
                         <AnimatePresence initial={false}>
-                            {[...messages, ...localMessages]
-                                .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+                            {allRenderableMessages
                                 .map((msg) => (
                                     <motion.div
                                         key={msg._id}
                                         data-message-id={msg._id}
-                                        className="transition-colors duration-500"
+                                        className={`transition-colors duration-500 ${msg.pending ? 'opacity-85' : ''}`}
                                         layout
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
@@ -571,6 +791,10 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                                             onForward={(msg) => setForwardMsg(msg)}
                                             onPinMessage={handlePinMessage}
                                             onVotePoll={handleVotePoll}
+                                            selectionMode={selectionMode}
+                                            isSelected={selectedMessageIds.has(msg._id)}
+                                            onToggleSelect={toggleMessageSelection}
+                                            onQuickReply={handleQuickReply}
                                         />
                                     </motion.div>
                                 ))}
@@ -593,6 +817,32 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
 
                 <div ref={messagesEndRef} />
             </div>
+
+            {selectionMode && (
+                <div className="px-4 py-2 border-t border-gray-200 bg-[var(--color-primary-light)] flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-sm text-[var(--color-primary-dark)] flex items-center gap-1.5">
+                        <Reply size={14} className="opacity-70" />
+                        <span>Đã chọn {selectedMessageIds.size} tin nhắn</span>
+                    </div>
+                    <div className="flex items-center gap-2 ml-auto">
+                        <button
+                            onClick={copySelectedMessages}
+                            disabled={selectedMessageIds.size === 0}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-gray-200 text-[var(--color-primary)] hover:bg-gray-50 disabled:opacity-50"
+                        >
+                            <Copy size={13} />
+                            {copiedSelection ? 'Đã sao chép' : 'Sao chép'}
+                        </button>
+                        <button
+                            onClick={clearSelectionMode}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-gray-200 text-gray-500 hover:bg-gray-50"
+                        >
+                            <X size={13} />
+                            Hủy
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Input or Block notice */}
             {iBlockedThem ? (
@@ -630,6 +880,8 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                             ? user.lockUntil
                             : null
                     }
+                    replyContext={replyDraft}
+                    onCancelReply={() => setReplyDraft(null)}
                     onLockExpire={() => updateLockStatus('active', null)}
                 />
             )}

@@ -1,0 +1,75 @@
+.onboarding-popup-overlay {
+  position: fixed;
+  z-index: 9999;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.onboarding-popup {
+  background: var(--theme-surface, #fff);
+  border-radius: 18px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  padding: 32px 24px;
+  max-width: 350px;
+  width: 90vw;
+  text-align: center;
+  animation: fadeIn .4s cubic-bezier(.4,0,.2,1);
+}
+.onboarding-popup h2 {
+  margin-bottom: 12px;
+  font-size: 1.3rem;
+  font-weight: bold;
+}
+.onboarding-step-indicator {
+  margin-bottom: 8px;
+  color: var(--text-tertiary, #6b7280);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.onboarding-dots {
+  margin-top: 10px;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+}
+.onboarding-dots .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-tertiary, #9ca3af) 40%, transparent);
+}
+.onboarding-dots .dot.active {
+  width: 18px;
+  background: var(--theme-primary, #1976d2);
+}
+.onboarding-popup-actions {
+  margin-top: 24px;
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+.onboarding-popup-actions button {
+  background: var(--theme-primary, #1976d2);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 18px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background .2s;
+}
+.onboarding-popup-actions button.ghost {
+  background: transparent;
+  color: var(--text-secondary, #4b5563);
+  border: 1px solid color-mix(in srgb, var(--border-color, #d1d5db) 80%, transparent);
+}
+.onboarding-popup-actions button:hover {
+  background: var(--theme-primary-dark, #115293);
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
