@@ -13,6 +13,10 @@ import {
     Loader2,
     UserPlus,
     X,
+    Settings,
+    Wifi,
+    Signal,
+    Zap,
 } from 'lucide-react';
 import { resolveMediaUrl } from '../../services/api';
 
@@ -138,6 +142,14 @@ export default function CallModal() {
         toggleAudio,
         toggleVideo,
         toggleScreenShare,
+        // Device & Quality
+        availableDevices,
+        selectedDevices,
+        changeDevice,
+        videoQuality,
+        setVideoQuality,
+        networkStats,
+        callHistory,
     } = useCall();
 
     const remoteAudioRef = useRef(null);
@@ -148,6 +160,7 @@ export default function CallModal() {
     const [connectionWarning, setConnectionWarning] = useState(false);
     const [showControls, setShowControls] = useState(true);
     const [showInvitePanel, setShowInvitePanel] = useState(false);
+    const [showSettingsPanel, setShowSettingsPanel] = useState(false);
     const controlsTimerRef = useRef(null);
 
     // ── Draggable PiP state ──
@@ -656,6 +669,19 @@ export default function CallModal() {
                         onClose={() => setShowInvitePanel(false)}
                     />
                 )}
+
+                {/* ─── Settings Panel ─── */}
+                {showSettingsPanel && (
+                    <SettingsPanel
+                        availableDevices={availableDevices}
+                        selectedDevices={selectedDevices}
+                        changeDevice={changeDevice}
+                        videoQuality={videoQuality}
+                        setVideoQuality={setVideoQuality}
+                        networkStats={networkStats}
+                        onClose={() => setShowSettingsPanel(false)}
+                    />
+                )}
             </div>
 
             {/* ═══ Floating Toolbar — always on top ═══ */}
@@ -708,6 +734,17 @@ export default function CallModal() {
                             </button>
                         </>
                     )}
+
+                    {/* Settings button */}
+                    <div className="w-px h-7 bg-white/15" />
+                    <button
+                        onClick={() => setShowSettingsPanel(!showSettingsPanel)}
+                        className={`p-3 rounded-full transition-all duration-200 flex items-center gap-2 ${showSettingsPanel ? 'bg-purple-500 text-white' : 'bg-white/10 text-white hover:bg-white/20'}`}
+                        title="Cài đặt"
+                    >
+                        <Settings size={20} />
+                        <span className="text-xs font-medium hidden sm:inline">Cài đặt</span>
+                    </button>
 
                     <div className="w-px h-7 bg-white/15" />
 
@@ -798,6 +835,123 @@ function InvitePanel({ roomId, participants, onInvite, onClose }) {
                                 </button>
                             </div>
                         ))
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ── Settings Panel Component ──
+function SettingsPanel({ availableDevices, selectedDevices, changeDevice, videoQuality, setVideoQuality, networkStats, onClose }) {
+    return (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/20 backdrop-blur-md" onClick={onClose}>
+            <div
+                className="w-[92vw] max-w-lg bg-white/10 backdrop-blur-2xl rounded-3xl border border-white/30 shadow-[0_20px_80px_rgba(0,0,0,0.45)] overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+                onClick={e => e.stopPropagation()}
+            >
+                <div className="flex items-center justify-between px-6 py-4 border-b border-white/20 bg-white/5">
+                    <h3 className="text-white text-lg font-semibold flex items-center gap-2">
+                        <Settings size={20} /> Cài đặt
+                    </h3>
+                    <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition">
+                        <X size={20} />
+                    </button>
+                </div>
+                <div className="p-6 space-y-6 max-h-[68vh] overflow-y-auto">
+                    {/* Microphone Selection */}
+                    {availableDevices.audio.length > 0 && (
+                        <div>
+                            <label className="block text-white text-sm font-semibold mb-2">🎤 Microphone</label>
+                            <select
+                                value={selectedDevices.audioId}
+                                onChange={(e) => changeDevice('audio', e.target.value)}
+                                className="w-full px-4 py-2.5 bg-white/90 border border-cyan-300/70 rounded-lg text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400 transition"
+                            >
+                                {availableDevices.audio.map(device => (
+                                    <option key={device.deviceId} value={device.deviceId} className="bg-white text-slate-900">
+                                        {device.label || `Microphone ${device.deviceId.slice(0, 5)}`}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+
+                    {/* Camera Selection */}
+                    {availableDevices.video.length > 0 && (
+                        <div>
+                            <label className="block text-white text-sm font-semibold mb-2">📹 Camera</label>
+                            <select
+                                value={selectedDevices.videoId}
+                                onChange={(e) => changeDevice('video', e.target.value)}
+                                className="w-full px-4 py-2.5 bg-white/90 border border-cyan-300/70 rounded-lg text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400 transition"
+                            >
+                                {availableDevices.video.map(device => (
+                                    <option key={device.deviceId} value={device.deviceId} className="bg-white text-slate-900">
+                                        {device.label || `Camera ${device.deviceId.slice(0, 5)}`}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+
+                    {/* Video Quality */}
+                    <div>
+                        <label className="block text-white text-sm font-semibold mb-2">📊 Chất lượng video</label>
+                        <div className="grid grid-cols-3 gap-2">
+                            {['low', 'auto', 'high'].map(q => (
+                                <button
+                                    key={q}
+                                    onClick={() => setVideoQuality(q)}
+                                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                                        videoQuality === q
+                                            ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
+                                            : 'bg-black/20 text-white hover:bg-white/15 border border-white/25'
+                                    }`}
+                                >
+                                    {q === 'low' ? '📉 Thấp' : q === 'high' ? '📈 Cao' : 'Auto'}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Network Stats */}
+                    {(networkStats.bandwidth > 0 || networkStats.latency > 0) && (
+                        <div className="bg-black/20 rounded-xl p-4 border border-white/20">
+                            <h4 className="text-white text-sm font-semibold mb-3 flex items-center gap-2">
+                                <Wifi size={16} /> Thống kê mạng
+                            </h4>
+                            <div className="space-y-2 text-xs text-gray-300">
+                                <div className="flex items-center justify-between">
+                                    <span className="flex items-center gap-1.5">
+                                        <Zap size={14} /> Bandwidth
+                                    </span>
+                                    <span className="text-white font-semibold">{networkStats.bandwidth} kbps</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="flex items-center gap-1.5">
+                                        <Signal size={14} /> Latency
+                                    </span>
+                                    <span className={`font-semibold ${networkStats.latency > 100 ? 'text-yellow-400' : 'text-green-400'}`}>
+                                        {networkStats.latency} ms
+                                    </span>
+                                </div>
+                                {networkStats.packetLoss > 0 && (
+                                    <div className="flex items-center justify-between">
+                                        <span>Packet Loss</span>
+                                        <span className={`font-semibold ${networkStats.packetLoss > 5 ? 'text-red-400' : 'text-green-400'}`}>
+                                            {networkStats.packetLoss}%
+                                        </span>
+                                    </div>
+                                )}
+                                {networkStats.videoResolution !== '0x0' && (
+                                    <div className="flex items-center justify-between">
+                                        <span>Độ phân giải</span>
+                                        <span className="text-white font-semibold">{networkStats.videoResolution}</span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     )}
                 </div>
             </div>

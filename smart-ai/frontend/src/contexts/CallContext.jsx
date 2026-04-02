@@ -3,6 +3,7 @@ import { useSocket } from '../hooks/useSocket';
 import { useAuth } from '../hooks/useAuth';
 import { CallContext } from '.';
 import { startRingtone, stopRingtone } from '../utils/ringtone';
+import { emitToast } from '../utils/toast';
 
 // ── Lazy-load SimplePeer to avoid TDZ errors ───────────────────
 let SimplePeerClass = null;
@@ -67,6 +68,7 @@ export function CallProvider({ children }) {
     const pendingSignalsRef = useRef([]);
     const notifRef = useRef(null);
     const acceptingRef = useRef(false);
+    const callDurationRef = useRef(0);
     const screenStreamRef = useRef(null);
     const originalVideoTrackRef = useRef(null);
 
@@ -80,6 +82,33 @@ export function CallProvider({ children }) {
     const [screenStream, setScreenStream] = useState(null);
     const [remoteScreenSharing, setRemoteScreenSharing] = useState(false);
     const [pipMode, setPipMode] = useState(false);
+
+    // ── Device Selection ──
+    const [availableDevices, setAvailableDevices] = useState({ audio: [], video: [] });
+    const [selectedDevices, setSelectedDevices] = useState({ audioId: '', videoId: '' });
+
+    // ── Network & Quality ──
+    const [videoQuality, setVideoQuality] = useState('auto'); // 'auto', 'low', 'high'
+    const [networkStats, setNetworkStats] = useState({
+        bandwidth: 0,
+        latency: 0,
+        packetLoss: 0,
+        videoResolution: '0x0',
+        connectionState: 'new',
+    });
+
+    // ── Call History (session-based) ──
+    const [callHistory, setCallHistory] = useState(() => {
+        try {
+            const stored = sessionStorage.getItem('callHistory');
+            return stored ? JSON.parse(stored) : [];
+        } catch {
+            return [];
+        }
+    });
+
+    // Refs for stats monitoring
+    const statsIntervalRef = useRef(null);
 
     // Pre-fetched ICE servers (STUN + TURN) — filled on mount
     const iceServersRef = useRef(DEFAULT_ICE_SERVERS);
@@ -121,6 +150,40 @@ export function CallProvider({ children }) {
         fetchIceServers();
     }, []);
 
+    // ── Enumerate available devices on mount ──
+    useEffect(() => {
+        const enumerateDevices = async () => {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const audioDevices = devices.filter(d => d.kind === 'audioinput');
+                const videoDevices = devices.filter(d => d.kind === 'videoinput');
+                setAvailableDevices({ audio: audioDevices, video: videoDevices });
+                // Auto-select first available if not set
+                if (!selectedDevices.audioId && audioDevices.length > 0) {
+                    setSelectedDevices(prev => ({ ...prev, audioId: audioDevices[0].deviceId }));
+                }
+                if (!selectedDevices.videoId && videoDevices.length > 0) {
+                    setSelectedDevices(prev => ({ ...prev, videoId: videoDevices[0].deviceId }));
+                }
+            } catch (err) {
+                console.warn('[Call] enumerateDevices failed:', err.message);
+            }
+        };
+        enumerateDevices();
+        // Listen for device changes
+        navigator.mediaDevices?.addEventListener('devicechange', enumerateDevices);
+        return () => navigator.mediaDevices?.removeEventListener('devicechange', enumerateDevices);
+    }, []);
+
+    // ── Helper: Add call to history ──
+    const addToCallHistory = useCallback((callInfo) => {
+        setCallHistory(prev => {
+            const updated = [...prev, { timestamp: Date.now(), ...callInfo }].slice(-50); // Keep last 50
+            sessionStorage.setItem('callHistory', JSON.stringify(updated));
+            return updated;
+        });
+    }, []);
+
     // ---- Helpers ----
 
     // Keep isGroupRef in sync
@@ -157,6 +220,8 @@ export function CallProvider({ children }) {
         pendingSignalsRef.current = [];
         targetUserIdRef.current = null;
         acceptingRef.current = false;
+        callDurationRef.current = 0;
+        stopStatsMonitoring();
         setLocalStream(null);
         setRemoteStream(null);
         setRemoteStreams({});
@@ -181,12 +246,107 @@ export function CallProvider({ children }) {
 
     const getMediaStream = useCallback(async (type) => {
         console.log('[Call] getMediaStream:', type);
-        const constraints = { audio: true, video: type === 'video' };
+        
+        // Build quality constraints
+        const videoConstraints = type === 'video' ? {
+            deviceId: selectedDevices.videoId ? { ideal: selectedDevices.videoId } : undefined,
+            ...getVideoConstraintsByQuality(videoQuality)
+        } : false;
+
+        const constraints = {
+            audio: selectedDevices.audioId ? { deviceId: { ideal: selectedDevices.audioId } } : true,
+            video: videoConstraints,
+        };
+        
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
         localStreamRef.current = stream;
         setLocalStream(stream);
         console.log('[Call] getMediaStream OK, tracks:', stream.getTracks().map(t => `${t.kind}:${t.readyState}`).join(', '));
         return stream;
+    }, [selectedDevices, videoQuality]);
+
+    // ── Helper: Get video quality constraints ──
+    const getVideoConstraintsByQuality = useCallback((quality) => {
+        switch (quality) {
+            case 'high':
+                return { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } };
+            case 'low':
+                return { width: { ideal: 320 }, height: { ideal: 240 }, frameRate: { ideal: 15 } };
+            case 'auto':
+            default:
+                return { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24 } };
+        }
+    }, []);
+
+    // ── Helper: Change input device ──
+    const changeDevice = useCallback(async (kind, deviceId) => {
+        if (kind === 'audio') {
+            setSelectedDevices(prev => ({ ...prev, audioId: deviceId }));
+            if (localStreamRef.current) {
+                const audioTrack = localStreamRef.current.getAudioTracks()[0];
+                if (audioTrack && deviceId) {
+                    try {
+                        await audioTrack.applyConstraints({ deviceId: { exact: deviceId } });
+                    } catch (err) {
+                        console.error('[Call] Failed to apply audio device:', err.message);
+                    }
+                }
+            }
+        } else if (kind === 'video') {
+            setSelectedDevices(prev => ({ ...prev, videoId: deviceId }));
+            if (localStreamRef.current) {
+                const videoTrack = localStreamRef.current.getVideoTracks()[0];
+                if (videoTrack && deviceId) {
+                    try {
+                        await videoTrack.applyConstraints({ deviceId: { exact: deviceId } });
+                    } catch (err) {
+                        console.error('[Call] Failed to apply video device:', err.message);
+                    }
+                }
+            }
+        }
+    }, []);
+
+    // ── Helper: Start WebRTC stats monitoring ──
+    const startStatsMonitoring = useCallback((peer) => {
+        if (!peer || !peer._pc) return;
+        if (statsIntervalRef.current) clearInterval(statsIntervalRef.current);
+
+        statsIntervalRef.current = setInterval(async () => {
+            try {
+                const stats = await peer._pc.getStats();
+                let bandwidth = 0, latency = 0, packetLoss = 0, videoResolution = '0x0', connectionState = 'new';
+
+                stats.forEach(report => {
+                    if (report.type === 'inbound-rtp' && report.kind === 'video') {
+                        const bytes = report.bytesReceived;
+                        const packets = report.packetsReceived;
+                        const packetsLost = report.packetsLost || 0;
+                        if (packets > 0) {
+                            packetLoss = Math.round((packetsLost / (packets + packetsLost)) * 100);
+                        }
+                        bandwidth = Math.round((bytes * 8) / 1000); // kbps
+                        videoResolution = `${report.frameWidth}x${report.frameHeight}`;
+                    }
+                    if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+                        latency = Math.round(report.currentRoundTripTime * 1000); // ms
+                        connectionState = report.state;
+                    }
+                });
+
+                setNetworkStats({ bandwidth, latency, packetLoss, videoResolution, connectionState });
+            } catch (err) {
+                console.warn('[Call] Stats monitoring error:', err.message);
+            }
+        }, 1000); // Update every second
+    }, []);
+
+    // ── Helper: Stop stats monitoring ──
+    const stopStatsMonitoring = useCallback(() => {
+        if (statsIntervalRef.current) {
+            clearInterval(statsIntervalRef.current);
+            statsIntervalRef.current = null;
+        }
     }, []);
 
     // ── Create peer for 1-1 calls (backward compat) ──
@@ -239,8 +399,10 @@ export function CallProvider({ children }) {
         }
 
         peerRef.current = peer;
+        // Start monitoring stats for this peer
+        startStatsMonitoring(peer);
         return peer;
-    }, [emit]);
+    }, [emit, startStatsMonitoring]);
 
     // ── Create peer for group calls (mesh: one peer per participant) ──
     const createPeerForUser = useCallback(async (targetId, initiator, stream) => {
@@ -304,8 +466,10 @@ export function CallProvider({ children }) {
             delete pendingSignalsGroupRef.current[targetId];
         }
 
+        // Start monitoring stats for this peer
+        startStatsMonitoring(peer);
         return peer;
-    }, [emit, safePeerSignal]);
+    }, [emit, safePeerSignal, startStatsMonitoring]);
 
     // ---- Socket listeners ----
     useEffect(() => {
@@ -343,10 +507,58 @@ export function CallProvider({ children }) {
             });
         };
 
-        const handleCancelled = () => { console.log('[Call] Call cancelled'); cleanup(); };
-        const handleRejected = () => { console.log('[Call] Call rejected'); cleanup(); };
-        const handleEnded = () => { console.log('[Call] Call ended'); cleanup(); };
-        const handleTimeout = () => { console.log('[Call] Call timeout'); cleanup(); };
+        const handleCancelled = () => {
+            console.log('[Call] Call cancelled');
+            // Missed call (caller cancelled before callee answered)
+            if (callState.incoming && !callState.active) {
+                const caller = callState.caller;
+                addToCallHistory({
+                    type: 'missed',
+                    from: caller?.username || 'Unknown',
+                    fromId: caller?._id,
+                    duration: 0,
+                });
+                emitToast(`📞 Cuộc gọi nhỡ từ ${caller?.username || 'ai đó'}`, { duration: 5000 });
+            }
+            cleanup();
+        };
+
+        const handleRejected = () => {
+            console.log('[Call] Call rejected');
+            if (!callState.active) {
+                addToCallHistory({
+                    type: 'rejected',
+                    from: callState.caller?.username || 'Unknown',
+                    fromId: callState.caller?._id,
+                    duration: 0,
+                });
+            }
+            cleanup();
+        };
+
+        const handleEnded = () => {
+            console.log('[Call] Call ended');
+            if (callState.active) {
+                addToCallHistory({
+                    type: 'completed',
+                    from: callState.outgoing ? callState.callee?.username : callState.caller?.username,
+                    fromId: callState.outgoing ? callState.callee?._id : callState.caller?._id,
+                    duration: callDurationRef?.current || 0,
+                });
+            }
+            cleanup();
+        };
+
+        const handleTimeout = () => {
+            console.log('[Call] Call timeout');
+            addToCallHistory({
+                type: 'timeout',
+                from: callState.callee?.username || callState.caller?.username || 'Unknown',
+                fromId: callState.callee?._id || callState.caller?._id,
+                duration: 0,
+            });
+            cleanup();
+        };
 
         // ── 1-1: callee accepted → caller creates initiator peer ──
         const handleAccepted = async ({ userId: acceptedUserId }) => {
@@ -373,6 +585,8 @@ export function CallProvider({ children }) {
                 if (prev.some(p => p._id === joinedUserId)) return prev;
                 return [...prev, { _id: joinedUserId, username, avatar }];
             });
+            // Emit toast notification
+            emitToast(`👤 ${username} đã tham gia cuộc gọi`, { duration: 3000 });
             // Create initiator peer to the new participant
             const stream = localStreamRef.current;
             if (stream) {
@@ -396,6 +610,8 @@ export function CallProvider({ children }) {
         // ── Group: a participant left ──
         const handleParticipantLeft = ({ userId: leftUserId, username }) => {
             console.log('[GroupCall] Participant left:', username, leftUserId);
+            // Emit toast notification
+            emitToast(`👤 ${username} đã rời khỏi cuộc gọi`, { duration: 3000 });
             // Destroy peer for this user
             if (peersRef.current[leftUserId]) {
                 try { peersRef.current[leftUserId].destroy(); } catch { /* ignore */ }
@@ -802,6 +1018,16 @@ export function CallProvider({ children }) {
                 toggleAudio,
                 toggleVideo,
                 toggleScreenShare,
+                // Device Selection
+                availableDevices,
+                selectedDevices,
+                changeDevice,
+                // Network & Quality
+                videoQuality,
+                setVideoQuality,
+                networkStats,
+                // Call History
+                callHistory,
             }}
         >
             {children}
