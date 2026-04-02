@@ -6,6 +6,7 @@
     "strict": true,
     "allowJs": true,
     "strictNullChecks": false,
+    "moduleResolution": "node",
     "esModuleInterop": true,
     "experimentalDecorators": true,
     "skipLibCheck": true,

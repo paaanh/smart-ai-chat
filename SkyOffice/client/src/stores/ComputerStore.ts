@@ -1,4 +1,4 @@
-import Peer from 'peerjs'
+import type { MediaConnection } from 'peerjs'
 import { createSlice, PayloadAction } from '@reduxjs/toolkit'
 import ShareScreenManager from '../web/ShareScreenManager'
 import phaserGame from '../PhaserGame'
@@ -13,7 +13,7 @@ interface ComputerState {
     string,
     {
       stream: MediaStream
-      call: Peer.MediaConnection
+      call: MediaConnection
     }
   >
   shareScreenManager: null | ShareScreenManager
@@ -63,7 +63,7 @@ export const computerSlice = createSlice({
     },
     addVideoStream: (
       state,
-      action: PayloadAction<{ id: string; call: Peer.MediaConnection; stream: MediaStream }>
+      action: PayloadAction<{ id: string; call: MediaConnection; stream: MediaStream }>
     ) => {
       state.peerStreams.set(sanitizeId(action.payload.id), {
         call: action.payload.call,

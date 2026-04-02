@@ -25,7 +25,6 @@ services:
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - METERED_API_KEY=${METERED_API_KEY:-}
       - METERED_DOMAIN=${METERED_DOMAIN:-}
-      - RESEND_API_KEY=${RESEND_API_KEY:-}
     volumes:
       - backend-uploads:/app/uploads
     depends_on:
@@ -50,8 +49,8 @@ services:
       context: ./SkyOffice
       dockerfile: Dockerfile.client
       args:
-        # Nginx reverse-proxies matchmaking + WS to skyoffice-server
-        - VITE_SERVER_URL=ws://localhost:3000
+        # Connect browser client directly to Colyseus server
+        - VITE_SERVER_URL=ws://localhost:2567
     ports:
       - "3000:80"
     depends_on:

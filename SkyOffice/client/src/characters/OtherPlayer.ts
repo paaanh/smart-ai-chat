@@ -38,6 +38,7 @@ export default class OtherPlayer extends Player {
       myPlayer.readyToConnect &&
       this.readyToConnect &&
       myPlayer.videoConnected &&
+      this.videoConnected &&
       myPlayerId > this.playerId
     ) {
       webRTC.connectToNewUser(this.playerId)

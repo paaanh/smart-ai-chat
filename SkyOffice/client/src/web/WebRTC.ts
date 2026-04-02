@@ -1,16 +1,17 @@
-import Peer from 'peerjs'
+import Peer, { type MediaConnection } from 'peerjs'
 import Network from '../services/Network'
 import store from '../stores'
 import { setVideoConnected } from '../stores/UserStore'
 
 export default class WebRTC {
   private myPeer: Peer
-  private peers = new Map<string, { call: Peer.MediaConnection; video: HTMLVideoElement }>()
-  private onCalledPeers = new Map<string, { call: Peer.MediaConnection; video: HTMLVideoElement }>()
+  private peers = new Map<string, { call: MediaConnection; video: HTMLVideoElement }>()
+  private onCalledPeers = new Map<string, { call: MediaConnection; video: HTMLVideoElement }>()
   private videoGrid = document.querySelector('.video-grid')
   private buttonGrid = document.querySelector('.button-grid')
   private myVideo = document.createElement('video')
   private myStream?: MediaStream
+  private buttonsSetUp = false
   private network: Network
 
   constructor(userId: string, network: Network) {
@@ -61,6 +62,8 @@ export default class WebRTC {
   }
 
   getUserMedia(alertOnError = true) {
+    if (this.myStream) return
+
     // ask the browser to get user media
     navigator.mediaDevices
       ?.getUserMedia({
@@ -70,7 +73,10 @@ export default class WebRTC {
       .then((stream) => {
         this.myStream = stream
         this.addVideoStream(this.myVideo, this.myStream)
-        this.setUpButtons()
+        if (!this.buttonsSetUp) {
+          this.setUpButtons()
+          this.buttonsSetUp = true
+        }
         store.dispatch(setVideoConnected(true))
         this.network.videoConnected()
       })
@@ -102,8 +108,11 @@ export default class WebRTC {
   addVideoStream(video: HTMLVideoElement, stream: MediaStream) {
     video.srcObject = stream
     video.playsInline = true
+    video.autoplay = true
     video.addEventListener('loadedmetadata', () => {
-      video.play()
+      video.play().catch((error) => {
+        console.warn('Autoplay blocked for media element. Click the video to resume playback.', error)
+      })
     })
     if (this.videoGrid) this.videoGrid.append(video)
   }

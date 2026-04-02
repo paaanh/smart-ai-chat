@@ -19,8 +19,8 @@ import ChatMessageUpdateCommand from './commands/ChatMessageUpdateCommand'
 
 export class SkyOffice extends Room<OfficeState> {
   private dispatcher = new Dispatcher(this)
-  private name: string
-  private description: string
+  private name: string = ''
+  private description: string = ''
   private password: string | null = null
 
   async onCreate(options: IRoomData) {
@@ -68,7 +68,7 @@ export class SkyOffice extends Room<OfficeState> {
     // when a player stop sharing screen
     this.onMessage(Message.STOP_SCREEN_SHARE, (client, message: { computerId: string }) => {
       const computer = this.state.computers.get(message.computerId)
-      computer.connectedUser.forEach((id) => {
+      computer.connectedUser.forEach((id: string) => {
         this.clients.forEach((cli) => {
           if (cli.sessionId === id && cli.sessionId !== client.sessionId) {
             cli.send(Message.STOP_SCREEN_SHARE, client.sessionId)
@@ -157,6 +157,9 @@ export class SkyOffice extends Room<OfficeState> {
 
   async onAuth(client: Client, options: { password: string | null }) {
     if (this.password) {
+      if (!options.password) {
+        throw new ServerError(403, 'Password is incorrect!')
+      }
       const validPassword = await bcrypt.compare(options.password, this.password)
       if (!validPassword) {
         throw new ServerError(403, 'Password is incorrect!')
@@ -178,20 +181,20 @@ export class SkyOffice extends Room<OfficeState> {
     if (this.state.players.has(client.sessionId)) {
       this.state.players.delete(client.sessionId)
     }
-    this.state.computers.forEach((computer) => {
+    this.state.computers.forEach((computer: Computer) => {
       if (computer.connectedUser.has(client.sessionId)) {
-        computer.connectedUser.delete(client.sessionId)
+      computer.connectedUser.delete(client.sessionId)
       }
     })
-    this.state.whiteboards.forEach((whiteboard) => {
+    this.state.whiteboards.forEach((whiteboard: Whiteboard) => {
       if (whiteboard.connectedUser.has(client.sessionId)) {
-        whiteboard.connectedUser.delete(client.sessionId)
+      whiteboard.connectedUser.delete(client.sessionId)
       }
     })
   }
 
   onDispose() {
-    this.state.whiteboards.forEach((whiteboard) => {
+    this.state.whiteboards.forEach((whiteboard: Whiteboard) => {
       if (whiteboardRoomIds.has(whiteboard.roomId)) whiteboardRoomIds.delete(whiteboard.roomId)
     })
 

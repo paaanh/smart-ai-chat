@@ -124,6 +124,12 @@ const dateFormatter = new Intl.DateTimeFormat('en', {
   dateStyle: 'short',
 })
 
+const EmojiPicker = Picker as unknown as React.ComponentType<{
+  theme?: string
+  perLine?: number
+  onSelect: (emoji: { native: string }) => void
+}>
+
 const Message = ({ chatMessage, messageType }) => {
   const [tooltipOpen, setTooltipOpen] = useState(false)
 
@@ -243,16 +249,14 @@ export default function Chat() {
               <div ref={messagesEndRef} />
               {showEmojiPicker && (
                 <EmojiPickerWrapper>
-                  <Picker
+                  <EmojiPicker
                     theme="dark"
-                    showSkinTones={false}
-                    showPreview={false}
-                    onSelect={(emoji) => {
+                    perLine={7}
+                    onSelect={(emoji: { native: string }) => {
                       setInputValue(inputValue + emoji.native)
                       setShowEmojiPicker(!showEmojiPicker)
                       dispatch(setFocused(true))
                     }}
-                    exclude={['recent', 'flags']}
                   />
                 </EmojiPickerWrapper>
               )}
