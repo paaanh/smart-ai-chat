@@ -7,7 +7,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import ImageModal from './ImageModal';
 import LocationMessage from './LocationMessage';
 import VoiceMessage from './VoiceMessage';
-import { resolveMediaUrl } from '../../services/api';
+import { getMediaUrlCandidates, resolveMediaUrl } from '../../services/api';
 import { useTheme } from '../../hooks/useTheme';
 
 const avatarColors = [
@@ -29,6 +29,7 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
     const [showActions, setShowActions] = useState(false);
     const [lightbox, setLightbox] = useState(null);
     const [imgError, setImgError] = useState(false);
+    const [mediaCandidateIndex, setMediaCandidateIndex] = useState(0);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [shouldShake, setShouldShake] = useState(false);
     const emojiPickerRef = useRef(null);
@@ -48,6 +49,11 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
         document.addEventListener('mousedown', handleClick);
         return () => document.removeEventListener('mousedown', handleClick);
     }, [showEmojiPicker]);
+
+    // Reset media URL fallback chain when message/file changes.
+    useEffect(() => {
+        setMediaCandidateIndex(0);
+    }, [message._id, message.file?.url]);
 
     // Subtle nudge for newly arrived incoming messages.
     useEffect(() => {
@@ -142,7 +148,13 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
     const renderFile = () => {
         if (!message.file) return null;
         const { url, mimeType, name: rawName, size } = message.file;
-        const resolvedUrl = resolveMediaUrl(url);
+        const mediaCandidates = getMediaUrlCandidates(url);
+        const resolvedUrl = mediaCandidates[mediaCandidateIndex] || resolveMediaUrl(url);
+        const tryNextMediaUrl = () => {
+            setMediaCandidateIndex((prev) => (
+                prev < mediaCandidates.length - 1 ? prev + 1 : prev
+            ));
+        };
         let fileName = rawName;
         try { fileName = decodeURIComponent(rawName); } catch { /* already decoded */ }
 
@@ -152,13 +164,14 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                     src={resolvedUrl}
                     alt={fileName}
                     className="max-w-70 rounded-lg mt-1 cursor-pointer hover:opacity-90"
+                    onError={tryNextMediaUrl}
                     onClick={() => setLightbox({ src: resolvedUrl, alt: fileName })}
                 />
             );
         }
         if (message.type === 'video' || mimeType?.startsWith('video/')) {
             return (
-                <video src={resolvedUrl} controls className="max-w-70 rounded-lg mt-1" />
+                <video src={resolvedUrl} controls className="max-w-70 rounded-lg mt-1" onError={tryNextMediaUrl} />
             );
         }
         if (mimeType?.startsWith('audio/')) {

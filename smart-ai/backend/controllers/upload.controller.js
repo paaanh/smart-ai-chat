@@ -2,25 +2,19 @@ const path = require('path');
 
 const trimTrailingSlashes = (value = '') => String(value).replace(/\/+$/, '');
 
-const getPublicBaseUrl = (req) => {
+const getPublicBaseUrl = () => {
     if (process.env.PUBLIC_BASE_URL) {
         return trimTrailingSlashes(process.env.PUBLIC_BASE_URL);
     }
 
-    const forwardedProto = req.headers['x-forwarded-proto'];
-    const protocol = forwardedProto || req.protocol || 'http';
-    const host = req.get('host');
-
-    if (!host) {
-        return '';
-    }
-
-    return `${protocol}://${host}`;
+    // Default to relative upload paths to avoid wrong host/protocol
+    // when requests pass through reverse proxies (Render/Vercel/Nginx).
+    return '';
 };
 
 const buildFileUrl = (req, filename) => {
     const relativePath = `/uploads/${filename}`;
-    const baseUrl = getPublicBaseUrl(req);
+    const baseUrl = getPublicBaseUrl();
 
     return baseUrl ? `${baseUrl}${relativePath}` : relativePath;
 };

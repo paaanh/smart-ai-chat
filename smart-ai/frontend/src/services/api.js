@@ -8,33 +8,153 @@
 import axios from 'axios';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
+const MEDIA_BASE = import.meta.env.VITE_MEDIA_URL || '';
 
 const isAbsoluteUrl = (value) => /^https?:\/\//i.test(value || '');
+const isLocalhost = (hostname = '') => /^(localhost|127\.0\.0\.1)$/i.test(hostname);
 
-const getApiOrigin = () => {
-    if (!isAbsoluteUrl(API_BASE)) {
-        return typeof window !== 'undefined' ? window.location.origin : '';
+const getWindowOrigin = () => (
+    typeof window !== 'undefined' ? window.location.origin : ''
+);
+
+const toOrigin = (value = '') => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+
+    if (!isAbsoluteUrl(raw)) {
+        const windowOrigin = getWindowOrigin();
+        if (!windowOrigin) return '';
+        try {
+            return new URL(raw, `${windowOrigin}/`).origin;
+        } catch {
+            return windowOrigin;
+        }
     }
 
     try {
-        return new URL(API_BASE).origin;
+        return new URL(raw).origin;
     } catch {
         return '';
     }
 };
 
-export const resolveMediaUrl = (value) => {
-    if (!value) return value;
-    if (isAbsoluteUrl(value) || value.startsWith('blob:') || value.startsWith('data:')) {
-        return value;
+const getApiOrigin = () => {
+    return toOrigin(API_BASE);
+};
+
+const addCandidate = (list, value) => {
+    if (!value) return;
+    if (!list.includes(value)) {
+        list.push(value);
+    }
+};
+
+const buildAbsoluteUrl = (origin, pathOrUrl) => {
+    if (!origin || !pathOrUrl) return '';
+    try {
+        return new URL(pathOrUrl, `${origin}/`).toString();
+    } catch {
+        return '';
+    }
+};
+
+const normalizeUploadPath = (value = '') => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+
+    const splitIndex = raw.search(/[?#]/);
+    const pathname = splitIndex >= 0 ? raw.slice(0, splitIndex) : raw;
+    const suffix = splitIndex >= 0 ? raw.slice(splitIndex) : '';
+
+    const normalizedPathname = pathname
+        .replace(/^\/?api\/uploads\//i, '/uploads/')
+        .replace(/^\/?uploads\//i, '/uploads/');
+
+    if (/^\/uploads\//i.test(normalizedPathname)) {
+        return `${normalizedPathname}${suffix}`;
     }
 
+    // Support legacy values stored as plain filename (no leading slash/path).
+    if (!normalizedPathname.startsWith('/') && /\.[a-z0-9]{2,5}$/i.test(normalizedPathname)) {
+        return `/uploads/${normalizedPathname}${suffix}`;
+    }
+
+    return `${normalizedPathname}${suffix}`;
+};
+
+const isUploadLikePath = (value = '') => {
+    const raw = String(value || '');
+    return (
+        /^\/?api\/uploads\//i.test(raw)
+        || /^\/?uploads\//i.test(raw)
+        || /^[^/?#]+\.[a-z0-9]{2,5}([?#].*)?$/i.test(raw)
+    );
+};
+
+export const getMediaUrlCandidates = (value) => {
+    if (!value) return [];
+
+    const raw = String(value);
+    if (raw.startsWith('blob:') || raw.startsWith('data:')) {
+        return [raw];
+    }
+
+    const mediaOrigin = toOrigin(MEDIA_BASE);
     const apiOrigin = getApiOrigin();
-    if (!apiOrigin) {
-        return value;
+    const browserOrigin = getWindowOrigin();
+    const preferredOrigins = [mediaOrigin, apiOrigin, browserOrigin].filter(Boolean);
+    const candidates = [];
+
+    if (isAbsoluteUrl(raw)) {
+        let parsedUrl;
+        try {
+            parsedUrl = new URL(raw);
+        } catch {
+            return [raw];
+        }
+
+        const pathnameWithQuery = `${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`;
+        const uploadPath = normalizeUploadPath(pathnameWithQuery);
+        const uploadLike = isUploadLikePath(parsedUrl.pathname);
+
+        if (!uploadLike) {
+            return [raw];
+        }
+
+        // Prioritize API/media origins for localhost or mismatched proxy hosts.
+        const shouldSwapOriginFirst = isLocalhost(parsedUrl.hostname)
+            || (apiOrigin && parsedUrl.origin !== apiOrigin)
+            || (mediaOrigin && parsedUrl.origin !== mediaOrigin);
+
+        if (shouldSwapOriginFirst) {
+            preferredOrigins.forEach((origin) => addCandidate(candidates, buildAbsoluteUrl(origin, uploadPath)));
+        }
+
+        addCandidate(candidates, raw);
+
+        if (!shouldSwapOriginFirst) {
+            preferredOrigins.forEach((origin) => addCandidate(candidates, buildAbsoluteUrl(origin, uploadPath)));
+        }
+
+        return candidates;
     }
 
-    return new URL(value, `${apiOrigin}/`).toString();
+    const normalizedPath = normalizeUploadPath(raw);
+    const uploadLike = isUploadLikePath(raw);
+
+    if (uploadLike) {
+        preferredOrigins.forEach((origin) => addCandidate(candidates, buildAbsoluteUrl(origin, normalizedPath)));
+    }
+
+    addCandidate(candidates, normalizedPath);
+    addCandidate(candidates, raw);
+
+    return candidates;
+};
+
+export const resolveMediaUrl = (value) => {
+    const candidates = getMediaUrlCandidates(value);
+    return candidates[0] || value;
 };
 
 const api = axios.create({
