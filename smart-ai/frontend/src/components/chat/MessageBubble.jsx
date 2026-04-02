@@ -66,6 +66,52 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
     const isPixelTheme = themeId === 'pixel-art';
     const isNeonTheme = themeId === 'neon-night';
 
+    const renderLinkedText = (text, linkClassName = '') => {
+        if (text == null || text === '') return null;
+
+        const input = String(text);
+        const urlRegex = /((?:https?:\/\/|www\.)[^\s<]+)/gi;
+        const trailingPunctuationRegex = /[)\].,!?;:]+$/;
+        const nodes = [];
+        let lastIndex = 0;
+
+        input.replace(urlRegex, (match, _group, offset) => {
+            if (offset > lastIndex) {
+                nodes.push(input.slice(lastIndex, offset));
+            }
+
+            const trailingMatch = match.match(trailingPunctuationRegex);
+            const trailing = trailingMatch ? trailingMatch[0] : '';
+            const linkText = trailing ? match.slice(0, -trailing.length) : match;
+            const href = linkText.startsWith('www.') ? `https://${linkText}` : linkText;
+
+            nodes.push(
+                <a
+                    key={`${offset}-${linkText}`}
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`underline underline-offset-2 break-all hover:opacity-90 ${linkClassName}`.trim()}
+                >
+                    {linkText}
+                </a>
+            );
+
+            if (trailing) {
+                nodes.push(trailing);
+            }
+
+            lastIndex = offset + match.length;
+            return match;
+        });
+
+        if (lastIndex < input.length) {
+            nodes.push(input.slice(lastIndex));
+        }
+
+        return nodes;
+    };
+
     const triggerReactionEffect = async (emoji) => {
         if (!['❤️', '👍', '😂', '😯'].includes(emoji)) return;
         try {
@@ -363,12 +409,24 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                         Bạn đã trả lời ghi chú của họ
                                     </p>
                                     <div className={`px-3 py-1.5 rounded-lg text-xs ${isOwn ? 'bg-white/15 text-white/80' : 'bg-gray-200/70 text-gray-600'}`}>
-                                        {message.replyToNote}
+                                        {renderLinkedText(
+                                            message.replyToNote,
+                                            isOwn ? 'text-white' : 'text-[var(--color-primary)]'
+                                        )}
                                     </div>
                                 </div>
                             )}
                             {displayText && message.type !== 'location' && (
-                                <p className="text-sm whitespace-pre-wrap wrap-break-word">{displayText}</p>
+                                <p className="text-sm whitespace-pre-wrap wrap-break-word">
+                                    {renderLinkedText(
+                                        displayText,
+                                        isOwn
+                                            ? 'text-white'
+                                            : isAI
+                                                ? 'text-purple-600'
+                                                : 'text-[var(--color-primary)]'
+                                    )}
+                                </p>
                             )}
                             {message.type === 'location' && message.location && (
                                 <LocationMessage location={message.location} isOwn={isOwn} />
@@ -401,7 +459,7 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                 </button>
                                 {showTranslation && (
                                     <div className="bg-[var(--color-primary-light)] border border-[var(--color-primary-medium)] px-3 py-2 rounded-xl text-sm text-[var(--color-primary-dark)] ml-2">
-                                        {message.content}
+                                        {renderLinkedText(message.content, 'text-[var(--color-primary-dark)]')}
                                     </div>
                                 )}
                             </div>
@@ -415,7 +473,7 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                     <span>Dịch tự động</span>
                                 </div>
                                 <div className="bg-purple-50 border border-purple-100 px-3 py-1.5 rounded-xl text-sm text-purple-800">
-                                    {localTranslation}
+                                    {renderLinkedText(localTranslation, 'text-purple-800')}
                                 </div>
                             </div>
                         )}
