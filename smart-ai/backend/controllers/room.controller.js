@@ -269,7 +269,7 @@ exports.setNickname = async (req, res, next) => {
             content: systemContent,
         });
         const populatedSystemMsg = await Message.findById(systemMsg._id)
-            .populate('sender', 'username avatar googlePicture preferredLanguage');
+            .populate('sender', 'username avatar googlePicture preferredLanguage preferredBubbleFrame');
 
         // Emit realtime nickname update to all room members
         const io = req.app.get('io');
@@ -574,10 +574,10 @@ exports.pinMessage = async (req, res, next) => {
             content: `${pinner?.username || '?'} đã ghim một tin nhắn`,
         });
         const populatedSystemMsg = await Message.findById(systemMsg._id)
-            .populate('sender', 'username avatar googlePicture preferredLanguage');
+            .populate('sender', 'username avatar googlePicture preferredLanguage preferredBubbleFrame');
 
         const populatedPinnedMsg = await Message.findById(messageId)
-            .populate('sender', 'username avatar googlePicture')
+            .populate('sender', 'username avatar googlePicture preferredBubbleFrame')
             .lean();
 
         const io = req.app.get('io');
@@ -651,7 +651,7 @@ exports.forwardMessage = async (req, res, next) => {
         });
 
         const populated = await Message.findById(forwardedMsg._id)
-            .populate('sender', 'username avatar googlePicture preferredLanguage');
+            .populate('sender', 'username avatar googlePicture preferredLanguage preferredBubbleFrame');
 
         await Room.findByIdAndUpdate(targetRoomId, { lastMessage: forwardedMsg._id });
 

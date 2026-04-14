@@ -18,6 +18,24 @@ const LANGUAGE_LABELS = {
     ar: 'العربية',
 };
 
+const SUPPORTED_BUBBLE_FRAMES = [
+    'classic-blue',
+    'capybara-red',
+    'frog-green',
+    'cat-yellow',
+    'violet-grape',
+    'pink-heart',
+    'dolphin-lavender',
+    'hamster-orange',
+    'peach-doge',
+    'duck-blue',
+    'ladybug-red',
+    'llama-mint',
+    'dog-brown',
+    'spark-lime',
+    'hug-rose',
+];
+
 const userSchema = new mongoose.Schema({
     username: {
         type: String,
@@ -102,6 +120,13 @@ const userSchema = new mongoose.Schema({
         type: String,
         default: 'blue',
         enum: ['blue', 'red', 'purple', 'yellow', 'brown', 'dark', 'light', 'midnight-purple', 'solarized', 'glassmorphism', 'retro-terminal'],
+    },
+
+    // ===== KHUNG BONG BONG CHAT =====
+    preferredBubbleFrame: {
+        type: String,
+        default: 'classic-blue',
+        enum: SUPPORTED_BUBBLE_FRAMES,
     },
 
     status: {
@@ -212,4 +237,4 @@ userSchema.methods.toJSON = function () {
 
 const User = mongoose.model('User', userSchema);
 
-module.exports = { User, SUPPORTED_LANGUAGES, LANGUAGE_LABELS };
+module.exports = { User, SUPPORTED_LANGUAGES, LANGUAGE_LABELS, SUPPORTED_BUBBLE_FRAMES };

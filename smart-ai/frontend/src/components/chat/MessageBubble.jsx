@@ -119,10 +119,6 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
     const isPixelTheme = themeId === 'pixel-art';
     const isNeonTheme = themeId === 'neon-night';
     const isDarkTheme = ['dark', 'midnight-purple', 'glassmorphism', 'retro-terminal', 'neon-night'].includes(themeId);
-    const ownBubbleFrame = getChatBubbleFrameById(bubbleFrameId);
-    const ownBubbleClass = ownBubbleFrame?.bubbleClass || 'bg-[var(--color-primary)] text-white';
-    const ownMetaTextClass = ownBubbleFrame?.metaTextClass || 'text-white/70';
-    const ownBadgeClass = ownBubbleFrame?.badgeClass || 'bg-white/90 text-[var(--color-primary)] border-white/70';
 
     const trailingPunctuationRegex = /[)\].,!?;:]+$/;
 
@@ -370,7 +366,13 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
     const emojiMatches = [...String(displayText || '').matchAll(/\p{Extended_Pictographic}/gu)];
     const isEmojiOnlyMessage = !!displayText?.trim() && emojiOnlyRegex.test(displayText.trim()) && !message.file && message.type !== 'location' && !isStickerMessage;
     const emojiSizeClass = emojiMatches.length <= 2 ? 'text-5xl leading-tight' : emojiMatches.length <= 4 ? 'text-4xl leading-tight' : 'text-3xl leading-tight';
-    const showOwnFrameBadge = isOwn && !isEmojiOnlyMessage && !isStickerMessage && message.type !== 'location';
+    const senderFrameId = message.sender?.preferredBubbleFrame || (isOwn ? bubbleFrameId : 'classic-blue');
+    const senderBubbleFrame = getChatBubbleFrameById(senderFrameId);
+    const senderBubbleClass = senderBubbleFrame?.bubbleClass || 'bg-[var(--color-primary)] text-white';
+    const senderMetaTextClass = senderBubbleFrame?.metaTextClass || 'text-white/70';
+    const senderBadgeClass = senderBubbleFrame?.badgeClass || 'bg-white/90 text-[var(--color-primary)] border-white/70';
+    const useSenderFrameStyle = !isAI && !isEmojiOnlyMessage && !isStickerMessage && message.type !== 'location';
+    const showSenderFrameBadge = useSenderFrameStyle;
 
     const readByOthers = (message.readBy || []).filter((entry) => {
         const readerId = entry?.user?._id || entry?.user;
@@ -448,31 +450,31 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                 target="_blank"
                 rel="noopener noreferrer"
                 className={`flex items-center gap-3 mt-1 px-3 py-2.5 rounded-2xl max-w-[280px] w-fit cursor-pointer transition-all duration-150 group/file
-                    ${isOwn
+                    ${useSenderFrameStyle
                         ? 'bg-white/15 hover:bg-white/25'
                         : 'bg-[var(--color-primary-light)] hover:bg-[var(--color-primary-medium)]'
                     }`}
                 download
             >
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0
-                    ${isOwn
+                    ${useSenderFrameStyle
                         ? 'bg-white/20'
                         : 'bg-[var(--color-primary-light)]'
                     }`}
                 >
-                    <IconComponent size={20} className={isOwn ? 'text-white' : 'text-[var(--color-primary)]'} />
+                    <IconComponent size={20} className={useSenderFrameStyle ? 'text-white' : 'text-[var(--color-primary)]'} />
                 </div>
                 <div className="min-w-0 flex-1">
-                    <p className={`text-sm font-medium truncate ${isOwn ? 'text-white' : 'text-[var(--text-primary)]'}`}>
+                    <p className={`text-sm font-medium truncate ${useSenderFrameStyle ? 'text-white' : 'text-[var(--text-primary)]'}`}>
                         {fileName || 'file'}
                     </p>
                     {size > 0 && (
-                        <p className={`text-xs mt-0.5 ${isOwn ? 'text-white/60' : 'text-[var(--text-tertiary)]'}`}>
+                        <p className={`text-xs mt-0.5 ${useSenderFrameStyle ? 'text-white/60' : 'text-[var(--text-tertiary)]'}`}>
                             {formatSize(size)}
                         </p>
                     )}
                 </div>
-                <Download size={16} className={`shrink-0 opacity-0 group-hover/file:opacity-100 transition-opacity ${isOwn ? 'text-white/70' : 'text-[var(--text-tertiary)]'}`} />
+                <Download size={16} className={`shrink-0 opacity-0 group-hover/file:opacity-100 transition-opacity ${useSenderFrameStyle ? 'text-white/70' : 'text-[var(--text-tertiary)]'}`} />
             </a>
         );
     };
@@ -629,8 +631,8 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                         ? isDarkTheme
                                             ? 'bg-[var(--color-primary-light)] text-[var(--text-primary)] border border-gray-200'
                                             : 'bg-purple-50 text-purple-900 border border-purple-100'
-                                        : isOwn
-                                            ? ownBubbleClass
+                                        : useSenderFrameStyle
+                                            ? senderBubbleClass
                                             : 'bg-gray-100 text-gray-900'
                                 } ${selectionMode && isSelected ? 'ring-2 ring-[var(--color-primary)] ring-offset-1' : ''} ${isPixelTheme ? 'pixel-bubble font-pixel' : ''} ${isNeonTheme ? 'neon-bubble' : ''}`}
                             onDoubleClick={() => {
@@ -641,42 +643,42 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                             animate={shouldShake ? { x: [0, -2, 2, -1, 1, 0] } : { x: 0 }}
                             transition={{ duration: 0.36, ease: 'easeInOut' }}
                         >
-                            {showOwnFrameBadge && (
+                            {showSenderFrameBadge && (
                                 <span
-                                    className={`absolute -top-2 -right-2 z-[2] w-6 h-6 rounded-full border text-[11px] leading-none flex items-center justify-center shadow-sm ${ownBadgeClass}`}
-                                    title={ownBubbleFrame?.name || 'Khung chat'}
+                                    className={`absolute -top-2 -right-2 z-[2] w-6 h-6 rounded-full border text-[11px] leading-none flex items-center justify-center shadow-sm ${senderBadgeClass}`}
+                                    title={senderBubbleFrame?.name || 'Khung chat'}
                                 >
-                                    {ownBubbleFrame?.icon || '💬'}
+                                    {senderBubbleFrame?.icon || '💬'}
                                 </span>
                             )}
 
                             {/* Forward indicator */}
                             {message.forwardedFrom && (
-                                <p className={`text-[10px] mb-1 flex items-center gap-1 ${isOwn ? 'text-white/60' : 'text-gray-400'}`}>
+                                <p className={`text-[10px] mb-1 flex items-center gap-1 ${useSenderFrameStyle ? 'text-white/70' : 'text-gray-400'}`}>
                                     <Forward size={10} /> Chuyển tiếp từ {message.forwardedFrom.senderName || 'Unknown'}
                                 </p>
                             )}
 
                             {/* Pin indicator */}
                             {message.pinned && (
-                                <p className={`text-[10px] mb-1 flex items-center gap-1 ${isOwn ? 'text-white/60' : 'text-gray-400'}`}>
+                                <p className={`text-[10px] mb-1 flex items-center gap-1 ${useSenderFrameStyle ? 'text-white/70' : 'text-gray-400'}`}>
                                     <Pin size={10} /> Đã ghim
                                 </p>
                             )}
                             {/* Reply to Note quote */}
                             {message.replyToNote && (
                                 <div className="mb-1.5">
-                                    <p className={`text-[10px] mb-1 ${isOwn ? 'text-white/60' : 'text-gray-400'}`}>
+                                    <p className={`text-[10px] mb-1 ${useSenderFrameStyle ? 'text-white/70' : 'text-gray-400'}`}>
                                         Bạn đã trả lời ghi chú của họ
                                     </p>
-                                    <div className={`px-3 py-1.5 rounded-lg text-xs ${isOwn ? 'bg-white/15 text-white/80' : 'bg-gray-200/70 text-gray-600'}`}>
+                                    <div className={`px-3 py-1.5 rounded-lg text-xs ${useSenderFrameStyle ? 'bg-white/15 text-white/85' : 'bg-gray-200/70 text-gray-600'}`}>
                                         {renderRichText(
                                             message.replyToNote,
                                             {
-                                                linkClassName: isOwn ? 'text-white' : 'text-[var(--color-primary)]',
-                                                mentionClassName: isOwn ? 'font-semibold text-white' : 'font-semibold text-sky-700',
-                                                inlineCodeClassName: isOwn ? 'bg-white/20' : 'bg-black/10',
-                                                codeBlockClassName: isOwn ? 'bg-white/15' : 'bg-black/10',
+                                                linkClassName: useSenderFrameStyle ? 'text-white' : 'text-[var(--color-primary)]',
+                                                mentionClassName: useSenderFrameStyle ? 'font-semibold text-white' : 'font-semibold text-sky-700',
+                                                inlineCodeClassName: useSenderFrameStyle ? 'bg-white/20' : 'bg-black/10',
+                                                codeBlockClassName: useSenderFrameStyle ? 'bg-white/15' : 'bg-black/10',
                                             }
                                         )}
                                     </div>
@@ -692,16 +694,16 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                     {renderRichText(
                                         displayText,
                                         {
-                                            linkClassName: isOwn
+                                            linkClassName: useSenderFrameStyle
                                                 ? 'text-white'
                                                 : isAI
                                                     ? isDarkTheme
                                                         ? 'text-[var(--color-primary-dark)]'
                                                         : 'text-purple-600'
                                                     : 'text-[var(--color-primary)]',
-                                            mentionClassName: isOwn ? 'font-semibold text-white' : 'font-semibold text-sky-700',
-                                            inlineCodeClassName: isOwn ? 'bg-white/20' : 'bg-black/10',
-                                            codeBlockClassName: isOwn ? 'bg-white/15' : 'bg-black/10',
+                                            mentionClassName: useSenderFrameStyle ? 'font-semibold text-white' : 'font-semibold text-sky-700',
+                                            inlineCodeClassName: useSenderFrameStyle ? 'bg-white/20' : 'bg-black/10',
+                                            codeBlockClassName: useSenderFrameStyle ? 'bg-white/15' : 'bg-black/10',
                                         }
                                     )}
                                 </p>
@@ -726,7 +728,7 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                                 target="_blank"
                                                 rel="noopener noreferrer"
                                                 className={`flex items-center gap-2 rounded-xl px-2.5 py-2 border text-xs transition hover:opacity-90
-                                                    ${isOwn
+                                                    ${useSenderFrameStyle
                                                         ? 'border-white/30 bg-white/10 text-white'
                                                         : 'border-gray-200 bg-white text-gray-700'
                                                     }`}
@@ -741,11 +743,11 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                                 />
                                                 <div className="min-w-0 flex-1">
                                                     <p className="font-medium truncate">{hostname}</p>
-                                                    <p className={`truncate ${isOwn ? 'text-white/80' : 'text-gray-500'}`}>
+                                                    <p className={`truncate ${useSenderFrameStyle ? 'text-white/80' : 'text-gray-500'}`}>
                                                         {pathname || link.text}
                                                     </p>
                                                 </div>
-                                                <ExternalLink size={12} className={isOwn ? 'text-white/80' : 'text-gray-500'} />
+                                                <ExternalLink size={12} className={useSenderFrameStyle ? 'text-white/80' : 'text-gray-500'} />
                                             </motion.a>
                                         );
                                     })}
@@ -753,7 +755,7 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                             )}
                             {embeddableMedia && (
                                 <motion.div
-                                    className={`mt-2 overflow-hidden rounded-xl border ${isOwn ? 'border-white/30' : 'border-gray-200'}`}
+                                    className={`mt-2 overflow-hidden rounded-xl border ${useSenderFrameStyle ? 'border-white/30' : 'border-gray-200'}`}
                                     initial={{ opacity: 0, y: 8 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ duration: 0.2 }}
@@ -779,8 +781,8 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                     ? isDarkTheme
                                         ? 'text-gray-400'
                                         : 'text-purple-400'
-                                    : isOwn
-                                        ? ownMetaTextClass
+                                    : useSenderFrameStyle
+                                        ? senderMetaTextClass
                                         : 'text-gray-400'
                                     }`}
                                 title={format(new Date(message.createdAt), 'HH:mm:ss - dd/MM/yyyy')}
@@ -789,7 +791,7 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                             </p>
                             {isOwn && message.type !== 'system' && (
                                 <p
-                                    className={`text-[10px] ${isOwn ? ownMetaTextClass : 'text-gray-400'}`}
+                                    className={`text-[10px] ${senderMetaTextClass}`}
                                     title={message.pending ? 'Tin nhắn đang chờ xác nhận từ server' : 'Trạng thái xem tin nhắn'}
                                 >
                                     {message.pending

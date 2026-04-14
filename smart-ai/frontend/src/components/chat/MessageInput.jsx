@@ -1,13 +1,15 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Send, Paperclip, Smile, X, Loader2, MapPin, Mic, ThumbsUp, Lock } from 'lucide-react';
-import { uploadAPI } from '../../services/api';
+import { uploadAPI, userAPI } from '../../services/api';
 import { useLockCountdown } from '../../hooks/useLockCountdown';
 import { emitToast } from '../../utils/toast';
 import { useTheme } from '../../hooks/useTheme';
+import { useAuth } from '../../hooks/useAuth';
 
 export default function MessageInput({ onSend, onSendLocation, onTyping, disabled, lockUntil, onLockExpire, replyContext, onCancelReply }) {
     const { isLocked, timeDisplay } = useLockCountdown(lockUntil);
     const { bubbleFrameId, changeBubbleFrame, bubbleFrames } = useTheme();
+    const { user, updateUser } = useAuth();
     const [text, setText] = useState('');
     const [file, setFile] = useState(null);
     const [showFramePicker, setShowFramePicker] = useState(false);
@@ -133,7 +135,24 @@ export default function MessageInput({ onSend, onSendLocation, onTyping, disable
     const handleFrameSelect = useCallback((frameId) => {
         changeBubbleFrame(frameId);
         setShowFramePicker(false);
-    }, [changeBubbleFrame]);
+
+        if (user && updateUser) {
+            updateUser({
+                ...user,
+                preferredBubbleFrame: frameId,
+            });
+        }
+
+        userAPI.updateProfile({ preferredBubbleFrame: frameId })
+            .then(({ data }) => {
+                if (data?.user && updateUser) {
+                    updateUser(data.user);
+                }
+            })
+            .catch((error) => {
+                console.error('Update bubble frame error:', error);
+            });
+    }, [changeBubbleFrame, user, updateUser]);
 
     const handleFileSelect = (e) => {
         const f = e.target.files?.[0];

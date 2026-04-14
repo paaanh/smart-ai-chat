@@ -1,10 +1,10 @@
-const { User, SUPPORTED_LANGUAGES, LANGUAGE_LABELS } = require('../models/User');
+const { User, SUPPORTED_LANGUAGES, LANGUAGE_LABELS, SUPPORTED_BUBBLE_FRAMES } = require('../models/User');
 const { buildFileUrl } = require('./upload.controller');
 
 // ─── Cập nhật profile (hỗ trợ upload avatar + cover) ──────────────────
 exports.updateProfile = async (req, res, next) => {
     try {
-        const { username, preferredLanguage, bio, phoneNumber, address, education, hobbies } = req.body;
+        const { username, preferredLanguage, bio, phoneNumber, address, education, hobbies, preferredBubbleFrame } = req.body;
         const updates = {};
 
         if (username) updates.username = username;
@@ -18,6 +18,10 @@ exports.updateProfile = async (req, res, next) => {
         if (preferredLanguage && SUPPORTED_LANGUAGES.includes(preferredLanguage)) {
             updates.preferredLanguage = preferredLanguage;
             updates.preferredLanguageLabel = LANGUAGE_LABELS[preferredLanguage];
+        }
+
+        if (preferredBubbleFrame && SUPPORTED_BUBBLE_FRAMES.includes(preferredBubbleFrame)) {
+            updates.preferredBubbleFrame = preferredBubbleFrame;
         }
 
         const validThemes = ['blue', 'red', 'purple', 'yellow', 'brown', 'dark', 'light'];
@@ -72,7 +76,7 @@ exports.searchUsers = async (req, res, next) => {
                 { email: { $regex: q, $options: 'i' } },
             ],
         })
-            .select('username email avatar status preferredLanguage preferredLanguageLabel')
+            .select('username email avatar status preferredLanguage preferredLanguageLabel preferredBubbleFrame')
             .limit(20);
 
         res.json({ users });
@@ -94,7 +98,7 @@ exports.getSupportedLanguages = (req, res) => {
 exports.getUserById = async (req, res, next) => {
     try {
         const user = await User.findById(req.params.id)
-            .select('username email avatar coverPicture bio phoneNumber address education hobbies status preferredLanguage preferredLanguageLabel lastSeen createdAt');
+            .select('username email avatar coverPicture bio phoneNumber address education hobbies status preferredLanguage preferredLanguageLabel preferredBubbleFrame lastSeen createdAt');
 
         if (!user) {
             return res.status(404).json({ error: 'User không tồn tại' });

@@ -52,6 +52,14 @@ export function ThemeProvider({ children }) {
     const [bubbleFrameId, setBubbleFrameId] = useState(() => {
         const saved = localStorage.getItem('chatBubbleFrame');
         if (saved && isValidChatBubbleFrame(saved)) return saved;
+        try {
+            const user = JSON.parse(localStorage.getItem('user'));
+            if (user?.preferredBubbleFrame && isValidChatBubbleFrame(user.preferredBubbleFrame)) {
+                return user.preferredBubbleFrame;
+            }
+        } catch {
+            // Ignore malformed localStorage user payload.
+        }
         return DEFAULT_CHAT_BUBBLE_FRAME;
     });
 
@@ -76,6 +84,18 @@ export function ThemeProvider({ children }) {
         if (!isValidChatBubbleFrame(newFrameId)) return;
         setBubbleFrameId(newFrameId);
         localStorage.setItem('chatBubbleFrame', newFrameId);
+
+        try {
+            const cachedUser = JSON.parse(localStorage.getItem('user'));
+            if (cachedUser && typeof cachedUser === 'object') {
+                localStorage.setItem('user', JSON.stringify({
+                    ...cachedUser,
+                    preferredBubbleFrame: newFrameId,
+                }));
+            }
+        } catch {
+            // Ignore malformed localStorage user payload.
+        }
     }, []);
 
     return (

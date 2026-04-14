@@ -92,7 +92,7 @@ module.exports = (io, socket) => {
             const message = await Message.create(messageData);
 
             const populatedMessage = await Message.findById(message._id)
-                .populate('sender', 'username avatar googlePicture preferredLanguage');
+                .populate('sender', 'username avatar googlePicture preferredLanguage preferredBubbleFrame');
 
             // Cập nhật lastMessage
             await Room.findByIdAndUpdate(roomId, { lastMessage: message._id });
@@ -283,7 +283,7 @@ module.exports = (io, socket) => {
             });
 
             const populated = await Message.findById(message._id)
-                .populate('sender', 'username avatar googlePicture preferredLanguage');
+                .populate('sender', 'username avatar googlePicture preferredLanguage preferredBubbleFrame');
 
             await Room.findByIdAndUpdate(roomId, { lastMessage: message._id });
             io.to(roomId).emit('message:received', { message: populated });
@@ -314,7 +314,7 @@ module.exports = (io, socket) => {
             });
 
             const populated = await Message.findById(message._id)
-                .populate('sender', 'username avatar googlePicture preferredLanguage');
+                .populate('sender', 'username avatar googlePicture preferredLanguage preferredBubbleFrame');
 
             await Room.findByIdAndUpdate(roomId, { lastMessage: message._id });
             io.to(roomId).emit('message:received', { message: populated });

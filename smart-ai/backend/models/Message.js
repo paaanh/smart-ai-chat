@@ -125,7 +125,7 @@ messageSchema.statics.getByRoom = async function (roomId, { page = 1, limit = 50
         filter.deletedFor = { $ne: userId };
     }
     const messages = await this.find(filter)
-        .populate('sender', 'username avatar googlePicture preferredLanguage')
+        .populate('sender', 'username avatar googlePicture preferredLanguage preferredBubbleFrame')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)

@@ -124,7 +124,7 @@ exports.replyNote = async (req, res, next) => {
         });
 
         const populatedMessage = await Message.findById(message._id)
-            .populate('sender', 'username avatar googlePicture preferredLanguage');
+              .populate('sender', 'username avatar googlePicture preferredLanguage preferredBubbleFrame');
 
         // Update lastMessage on the room
         await Room.findByIdAndUpdate(room._id, { lastMessage: message._id });
