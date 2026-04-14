@@ -52,6 +52,7 @@ exports.updateProfile = async (req, res, next) => {
                 username: user.username,
                 avatar: user.avatar,
                 bio: user.bio,
+                preferredBubbleFrame: user.preferredBubbleFrame,
             });
         }
 

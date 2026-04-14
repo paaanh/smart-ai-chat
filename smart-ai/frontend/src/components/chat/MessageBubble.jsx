@@ -366,7 +366,9 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
     const emojiMatches = [...String(displayText || '').matchAll(/\p{Extended_Pictographic}/gu)];
     const isEmojiOnlyMessage = !!displayText?.trim() && emojiOnlyRegex.test(displayText.trim()) && !message.file && message.type !== 'location' && !isStickerMessage;
     const emojiSizeClass = emojiMatches.length <= 2 ? 'text-5xl leading-tight' : emojiMatches.length <= 4 ? 'text-4xl leading-tight' : 'text-3xl leading-tight';
-    const senderFrameId = message.sender?.preferredBubbleFrame || (isOwn ? bubbleFrameId : 'classic-blue');
+    const senderFrameId = isOwn
+        ? bubbleFrameId
+        : (message.sender?.preferredBubbleFrame || 'classic-blue');
     const senderBubbleFrame = getChatBubbleFrameById(senderFrameId);
     const senderBubbleClass = senderBubbleFrame?.bubbleClass || 'bg-[var(--color-primary)] text-white';
     const senderMetaTextClass = senderBubbleFrame?.metaTextClass || 'text-white/70';

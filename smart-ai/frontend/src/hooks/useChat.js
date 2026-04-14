@@ -124,6 +124,30 @@ export function useChat(roomId) {
             );
         };
 
+        const handleUserProfileUpdated = ({ userId, username, avatar, preferredBubbleFrame }) => {
+            if (!userId) return;
+            setMessages((prev) =>
+                prev.map((m) => {
+                    const senderId = m.sender?._id || m.sender;
+                    if (String(senderId || '') !== String(userId)) return m;
+
+                    if (m.sender && typeof m.sender === 'object') {
+                        return {
+                            ...m,
+                            sender: {
+                                ...m.sender,
+                                username: username ?? m.sender.username,
+                                avatar: avatar ?? m.sender.avatar,
+                                preferredBubbleFrame: preferredBubbleFrame ?? m.sender.preferredBubbleFrame,
+                            },
+                        };
+                    }
+
+                    return m;
+                })
+            );
+        };
+
         on('message:received', handleNewMessage);
         on('message:deleted', handleDeleted);
         on('room:typing', handleTyping);
@@ -133,6 +157,7 @@ export function useChat(roomId) {
         on('poll:updated', handlePollUpdated);
         on('message:pinned', handlePinned);
         on('message:read-update', handleReadUpdate);
+        on('user:profile-updated', handleUserProfileUpdated);
 
         // Join room
         emit('room:join', { roomId });
@@ -147,6 +172,7 @@ export function useChat(roomId) {
             off('poll:updated', handlePollUpdated);
             off('message:pinned', handlePinned);
             off('message:read-update', handleReadUpdate);
+            off('user:profile-updated', handleUserProfileUpdated);
             emit('room:leave', { roomId });
         };
     }, [roomId, connected, on, off, emit]);
