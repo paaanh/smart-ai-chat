@@ -4,6 +4,9 @@ const { User } = require('../models/User');
 const { translateForRoom, getTranslationForUser } = require('../services/translation.service');
 const { filterMessage } = require('../utils/badWordFilter');
 
+const STICKER_MESSAGE_PREFIX = '__smartsticker__:';
+const isStickerPayload = (content) => typeof content === 'string' && content.startsWith(STICKER_MESSAGE_PREFIX);
+
 module.exports = (io, socket) => {
     const userId = socket.user._id;
 
@@ -56,8 +59,10 @@ module.exports = (io, socket) => {
             // ── Bad word filter ──
             let filteredContent = content;
             if (type === 'text' && content) {
-                const { filtered } = await filterMessage(content);
-                filteredContent = filtered;
+                if (!isStickerPayload(content)) {
+                    const { filtered } = await filterMessage(content);
+                    filteredContent = filtered;
+                }
             }
 
             // ── Tạo message ──
@@ -119,7 +124,7 @@ module.exports = (io, socket) => {
             // ═════════════════════════════════════════════════════════════════
             // BƯỚC 2: Dịch thuật ASYNC (fire-and-forget, không block UX)
             // ═════════════════════════════════════════════════════════════════
-            if (type === 'text' && filteredContent && filteredContent.trim().length >= 2) {
+            if (type === 'text' && filteredContent && filteredContent.trim().length >= 2 && !isStickerPayload(filteredContent)) {
                 translateForRoom(io, roomId, message._id, filteredContent, senderLanguage)
                     .catch(err => console.error('Translation error:', err.message));
             }

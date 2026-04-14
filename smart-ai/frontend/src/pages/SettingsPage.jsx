@@ -5,7 +5,7 @@ import { useLanguage } from '../hooks/useLanguage';
 import { userAPI } from '../services/api';
 import { ArrowLeft, Loader2, Check, Palette, Phone } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion } from 'framer-motion'; // eslint-disable-line no-unused-vars
 
 export default function SettingsPage() {
     const { user, updateUser, logout } = useAuth();

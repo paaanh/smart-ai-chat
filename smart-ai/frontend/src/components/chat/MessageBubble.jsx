@@ -1,14 +1,17 @@
 import { useAuth } from '../../hooks/useAuth';
 import { format } from 'date-fns';
-import { Bot, Trash2, Globe, ChevronDown, ChevronUp, FileText, FileArchive, FileSpreadsheet, FileImage, FileVideo, FileAudio, File, Download, SmilePlus, Forward, Pin, Copy, Check, ExternalLink } from 'lucide-react';
+import { Bot, Trash2, Globe, ChevronDown, ChevronUp, FileText, FileArchive, FileSpreadsheet, FileImage, FileVideo, FileAudio, File, Download, SmilePlus, Forward, Pin, Copy, Check, ExternalLink, Smile } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion'; // eslint-disable-line no-unused-vars
 import ImageModal from './ImageModal';
 import LocationMessage from './LocationMessage';
 import VoiceMessage from './VoiceMessage';
+import StickerCard from './StickerCard';
 import { getMediaUrlCandidates, resolveMediaUrl } from '../../services/api';
 import { useTheme } from '../../hooks/useTheme';
+import { parseStickerPayload } from '../../utils/stickers';
+import { getChatBubbleFrameById } from '../../config/chatBubbleFrames';
 
 const avatarColors = [
     'bg-red-500', 'bg-[var(--color-primary)]', 'bg-green-500', 'bg-yellow-500',
@@ -72,7 +75,7 @@ function getEmbeddableMedia(links = []) {
 
 export default function MessageBubble({ message, isOwn, onDelete, onReact, nicknames, localTranslation, onForward, onPinMessage, onVotePoll, selectionMode = false, isSelected = false, onToggleSelect, onQuickReply }) {
     const { user } = useAuth();
-    const { themeId } = useTheme();
+    const { themeId, bubbleFrameId } = useTheme();
     const navigate = useNavigate();
     const [showTranslation, setShowTranslation] = useState(false);
     const [showActions, setShowActions] = useState(false);
@@ -116,6 +119,10 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
     const isPixelTheme = themeId === 'pixel-art';
     const isNeonTheme = themeId === 'neon-night';
     const isDarkTheme = ['dark', 'midnight-purple', 'glassmorphism', 'retro-terminal', 'neon-night'].includes(themeId);
+    const ownBubbleFrame = getChatBubbleFrameById(bubbleFrameId);
+    const ownBubbleClass = ownBubbleFrame?.bubbleClass || 'bg-[var(--color-primary)] text-white';
+    const ownMetaTextClass = ownBubbleFrame?.metaTextClass || 'text-white/70';
+    const ownBadgeClass = ownBubbleFrame?.badgeClass || 'bg-white/90 text-[var(--color-primary)] border-white/70';
 
     const trailingPunctuationRegex = /[)\].,!?;:]+$/;
 
@@ -291,9 +298,11 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
     };
 
     const handleCopyMessage = async () => {
-        if (!message.content) return;
+        const stickerPayload = parseStickerPayload(message.content);
+        const copyValue = stickerPayload ? `[Sticker:${stickerPayload.stickerId}]` : message.content;
+        if (!copyValue) return;
         try {
-            await navigator.clipboard.writeText(message.content);
+            await navigator.clipboard.writeText(copyValue);
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
         } catch {
@@ -350,15 +359,18 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
     // Find translation for current user's language
     const myLang = user?.preferredLanguage || localStorage.getItem('preferredLanguage') || 'vi';
     const translation = message.translations?.find((t) => t.language === myLang);
+    const stickerPayload = parseStickerPayload(message.content);
+    const isStickerMessage = message.type === 'text' && !!stickerPayload;
 
     // Prioritize translation for non-own messages
-    const hasTranslation = !!(translation && !isOwn && message.originalLanguage && message.originalLanguage !== myLang);
-    const displayText = hasTranslation ? translation.content : message.content;
+    const hasTranslation = !isStickerMessage && !!(translation && !isOwn && message.originalLanguage && message.originalLanguage !== myLang);
+    const displayText = isStickerMessage ? '' : (hasTranslation ? translation.content : message.content);
     const messageLinks = extractLinks(displayText);
     const embeddableMedia = getEmbeddableMedia(messageLinks);
     const emojiMatches = [...String(displayText || '').matchAll(/\p{Extended_Pictographic}/gu)];
-    const isEmojiOnlyMessage = !!displayText?.trim() && emojiOnlyRegex.test(displayText.trim()) && !message.file && message.type !== 'location';
+    const isEmojiOnlyMessage = !!displayText?.trim() && emojiOnlyRegex.test(displayText.trim()) && !message.file && message.type !== 'location' && !isStickerMessage;
     const emojiSizeClass = emojiMatches.length <= 2 ? 'text-5xl leading-tight' : emojiMatches.length <= 4 ? 'text-4xl leading-tight' : 'text-3xl leading-tight';
+    const showOwnFrameBadge = isOwn && !isEmojiOnlyMessage && !isStickerMessage && message.type !== 'location';
 
     const readByOthers = (message.readBy || []).filter((entry) => {
         const readerId = entry?.user?._id || entry?.user;
@@ -606,19 +618,19 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                         {/* Main bubble */}
                         <motion.div
                             ref={bubbleRef}
-                            className={`rounded-2xl ${message.type === 'location'
+                            className={`relative rounded-2xl ${message.type === 'location'
                                 ? 'overflow-hidden'
-                                : isEmojiOnlyMessage
+                                : isEmojiOnlyMessage || isStickerMessage
                                     ? 'px-1 py-0'
                                     : 'px-4 py-2.5'
-                                } ${isEmojiOnlyMessage
+                                } ${isEmojiOnlyMessage || isStickerMessage
                                     ? 'bg-transparent border-transparent shadow-none'
                                     : isAI
                                         ? isDarkTheme
                                             ? 'bg-[var(--color-primary-light)] text-[var(--text-primary)] border border-gray-200'
                                             : 'bg-purple-50 text-purple-900 border border-purple-100'
                                         : isOwn
-                                            ? 'bg-[var(--color-primary)] text-white'
+                                            ? ownBubbleClass
                                             : 'bg-gray-100 text-gray-900'
                                 } ${selectionMode && isSelected ? 'ring-2 ring-[var(--color-primary)] ring-offset-1' : ''} ${isPixelTheme ? 'pixel-bubble font-pixel' : ''} ${isNeonTheme ? 'neon-bubble' : ''}`}
                             onDoubleClick={() => {
@@ -629,6 +641,15 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                             animate={shouldShake ? { x: [0, -2, 2, -1, 1, 0] } : { x: 0 }}
                             transition={{ duration: 0.36, ease: 'easeInOut' }}
                         >
+                            {showOwnFrameBadge && (
+                                <span
+                                    className={`absolute -top-2 -right-2 z-[2] w-6 h-6 rounded-full border text-[11px] leading-none flex items-center justify-center shadow-sm ${ownBadgeClass}`}
+                                    title={ownBubbleFrame?.name || 'Khung chat'}
+                                >
+                                    {ownBubbleFrame?.icon || '💬'}
+                                </span>
+                            )}
+
                             {/* Forward indicator */}
                             {message.forwardedFrom && (
                                 <p className={`text-[10px] mb-1 flex items-center gap-1 ${isOwn ? 'text-white/60' : 'text-gray-400'}`}>
@@ -659,6 +680,11 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                             }
                                         )}
                                     </div>
+                                </div>
+                            )}
+                            {isStickerMessage && stickerPayload?.sticker && (
+                                <div className="py-0.5">
+                                    <StickerCard sticker={stickerPayload.sticker} size="lg" />
                                 </div>
                             )}
                             {displayText && message.type !== 'location' && (
@@ -754,7 +780,7 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                         ? 'text-gray-400'
                                         : 'text-purple-400'
                                     : isOwn
-                                        ? 'text-white/70'
+                                        ? ownMetaTextClass
                                         : 'text-gray-400'
                                     }`}
                                 title={format(new Date(message.createdAt), 'HH:mm:ss - dd/MM/yyyy')}
@@ -763,7 +789,7 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                             </p>
                             {isOwn && message.type !== 'system' && (
                                 <p
-                                    className={`text-[10px] ${isOwn ? 'text-white/70' : 'text-gray-400'}`}
+                                    className={`text-[10px] ${isOwn ? ownMetaTextClass : 'text-gray-400'}`}
                                     title={message.pending ? 'Tin nhắn đang chờ xác nhận từ server' : 'Trạng thái xem tin nhắn'}
                                 >
                                     {message.pending
@@ -864,6 +890,18 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                         <Pin size={14} />
                                     </motion.button>
                                 )}
+                                <motion.button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        window.dispatchEvent(new CustomEvent('chat:open-bubble-frame-picker'));
+                                    }}
+                                    className="p-1 text-gray-400 hover:text-fuchsia-500 transition"
+                                    title="Đổi khung chat"
+                                    whileHover={{ scale: 1.08 }}
+                                    whileTap={{ scale: 0.92 }}
+                                >
+                                    <Smile size={14} />
+                                </motion.button>
                             </div>
                         )}
 

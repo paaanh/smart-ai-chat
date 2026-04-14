@@ -6,7 +6,7 @@ import { useSocket } from '../../hooks/useSocket';
 import { useCall } from '../../hooks/useCall';
 import { useChat } from '../../hooks/useChat';
 import { useAI } from '../../hooks/useAI';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion'; // eslint-disable-line no-unused-vars
 import MessageBubble from './MessageBubble';
 import MessageInput from './MessageInput';
 import AIToggle from './AIToggle';
@@ -14,6 +14,7 @@ import ForwardModal from './ForwardModal';
 import PollCreator from './PollCreator';
 import PinnedHeader from './PinnedHeader';
 import SkeletonBlock from '../ui/SkeletonBlock';
+import { isStickerPayload } from '../../utils/stickers';
 import { format } from 'date-fns';
 import {
     Phone,
@@ -310,6 +311,7 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
             const senderId = msg.sender?._id || msg.sender;
             if (senderId === user?._id) continue; // Skip own messages
             if (msg.type !== 'text' && msg.type !== undefined) continue; // Only text
+            if (isStickerPayload(msg.content)) continue;
             if (!msg.content || msg.content.trim().length < 2) continue;
             if (msg.deleted) continue;
             if (msg.aiMetadata?.isAIResponse) continue;
@@ -445,7 +447,9 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
         const senderId = msg.sender?._id || msg.sender;
         const nickname = senderId && room?.nicknames?.[senderId];
         const senderName = nickname || msg.sender?.username || 'Người dùng';
-        const contentPreview = msg.content?.trim() || msg.file?.name || `[${msg.type || 'text'}]`;
+        const contentPreview = isStickerPayload(msg.content)
+            ? '[Sticker]'
+            : (msg.content?.trim() || msg.file?.name || `[${msg.type || 'text'}]`);
 
         setReplyDraft({
             messageId: msg._id,
@@ -486,7 +490,9 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
             const senderId = msg.sender?._id || msg.sender;
             const nickname = senderId && room?.nicknames?.[senderId];
             const senderName = nickname || msg.sender?.username || (senderId === user?._id ? 'Bạn' : 'Người dùng');
-            const body = msg.content || msg.file?.name || `[${msg.type || 'text'}]`;
+            const body = isStickerPayload(msg.content)
+                ? '[Sticker]'
+                : (msg.content || msg.file?.name || `[${msg.type || 'text'}]`);
             return `${senderName} (${format(new Date(msg.createdAt), 'HH:mm')}): ${body}`;
         });
 
@@ -525,7 +531,7 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
     // Listen for poll updates
     useEffect(() => {
         if (!roomId) return;
-        const handlePollUpdated = ({ messageId, poll }) => {
+        const handlePollUpdated = () => {
             // useChat will handle updating messages via message:received
             // but poll:updated is a separate event, so we need to refresh
             // The messages state is managed by useChat, we can emit a custom event

@@ -1,18 +1,22 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { Send, Paperclip, Smile, X, Loader2, MapPin, Mic, Square, ThumbsUp, Lock } from 'lucide-react';
+import { Send, Paperclip, Smile, X, Loader2, MapPin, Mic, ThumbsUp, Lock } from 'lucide-react';
 import { uploadAPI } from '../../services/api';
 import { useLockCountdown } from '../../hooks/useLockCountdown';
 import { emitToast } from '../../utils/toast';
+import { useTheme } from '../../hooks/useTheme';
 
 export default function MessageInput({ onSend, onSendLocation, onTyping, disabled, lockUntil, onLockExpire, replyContext, onCancelReply }) {
     const { isLocked, timeDisplay } = useLockCountdown(lockUntil);
+    const { bubbleFrameId, changeBubbleFrame, bubbleFrames } = useTheme();
     const [text, setText] = useState('');
     const [file, setFile] = useState(null);
+    const [showFramePicker, setShowFramePicker] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [isDraggingFile, setIsDraggingFile] = useState(false);
     const fileInputRef = useRef(null);
     const inputRef = useRef(null);
     const dragDepthRef = useRef(0);
+    const framePickerRef = useRef(null);
 
     // Voice recording state
     const [recording, setRecording] = useState(false);
@@ -32,6 +36,28 @@ export default function MessageInput({ onSend, onSendLocation, onTyping, disable
     useEffect(() => {
         return () => { if (previewUrl) URL.revokeObjectURL(previewUrl); };
     }, [previewUrl]);
+
+    useEffect(() => {
+        if (!showFramePicker) return;
+        const handleOutsideClick = (event) => {
+            if (framePickerRef.current && !framePickerRef.current.contains(event.target)) {
+                setShowFramePicker(false);
+            }
+        };
+        document.addEventListener('mousedown', handleOutsideClick);
+        return () => document.removeEventListener('mousedown', handleOutsideClick);
+    }, [showFramePicker]);
+
+    useEffect(() => {
+        const handleOpenFramePicker = () => {
+            if (disabled || isLocked) return;
+            setShowFramePicker(true);
+            inputRef.current?.focus();
+        };
+
+        window.addEventListener('chat:open-bubble-frame-picker', handleOpenFramePicker);
+        return () => window.removeEventListener('chat:open-bubble-frame-picker', handleOpenFramePicker);
+    }, [disabled, isLocked]);
 
     // Paste image handler
     const handlePaste = (e) => {
@@ -78,6 +104,7 @@ export default function MessageInput({ onSend, onSendLocation, onTyping, disable
         }
 
         setText('');
+        setShowFramePicker(false);
         inputRef.current?.focus();
     };
 
@@ -99,8 +126,14 @@ export default function MessageInput({ onSend, onSendLocation, onTyping, disable
             emitToast('File tối đa 50MB.', { type: 'error' });
             return;
         }
+        setShowFramePicker(false);
         setFile(selectedFile);
     }, []);
+
+    const handleFrameSelect = useCallback((frameId) => {
+        changeBubbleFrame(frameId);
+        setShowFramePicker(false);
+    }, [changeBubbleFrame]);
 
     const handleFileSelect = (e) => {
         const f = e.target.files?.[0];
@@ -412,7 +445,7 @@ export default function MessageInput({ onSend, onSendLocation, onTyping, disable
                         />
                     </div>
 
-                    {/* Send or Like button */}
+                    {/* Send button or quick actions */}
                     {text.trim() || file ? (
                         <button
                             type="submit"
@@ -426,15 +459,58 @@ export default function MessageInput({ onSend, onSendLocation, onTyping, disable
                             )}
                         </button>
                     ) : (
-                        <button
-                            type="button"
-                            onClick={() => onSend('👍', 'text')}
-                            disabled={disabled}
-                            className="p-2.5 text-[var(--color-primary)] hover:bg-gray-100 rounded-full transition disabled:opacity-50 shrink-0"
-                            title="Gửi like"
-                        >
-                            <ThumbsUp size={22} />
-                        </button>
+                        <div className="relative flex items-center gap-1 shrink-0" ref={framePickerRef}>
+                            <button
+                                type="button"
+                                onClick={() => setShowFramePicker((prev) => !prev)}
+                                disabled={disabled}
+                                className={`p-2.5 rounded-full transition disabled:opacity-50 ${showFramePicker ? 'bg-[var(--color-primary-light)] text-[var(--color-primary)]' : 'text-[var(--color-primary)] hover:bg-gray-100'}`}
+                                title="Đổi khung chat"
+                            >
+                                <Smile size={22} />
+                            </button>
+
+                            {showFramePicker && (
+                                <div className="absolute bottom-full right-0 mb-2 w-[336px] max-w-[calc(100vw-2rem)] rounded-3xl border border-gray-200 bg-white p-3 shadow-2xl z-20">
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {bubbleFrames.map((frame) => (
+                                            <button
+                                                key={frame.id}
+                                                type="button"
+                                                onClick={() => handleFrameSelect(frame.id)}
+                                                className={`rounded-2xl border p-1.5 transition ${bubbleFrameId === frame.id
+                                                    ? 'border-[var(--color-primary)] ring-2 ring-[var(--color-primary-light)]'
+                                                    : 'border-gray-200 hover:border-[var(--color-primary-medium)]'
+                                                }`}
+                                                title={frame.name}
+                                            >
+                                                <div className={`relative h-10 rounded-full ${frame.bubbleClass}`}>
+                                                    <span
+                                                        className={`absolute -top-1 -right-1 w-[18px] h-[18px] rounded-full border text-[9px] leading-none flex items-center justify-center ${frame.badgeClass}`}
+                                                    >
+                                                        {frame.icon}
+                                                    </span>
+                                                    <span
+                                                        className={`absolute left-1.5 bottom-1.5 w-2 h-2 rounded-full ${frame.pickerDotClass || 'bg-black/30'}`}
+                                                    />
+                                                    <span className="absolute right-1.5 top-1.5 w-1.5 h-1.5 rounded-full bg-white/80" />
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <button
+                                type="button"
+                                onClick={() => onSend('👍', 'text')}
+                                disabled={disabled}
+                                className="p-2.5 text-[var(--color-primary)] hover:bg-gray-100 rounded-full transition disabled:opacity-50 shrink-0"
+                                title="Gửi like"
+                            >
+                                <ThumbsUp size={22} />
+                            </button>
+                        </div>
                     )}
                 </form>
             )}

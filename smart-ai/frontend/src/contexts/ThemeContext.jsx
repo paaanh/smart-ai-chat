@@ -7,7 +7,13 @@
  */
 import { useState, useEffect, useCallback, createContext } from 'react';
 import { THEMES, DEFAULT_THEME } from '../config/themes';
+import {
+    CHAT_BUBBLE_FRAMES,
+    DEFAULT_CHAT_BUBBLE_FRAME,
+    isValidChatBubbleFrame,
+} from '../config/chatBubbleFrames';
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const ThemeContext = createContext(null);
 
 function applyTheme(themeId) {
@@ -43,6 +49,11 @@ export function ThemeProvider({ children }) {
         } catch { /* ignore */ }
         return DEFAULT_THEME;
     });
+    const [bubbleFrameId, setBubbleFrameId] = useState(() => {
+        const saved = localStorage.getItem('chatBubbleFrame');
+        if (saved && isValidChatBubbleFrame(saved)) return saved;
+        return DEFAULT_CHAT_BUBBLE_FRAME;
+    });
 
     // Apply CSS variables whenever theme changes
     useEffect(() => {
@@ -61,12 +72,21 @@ export function ThemeProvider({ children }) {
         }
     }, []);
 
+    const changeBubbleFrame = useCallback((newFrameId) => {
+        if (!isValidChatBubbleFrame(newFrameId)) return;
+        setBubbleFrameId(newFrameId);
+        localStorage.setItem('chatBubbleFrame', newFrameId);
+    }, []);
+
     return (
         <ThemeContext.Provider
             value={{
                 themeId,
                 changeTheme,
                 themes: THEMES,
+                bubbleFrameId,
+                changeBubbleFrame,
+                bubbleFrames: CHAT_BUBBLE_FRAMES,
             }}
         >
             {children}

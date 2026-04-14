@@ -1,0 +1,148 @@
+export const DEFAULT_CHAT_BUBBLE_FRAME = 'classic-blue';
+
+export const CHAT_BUBBLE_FRAMES = [
+    {
+        id: 'classic-blue',
+        name: 'Xanh mac dinh',
+        icon: '💙',
+        bubbleClass: 'bg-gradient-to-br from-blue-400 via-blue-500 to-indigo-500 text-white border border-blue-300/70 shadow-[0_10px_22px_rgba(59,130,246,0.35)]',
+        metaTextClass: 'text-white/70',
+        badgeClass: 'bg-white/90 text-[var(--color-primary)] border-white/70',
+        pickerDotClass: 'bg-blue-700/70',
+    },
+    {
+        id: 'capybara-red',
+        name: 'Capybara do',
+        icon: '🦫',
+        bubbleClass: 'bg-gradient-to-br from-rose-400 via-rose-500 to-red-500 text-white border border-rose-300/70 shadow-[0_10px_22px_rgba(244,63,94,0.35)]',
+        metaTextClass: 'text-rose-100',
+        badgeClass: 'bg-white/90 text-rose-500 border-rose-200',
+        pickerDotClass: 'bg-rose-700/70',
+    },
+    {
+        id: 'frog-green',
+        name: 'Ech xanh',
+        icon: '🐸',
+        bubbleClass: 'bg-gradient-to-br from-emerald-400 via-emerald-500 to-green-600 text-white border border-emerald-300/60 shadow-[0_10px_22px_rgba(16,185,129,0.34)]',
+        metaTextClass: 'text-emerald-100',
+        badgeClass: 'bg-white/90 text-emerald-500 border-emerald-200',
+        pickerDotClass: 'bg-green-800/70',
+    },
+    {
+        id: 'cat-yellow',
+        name: 'Meo vang',
+        icon: '🐱',
+        bubbleClass: 'bg-gradient-to-br from-yellow-300 via-amber-400 to-orange-400 text-white border border-amber-200/80 shadow-[0_10px_20px_rgba(245,158,11,0.35)]',
+        metaTextClass: 'text-amber-100',
+        badgeClass: 'bg-white/90 text-amber-500 border-amber-200',
+        pickerDotClass: 'bg-amber-700/70',
+    },
+    {
+        id: 'violet-grape',
+        name: 'Nho tim',
+        icon: '🍇',
+        bubbleClass: 'bg-gradient-to-br from-slate-400 via-violet-500 to-purple-600 text-white border border-violet-300/70 shadow-[0_10px_20px_rgba(124,58,237,0.35)]',
+        metaTextClass: 'text-violet-100',
+        badgeClass: 'bg-white/90 text-violet-500 border-violet-200',
+        pickerDotClass: 'bg-violet-800/70',
+    },
+    {
+        id: 'pink-heart',
+        name: 'Tim hong',
+        icon: '💚',
+        bubbleClass: 'bg-gradient-to-br from-fuchsia-300 via-pink-400 to-rose-400 text-white border border-pink-200/80 shadow-[0_10px_20px_rgba(236,72,153,0.32)]',
+        metaTextClass: 'text-pink-100',
+        badgeClass: 'bg-white/90 text-pink-500 border-pink-200',
+        pickerDotClass: 'bg-pink-700/70',
+    },
+    {
+        id: 'dolphin-lavender',
+        name: 'Ca heo',
+        icon: '🐬',
+        bubbleClass: 'bg-gradient-to-br from-indigo-300 via-violet-300 to-sky-300 text-white border border-indigo-200/90 shadow-[0_10px_20px_rgba(99,102,241,0.28)]',
+        metaTextClass: 'text-indigo-100',
+        badgeClass: 'bg-white/90 text-indigo-500 border-indigo-200',
+        pickerDotClass: 'bg-indigo-700/70',
+    },
+    {
+        id: 'hamster-orange',
+        name: 'Hamster',
+        icon: '🐹',
+        bubbleClass: 'bg-gradient-to-br from-orange-300 via-orange-400 to-amber-500 text-white border border-orange-200/80 shadow-[0_10px_20px_rgba(249,115,22,0.34)]',
+        metaTextClass: 'text-orange-100',
+        badgeClass: 'bg-white/90 text-orange-500 border-orange-200',
+        pickerDotClass: 'bg-orange-700/70',
+    },
+    {
+        id: 'peach-doge',
+        name: 'Doge dao',
+        icon: '👍',
+        bubbleClass: 'bg-gradient-to-br from-amber-400 via-orange-400 to-rose-400 text-white border border-orange-200/80 shadow-[0_10px_20px_rgba(251,146,60,0.28)]',
+        metaTextClass: 'text-white/75',
+        badgeClass: 'bg-white/90 text-orange-500 border-orange-200',
+        pickerDotClass: 'bg-orange-800/70',
+    },
+    {
+        id: 'duck-blue',
+        name: 'Vit xanh',
+        icon: '🦆',
+        bubbleClass: 'bg-gradient-to-br from-cyan-300 via-sky-300 to-blue-400 text-white border border-sky-200/80 shadow-[0_10px_20px_rgba(14,165,233,0.3)]',
+        metaTextClass: 'text-sky-100',
+        badgeClass: 'bg-white/90 text-sky-500 border-sky-200',
+        pickerDotClass: 'bg-sky-700/70',
+    },
+    {
+        id: 'ladybug-red',
+        name: 'Bo hung',
+        icon: '🪲',
+        bubbleClass: 'bg-gradient-to-br from-rose-300 via-red-400 to-pink-500 text-white border border-rose-200/80 shadow-[0_10px_20px_rgba(244,63,94,0.36)]',
+        metaTextClass: 'text-rose-100',
+        badgeClass: 'bg-white/90 text-rose-500 border-rose-200',
+        pickerDotClass: 'bg-rose-800/70',
+    },
+    {
+        id: 'llama-mint',
+        name: 'Llama mint',
+        icon: '🦙',
+        bubbleClass: 'bg-gradient-to-br from-cyan-300 via-teal-300 to-emerald-300 text-white border border-teal-200/80 shadow-[0_10px_20px_rgba(45,212,191,0.3)]',
+        metaTextClass: 'text-teal-100',
+        badgeClass: 'bg-white/90 text-teal-500 border-teal-200',
+        pickerDotClass: 'bg-teal-800/70',
+    },
+    {
+        id: 'dog-brown',
+        name: 'Cho nau',
+        icon: '🐶',
+        bubbleClass: 'bg-gradient-to-br from-amber-700 via-amber-600 to-orange-700 text-white border border-amber-500/70 shadow-[0_10px_20px_rgba(146,64,14,0.42)]',
+        metaTextClass: 'text-amber-100',
+        badgeClass: 'bg-white/90 text-amber-700 border-amber-200',
+        pickerDotClass: 'bg-amber-900/70',
+    },
+    {
+        id: 'spark-lime',
+        name: 'Lime spark',
+        icon: '✨',
+        bubbleClass: 'bg-gradient-to-br from-lime-300 via-lime-400 to-emerald-400 text-white border border-lime-200/80 shadow-[0_10px_20px_rgba(132,204,22,0.34)]',
+        metaTextClass: 'text-lime-100',
+        badgeClass: 'bg-white/90 text-lime-600 border-lime-200',
+        pickerDotClass: 'bg-lime-800/70',
+    },
+    {
+        id: 'hug-rose',
+        name: 'Hug rose',
+        icon: '🥰',
+        bubbleClass: 'bg-gradient-to-br from-rose-300 via-pink-400 to-fuchsia-400 text-white border border-rose-200/80 shadow-[0_10px_20px_rgba(244,114,182,0.33)]',
+        metaTextClass: 'text-rose-100',
+        badgeClass: 'bg-white/90 text-rose-500 border-rose-200',
+        pickerDotClass: 'bg-rose-700/70',
+    },
+];
+
+export function getChatBubbleFrameById(frameId) {
+    return CHAT_BUBBLE_FRAMES.find((frame) => frame.id === frameId)
+        || CHAT_BUBBLE_FRAMES[0];
+}
+
+export function isValidChatBubbleFrame(frameId) {
+    return CHAT_BUBBLE_FRAMES.some((frame) => frame.id === frameId);
+}
