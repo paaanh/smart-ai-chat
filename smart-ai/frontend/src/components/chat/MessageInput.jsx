@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { Send, Paperclip, Smile, X, Loader2, MapPin, Mic, ThumbsUp, Lock } from 'lucide-react';
+import { Send, Paperclip, Smile, X, Loader2, MapPin, Mic, ThumbsUp, Lock, Check } from 'lucide-react';
+import { AnimatePresence, motion as Motion, useReducedMotion } from 'framer-motion';
 import { uploadAPI, userAPI } from '../../services/api';
 import { useLockCountdown } from '../../hooks/useLockCountdown';
 import { emitToast } from '../../utils/toast';
@@ -7,6 +8,7 @@ import { useTheme } from '../../hooks/useTheme';
 import { useAuth } from '../../hooks/useAuth';
 
 export default function MessageInput({ onSend, onSendLocation, onTyping, disabled, lockUntil, onLockExpire, replyContext, onCancelReply }) {
+    const reduceMotion = useReducedMotion();
     const { isLocked, timeDisplay } = useLockCountdown(lockUntil);
     const { bubbleFrameId, changeBubbleFrame, bubbleFrames } = useTheme();
     const { user, updateUser } = useAuth();
@@ -46,8 +48,23 @@ export default function MessageInput({ onSend, onSendLocation, onTyping, disable
                 setShowFramePicker(false);
             }
         };
+
+        const handleEscape = (event) => {
+            if (event.key !== 'Escape') return;
+            event.preventDefault();
+            setShowFramePicker(false);
+            inputRef.current?.focus();
+        };
+
         document.addEventListener('mousedown', handleOutsideClick);
-        return () => document.removeEventListener('mousedown', handleOutsideClick);
+        document.addEventListener('touchstart', handleOutsideClick);
+        document.addEventListener('keydown', handleEscape);
+
+        return () => {
+            document.removeEventListener('mousedown', handleOutsideClick);
+            document.removeEventListener('touchstart', handleOutsideClick);
+            document.removeEventListener('keydown', handleEscape);
+        };
     }, [showFramePicker]);
 
     useEffect(() => {
@@ -300,7 +317,7 @@ export default function MessageInput({ onSend, onSendLocation, onTyping, disable
     };
 
     return (
-        <div className="border-t border-gray-200 bg-white p-3">
+        <div className="border-t theme-border theme-surface p-3">
             {/* Lock countdown banner */}
             {isLocked && (
                 <div className="flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-xl px-4 py-3">
@@ -337,15 +354,15 @@ export default function MessageInput({ onSend, onSendLocation, onTyping, disable
 
             {/* File preview */}
             {file && (
-                <div className="flex items-center gap-2 mb-2 bg-gray-50 px-3 py-2 rounded-lg">
+                <div className="flex items-center gap-2 mb-2 theme-muted-surface px-3 py-2 rounded-lg">
                     {previewUrl ? (
                         <img src={previewUrl} alt="preview" className="w-16 h-16 object-cover rounded-md" />
                     ) : (
-                        <Paperclip size={14} className="text-gray-500" />
+                        <Paperclip size={14} className="text-[var(--text-tertiary)]" />
                     )}
-                    <span className="text-sm text-gray-700 truncate flex-1">{file.name}</span>
-                    <span className="text-xs text-gray-400">{(file.size / 1024 / 1024).toFixed(1)} MB</span>
-                    <button onClick={() => setFile(null)} className="text-gray-400 hover:text-red-500">
+                    <span className="text-sm text-[var(--text-secondary)] truncate flex-1">{file.name}</span>
+                    <span className="text-xs text-[var(--text-tertiary)]">{(file.size / 1024 / 1024).toFixed(1)} MB</span>
+                    <button onClick={() => setFile(null)} className="text-[var(--text-tertiary)] hover:text-red-500">
                         <X size={16} />
                     </button>
                 </div>
@@ -356,7 +373,7 @@ export default function MessageInput({ onSend, onSendLocation, onTyping, disable
                     <button
                         type="button"
                         onClick={cancelRecording}
-                        className="p-2 text-gray-400 hover:text-red-500 hover:bg-gray-100 rounded-full transition shrink-0"
+                        className="p-2 text-[var(--text-tertiary)] hover:text-red-500 hover:bg-[var(--bg-hover)] rounded-full transition shrink-0"
                         title="Hủy ghi âm"
                     >
                         <X size={20} />
@@ -395,7 +412,7 @@ export default function MessageInput({ onSend, onSendLocation, onTyping, disable
                     <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="p-2 text-gray-400 hover:text-[var(--color-primary)] hover:bg-gray-100 rounded-full transition shrink-0"
+                        className="p-2 text-[var(--text-tertiary)] hover:text-[var(--color-primary)] hover:bg-[var(--bg-hover)] rounded-full transition shrink-0"
                         disabled={disabled}
                     >
                         <Paperclip size={20} />
@@ -430,7 +447,7 @@ export default function MessageInput({ onSend, onSendLocation, onTyping, disable
                                 { enableHighAccuracy: true, timeout: 10000 }
                             );
                         }}
-                        className="p-2 text-gray-400 hover:text-[var(--color-primary)] hover:bg-gray-100 rounded-full transition shrink-0"
+                        className="p-2 text-[var(--text-tertiary)] hover:text-[var(--color-primary)] hover:bg-[var(--bg-hover)] rounded-full transition shrink-0"
                         disabled={disabled}
                         title="Chia sẻ vị trí"
                     >
@@ -441,7 +458,7 @@ export default function MessageInput({ onSend, onSendLocation, onTyping, disable
                     <button
                         type="button"
                         onClick={startRecording}
-                        className="p-2 text-gray-400 hover:text-[var(--color-primary)] hover:bg-gray-100 rounded-full transition shrink-0"
+                        className="p-2 text-[var(--text-tertiary)] hover:text-[var(--color-primary)] hover:bg-[var(--bg-hover)] rounded-full transition shrink-0"
                         disabled={disabled}
                         title="Ghi âm giọng nói"
                     >
@@ -459,7 +476,7 @@ export default function MessageInput({ onSend, onSendLocation, onTyping, disable
                             placeholder={replyContext ? `Trả lời ${replyContext.senderName}...` : 'Nhập tin nhắn...'}
                             disabled={disabled}
                             rows={1}
-                            className="w-full resize-none px-4 py-2.5 bg-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-ring)] transition max-h-32 disabled:opacity-50"
+                            className="w-full resize-none px-4 py-2.5 theme-input-field rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-ring)] transition max-h-32 disabled:opacity-50"
                             style={{ minHeight: '42px' }}
                         />
                     </div>
@@ -483,48 +500,65 @@ export default function MessageInput({ onSend, onSendLocation, onTyping, disable
                                 type="button"
                                 onClick={() => setShowFramePicker((prev) => !prev)}
                                 disabled={disabled}
-                                className={`p-2.5 rounded-full transition disabled:opacity-50 ${showFramePicker ? 'bg-[var(--color-primary-light)] text-[var(--color-primary)]' : 'text-[var(--color-primary)] hover:bg-gray-100'}`}
+                                className={`p-2.5 rounded-full transition disabled:opacity-50 ${showFramePicker ? 'bg-[var(--color-primary-light)] text-[var(--color-primary)]' : 'text-[var(--color-primary)] hover:bg-[var(--bg-hover)]'}`}
                                 title="Đổi khung chat"
                             >
                                 <Smile size={22} />
                             </button>
 
-                            {showFramePicker && (
-                                <div className="absolute bottom-full right-0 mb-2 w-[336px] max-w-[calc(100vw-2rem)] rounded-3xl border border-gray-200 bg-white p-3 shadow-2xl z-20">
-                                    <div className="grid grid-cols-3 gap-2">
-                                        {bubbleFrames.map((frame) => (
-                                            <button
-                                                key={frame.id}
-                                                type="button"
-                                                onClick={() => handleFrameSelect(frame.id)}
-                                                className={`rounded-2xl border p-1.5 transition ${bubbleFrameId === frame.id
-                                                    ? 'border-[var(--color-primary)] ring-2 ring-[var(--color-primary-light)]'
-                                                    : 'border-gray-200 hover:border-[var(--color-primary-medium)]'
-                                                }`}
-                                                title={frame.name}
-                                            >
-                                                <div className={`relative h-10 rounded-full ${frame.bubbleClass}`}>
-                                                    <span
-                                                        className={`absolute -top-1 -right-1 w-[18px] h-[18px] rounded-full border text-[9px] leading-none flex items-center justify-center ${frame.badgeClass}`}
-                                                    >
-                                                        {frame.icon}
-                                                    </span>
-                                                    <span
-                                                        className={`absolute left-1.5 bottom-1.5 w-2 h-2 rounded-full ${frame.pickerDotClass || 'bg-black/30'}`}
-                                                    />
-                                                    <span className="absolute right-1.5 top-1.5 w-1.5 h-1.5 rounded-full bg-white/80" />
-                                                </div>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
+                            <AnimatePresence>
+                                {showFramePicker && (
+                                    <Motion.div
+                                        className="absolute bottom-full right-0 mb-2 w-[min(420px,calc(100vw-1rem))] rounded-3xl border theme-border theme-surface p-3 shadow-2xl z-20 origin-bottom-right"
+                                        initial={reduceMotion ? false : { opacity: 0, y: 10, scale: 0.96 }}
+                                        animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+                                        exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 6, scale: 0.97 }}
+                                        transition={reduceMotion
+                                            ? { duration: 0 }
+                                            : { type: 'spring', stiffness: 360, damping: 28, mass: 0.75 }
+                                        }
+                                    >
+                                        <div className="flex gap-2 overflow-x-auto scrollbar-thin pb-1 pr-1 snap-x snap-mandatory" role="listbox" aria-label="Chọn khung chat">
+                                            {bubbleFrames.map((frame) => (
+                                                <button
+                                                    key={frame.id}
+                                                    type="button"
+                                                    onClick={() => handleFrameSelect(frame.id)}
+                                                    aria-selected={bubbleFrameId === frame.id}
+                                                    className={`relative min-w-[84px] rounded-2xl border p-1.5 transition snap-start ${bubbleFrameId === frame.id
+                                                        ? 'border-[var(--color-primary)] ring-2 ring-[var(--color-primary-light)]'
+                                                        : 'theme-border hover:border-[var(--color-primary-medium)]'
+                                                    }`}
+                                                    title={frame.name}
+                                                >
+                                                    <div className={`relative h-10 rounded-full ${frame.bubbleClass}`}>
+                                                        {bubbleFrameId === frame.id && (
+                                                            <span className="absolute left-1 top-1 w-4 h-4 rounded-full bg-white/95 text-[var(--color-primary)] flex items-center justify-center shadow-sm">
+                                                                <Check size={11} />
+                                                            </span>
+                                                        )}
+                                                        <span
+                                                            className={`absolute -top-1 -right-1 w-[18px] h-[18px] rounded-full border text-[9px] leading-none flex items-center justify-center ${frame.badgeClass}`}
+                                                        >
+                                                            {frame.icon}
+                                                        </span>
+                                                        <span
+                                                            className={`absolute left-1.5 bottom-1.5 w-2 h-2 rounded-full ${frame.pickerDotClass || 'bg-black/30'}`}
+                                                        />
+                                                        <span className="absolute right-1.5 top-1.5 w-1.5 h-1.5 rounded-full bg-white/80" />
+                                                    </div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </Motion.div>
+                                )}
+                            </AnimatePresence>
 
                             <button
                                 type="button"
                                 onClick={() => onSend('👍', 'text')}
                                 disabled={disabled}
-                                className="p-2.5 text-[var(--color-primary)] hover:bg-gray-100 rounded-full transition disabled:opacity-50 shrink-0"
+                                className="p-2.5 text-[var(--color-primary)] hover:bg-[var(--bg-hover)] rounded-full transition disabled:opacity-50 shrink-0"
                                 title="Gửi like"
                             >
                                 <ThumbsUp size={22} />

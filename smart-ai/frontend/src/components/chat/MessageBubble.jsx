@@ -1,9 +1,9 @@
 import { useAuth } from '../../hooks/useAuth';
 import { format } from 'date-fns';
-import { Bot, Trash2, Globe, ChevronDown, ChevronUp, FileText, FileArchive, FileSpreadsheet, FileImage, FileVideo, FileAudio, File, Download, SmilePlus, Forward, Pin, Copy, Check, ExternalLink, Smile } from 'lucide-react';
+import { Bot, Trash2, Globe, ChevronDown, ChevronUp, FileText, FileArchive, FileSpreadsheet, FileImage, FileVideo, FileAudio, File, Download, SmilePlus, Forward, Pin, Copy, Check, ExternalLink, Smile, MoreHorizontal } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion'; // eslint-disable-line no-unused-vars
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'; // eslint-disable-line no-unused-vars
 import ImageModal from './ImageModal';
 import LocationMessage from './LocationMessage';
 import VoiceMessage from './VoiceMessage';
@@ -73,10 +73,27 @@ function getEmbeddableMedia(links = []) {
     return null;
 }
 
-export default function MessageBubble({ message, isOwn, onDelete, onReact, nicknames, localTranslation, onForward, onPinMessage, onVotePoll, selectionMode = false, isSelected = false, onToggleSelect, onQuickReply }) {
+export default function MessageBubble({
+    message,
+    isOwn,
+    onDelete,
+    onReact,
+    nicknames,
+    localTranslation,
+    onForward,
+    onPinMessage,
+    onVotePoll,
+    selectionMode = false,
+    isSelected = false,
+    onToggleSelect,
+    onQuickReply,
+    isClusterStart = true,
+    isClusterEnd = true,
+}) {
     const { user } = useAuth();
     const { themeId, bubbleFrameId } = useTheme();
     const navigate = useNavigate();
+    const reduceMotion = useReducedMotion();
     const [showTranslation, setShowTranslation] = useState(false);
     const [showActions, setShowActions] = useState(false);
     const [lightbox, setLightbox] = useState(null);
@@ -85,23 +102,26 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [shouldShake, setShouldShake] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [isTouchDevice, setIsTouchDevice] = useState(() => {
+        if (typeof window === 'undefined' || !window.matchMedia) return false;
+        return window.matchMedia('(hover: none), (pointer: coarse)').matches;
+    });
     const emojiPickerRef = useRef(null);
     const bubbleRef = useRef(null);
+    const rowRef = useRef(null);
+    const longPressTimerRef = useRef(null);
 
     const REACTION_EMOJIS = ['👍', '❤️', '😂', '😯', '😢', '😡'];
 
-    // Close emoji picker on outside click
     useEffect(() => {
-        if (!showEmojiPicker) return;
-        const handleClick = (e) => {
-            if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target)) {
-                setShowEmojiPicker(false);
-                setShowActions(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClick);
-        return () => document.removeEventListener('mousedown', handleClick);
-    }, [showEmojiPicker]);
+        if (typeof window === 'undefined' || !window.matchMedia) return;
+        const media = window.matchMedia('(hover: none), (pointer: coarse)');
+        const onChange = (event) => setIsTouchDevice(event.matches);
+
+        setIsTouchDevice(media.matches);
+        media.addEventListener('change', onChange);
+        return () => media.removeEventListener('change', onChange);
+    }, []);
 
     // Reset media URL fallback chain when message/file changes.
     useEffect(() => {
@@ -110,11 +130,37 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
 
     // Subtle nudge for newly arrived incoming messages.
     useEffect(() => {
-        if (isOwn || message.type === 'system') return;
+        if (reduceMotion || isOwn || message.type === 'system') return;
         setShouldShake(true);
         const timeout = setTimeout(() => setShouldShake(false), 480);
         return () => clearTimeout(timeout);
-    }, [message._id, message.createdAt, message.type, isOwn]);
+    }, [message._id, message.createdAt, message.type, isOwn, reduceMotion]);
+
+    useEffect(() => {
+        return () => {
+            if (longPressTimerRef.current) {
+                clearTimeout(longPressTimerRef.current);
+            }
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!showActions && !showEmojiPicker) return;
+
+        const handleOutside = (event) => {
+            if (rowRef.current && !rowRef.current.contains(event.target)) {
+                setShowActions(false);
+                setShowEmojiPicker(false);
+            }
+        };
+
+        document.addEventListener('touchstart', handleOutside);
+        document.addEventListener('mousedown', handleOutside);
+        return () => {
+            document.removeEventListener('touchstart', handleOutside);
+            document.removeEventListener('mousedown', handleOutside);
+        };
+    }, [showActions, showEmojiPicker]);
 
     const isPixelTheme = themeId === 'pixel-art';
     const isNeonTheme = themeId === 'neon-night';
@@ -307,6 +353,7 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
     };
 
     const triggerReactionEffect = async (emoji) => {
+        if (reduceMotion) return;
         if (!['❤️', '👍', '😂', '😯'].includes(emoji)) return;
         try {
             const { default: confetti } = await import('canvas-confetti');
@@ -370,11 +417,19 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
         ? bubbleFrameId
         : (message.sender?.preferredBubbleFrame || 'classic-blue');
     const senderBubbleFrame = getChatBubbleFrameById(senderFrameId);
-    const senderBubbleClass = senderBubbleFrame?.bubbleClass || 'bg-[var(--color-primary)] text-white';
-    const senderMetaTextClass = senderBubbleFrame?.metaTextClass || 'text-white/70';
+    const senderBubbleClass = senderBubbleFrame?.bubbleClass || 'bg-[var(--color-primary)]';
+    const frameIsLight = !!senderBubbleFrame?.isLightFrame;
+    const senderContentTextClass = frameIsLight ? 'text-slate-900' : 'text-white';
+    const senderMetaTextClass = senderBubbleFrame?.metaTextClass || (frameIsLight ? 'text-slate-700/80' : 'text-white/75');
     const senderBadgeClass = senderBubbleFrame?.badgeClass || 'bg-white/90 text-[var(--color-primary)] border-white/70';
     const useSenderFrameStyle = !isAI && !isEmojiOnlyMessage && !isStickerMessage && message.type !== 'location';
-    const showSenderFrameBadge = useSenderFrameStyle;
+    const showSenderFrameBadge = useSenderFrameStyle && isClusterStart;
+    const showCompactMeta = isClusterEnd || showActions || showEmojiPicker;
+
+    const senderLinkClassName = frameIsLight ? 'text-slate-900' : 'text-white';
+    const senderMentionClassName = frameIsLight ? 'font-semibold text-slate-900' : 'font-semibold text-white';
+    const senderInlineCodeClassName = frameIsLight ? 'bg-black/10' : 'bg-white/20';
+    const senderCodeBlockClassName = frameIsLight ? 'bg-black/10' : 'bg-white/15';
 
     const readByOthers = (message.readBy || []).filter((entry) => {
         const readerId = entry?.user?._id || entry?.user;
@@ -389,6 +444,24 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
     const senderId = message.sender?._id;
     const senderNickname = senderId && nicknames?.[senderId];
     const senderName = senderNickname || message.sender?.username || 'Unknown';
+    const showSenderAvatar = !isOwn && (isAI || isClusterEnd);
+
+    const startLongPressMenu = () => {
+        if (!isTouchDevice || selectionMode) return;
+        if (longPressTimerRef.current) {
+            clearTimeout(longPressTimerRef.current);
+        }
+
+        longPressTimerRef.current = setTimeout(() => {
+            setShowActions(true);
+        }, 360);
+    };
+
+    const clearLongPressMenu = () => {
+        if (!longPressTimerRef.current) return;
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+    };
 
     // Format file size
     const formatSize = (bytes) => {
@@ -453,30 +526,43 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                 rel="noopener noreferrer"
                 className={`flex items-center gap-3 mt-1 px-3 py-2.5 rounded-2xl max-w-[280px] w-fit cursor-pointer transition-all duration-150 group/file
                     ${useSenderFrameStyle
-                        ? 'bg-white/15 hover:bg-white/25'
+                        ? frameIsLight
+                            ? 'bg-white/45 hover:bg-white/65'
+                            : 'bg-white/15 hover:bg-white/25'
                         : 'bg-[var(--color-primary-light)] hover:bg-[var(--color-primary-medium)]'
                     }`}
                 download
             >
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0
                     ${useSenderFrameStyle
-                        ? 'bg-white/20'
+                        ? frameIsLight
+                            ? 'bg-white/65'
+                            : 'bg-white/20'
                         : 'bg-[var(--color-primary-light)]'
                     }`}
                 >
-                    <IconComponent size={20} className={useSenderFrameStyle ? 'text-white' : 'text-[var(--color-primary)]'} />
+                    <IconComponent
+                        size={20}
+                        className={useSenderFrameStyle
+                            ? (frameIsLight ? 'text-slate-900' : 'text-white')
+                            : 'text-[var(--color-primary)]'
+                        }
+                    />
                 </div>
                 <div className="min-w-0 flex-1">
-                    <p className={`text-sm font-medium truncate ${useSenderFrameStyle ? 'text-white' : 'text-[var(--text-primary)]'}`}>
+                    <p className={`text-sm font-medium truncate ${useSenderFrameStyle ? senderContentTextClass : 'text-[var(--text-primary)]'}`}>
                         {fileName || 'file'}
                     </p>
                     {size > 0 && (
-                        <p className={`text-xs mt-0.5 ${useSenderFrameStyle ? 'text-white/60' : 'text-[var(--text-tertiary)]'}`}>
+                        <p className={`text-xs mt-0.5 ${useSenderFrameStyle ? senderMetaTextClass : 'text-[var(--text-tertiary)]'}`}>
                             {formatSize(size)}
                         </p>
                     )}
                 </div>
-                <Download size={16} className={`shrink-0 opacity-0 group-hover/file:opacity-100 transition-opacity ${useSenderFrameStyle ? 'text-white/70' : 'text-[var(--text-tertiary)]'}`} />
+                <Download
+                    size={16}
+                    className={`shrink-0 opacity-0 group-hover/file:opacity-100 transition-opacity ${useSenderFrameStyle ? senderMetaTextClass : 'text-[var(--text-tertiary)]'}`}
+                />
             </a>
         );
     };
@@ -557,9 +643,8 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                 />
             )}
             <motion.div
-                className={`flex items-end gap-2 ${isOwn ? 'justify-end' : 'justify-start'} mb-2 group`}
-                onMouseEnter={() => setShowActions(true)}
-                onMouseLeave={() => { if (!showEmojiPicker) setShowActions(false); }}
+                ref={rowRef}
+                className={`chat-message-row ${isClusterEnd ? 'chat-cluster-end' : 'chat-cluster-mid'} flex items-end gap-2 ${isOwn ? 'justify-end' : 'justify-start'}`}
                 onClick={(event) => {
                     if (selectionMode) {
                         event.preventDefault();
@@ -567,9 +652,13 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                         onToggleSelect?.(message._id);
                     }
                 }}
-                initial={{ opacity: 0, y: 14, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ duration: 0.22, ease: 'easeOut' }}
+                onTouchStart={startLongPressMenu}
+                onTouchEnd={clearLongPressMenu}
+                onTouchMove={clearLongPressMenu}
+                onTouchCancel={clearLongPressMenu}
+                initial={reduceMotion ? false : { opacity: 0, y: 14, scale: 0.98 }}
+                animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+                transition={reduceMotion ? { duration: 0 } : { duration: 0.22, ease: 'easeOut' }}
             >
                 {/* Avatar for other's messages */}
                 {!isOwn && (
@@ -577,7 +666,7 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                         <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
                             <Bot size={16} className="text-purple-600" />
                         </div>
-                    ) : (
+                    ) : showSenderAvatar ? (
                         <div
                             className="w-8 h-8 rounded-full flex-shrink-0 cursor-pointer overflow-hidden"
                             onClick={() => message.sender?._id && navigate(`/profile/${message.sender._id}`)}
@@ -596,6 +685,8 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                 </div>
                             )}
                         </div>
+                    ) : (
+                        <div className="w-8 h-8 flex-shrink-0" aria-hidden="true" />
                     )
                 )}
 
@@ -634,16 +725,16 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                             ? 'bg-[var(--color-primary-light)] text-[var(--text-primary)] border border-gray-200'
                                             : 'bg-purple-50 text-purple-900 border border-purple-100'
                                         : useSenderFrameStyle
-                                            ? senderBubbleClass
-                                            : 'bg-gray-100 text-gray-900'
+                                            ? `${senderBubbleClass} ${senderContentTextClass}`
+                                            : 'theme-muted-surface text-gray-900'
                                 } ${selectionMode && isSelected ? 'ring-2 ring-[var(--color-primary)] ring-offset-1' : ''} ${isPixelTheme ? 'pixel-bubble font-pixel' : ''} ${isNeonTheme ? 'neon-bubble' : ''}`}
                             onDoubleClick={() => {
                                 if (!selectionMode) {
                                     onQuickReply?.(message);
                                 }
                             }}
-                            animate={shouldShake ? { x: [0, -2, 2, -1, 1, 0] } : { x: 0 }}
-                            transition={{ duration: 0.36, ease: 'easeInOut' }}
+                            animate={reduceMotion ? { x: 0 } : (shouldShake ? { x: [0, -2, 2, -1, 1, 0] } : { x: 0 })}
+                            transition={reduceMotion ? { duration: 0 } : { duration: 0.36, ease: 'easeInOut' }}
                         >
                             {showSenderFrameBadge && (
                                 <span
@@ -656,31 +747,36 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
 
                             {/* Forward indicator */}
                             {message.forwardedFrom && (
-                                <p className={`text-[10px] mb-1 flex items-center gap-1 ${useSenderFrameStyle ? 'text-white/70' : 'text-gray-400'}`}>
+                                <p className={`text-[10px] mb-1 flex items-center gap-1 ${useSenderFrameStyle ? senderMetaTextClass : 'text-gray-400'}`}>
                                     <Forward size={10} /> Chuyển tiếp từ {message.forwardedFrom.senderName || 'Unknown'}
                                 </p>
                             )}
 
                             {/* Pin indicator */}
                             {message.pinned && (
-                                <p className={`text-[10px] mb-1 flex items-center gap-1 ${useSenderFrameStyle ? 'text-white/70' : 'text-gray-400'}`}>
+                                <p className={`text-[10px] mb-1 flex items-center gap-1 ${useSenderFrameStyle ? senderMetaTextClass : 'text-gray-400'}`}>
                                     <Pin size={10} /> Đã ghim
                                 </p>
                             )}
                             {/* Reply to Note quote */}
                             {message.replyToNote && (
                                 <div className="mb-1.5">
-                                    <p className={`text-[10px] mb-1 ${useSenderFrameStyle ? 'text-white/70' : 'text-gray-400'}`}>
+                                    <p className={`text-[10px] mb-1 ${useSenderFrameStyle ? senderMetaTextClass : 'text-gray-400'}`}>
                                         Bạn đã trả lời ghi chú của họ
                                     </p>
-                                    <div className={`px-3 py-1.5 rounded-lg text-xs ${useSenderFrameStyle ? 'bg-white/15 text-white/85' : 'bg-gray-200/70 text-gray-600'}`}>
+                                    <div className={`px-3 py-1.5 rounded-lg text-xs ${useSenderFrameStyle
+                                        ? frameIsLight
+                                            ? 'bg-white/45 text-slate-800'
+                                            : 'bg-white/15 text-white/85'
+                                        : 'bg-gray-200/70 text-gray-600'
+                                    }`}>
                                         {renderRichText(
                                             message.replyToNote,
                                             {
-                                                linkClassName: useSenderFrameStyle ? 'text-white' : 'text-[var(--color-primary)]',
-                                                mentionClassName: useSenderFrameStyle ? 'font-semibold text-white' : 'font-semibold text-sky-700',
-                                                inlineCodeClassName: useSenderFrameStyle ? 'bg-white/20' : 'bg-black/10',
-                                                codeBlockClassName: useSenderFrameStyle ? 'bg-white/15' : 'bg-black/10',
+                                                linkClassName: useSenderFrameStyle ? senderLinkClassName : 'text-[var(--color-primary)]',
+                                                mentionClassName: useSenderFrameStyle ? senderMentionClassName : 'font-semibold text-sky-700',
+                                                inlineCodeClassName: useSenderFrameStyle ? senderInlineCodeClassName : 'bg-black/10',
+                                                codeBlockClassName: useSenderFrameStyle ? senderCodeBlockClassName : 'bg-black/10',
                                             }
                                         )}
                                     </div>
@@ -697,15 +793,15 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                         displayText,
                                         {
                                             linkClassName: useSenderFrameStyle
-                                                ? 'text-white'
+                                                ? senderLinkClassName
                                                 : isAI
                                                     ? isDarkTheme
                                                         ? 'text-[var(--color-primary-dark)]'
                                                         : 'text-purple-600'
                                                     : 'text-[var(--color-primary)]',
-                                            mentionClassName: useSenderFrameStyle ? 'font-semibold text-white' : 'font-semibold text-sky-700',
-                                            inlineCodeClassName: useSenderFrameStyle ? 'bg-white/20' : 'bg-black/10',
-                                            codeBlockClassName: useSenderFrameStyle ? 'bg-white/15' : 'bg-black/10',
+                                            mentionClassName: useSenderFrameStyle ? senderMentionClassName : 'font-semibold text-sky-700',
+                                            inlineCodeClassName: useSenderFrameStyle ? senderInlineCodeClassName : 'bg-black/10',
+                                            codeBlockClassName: useSenderFrameStyle ? senderCodeBlockClassName : 'bg-black/10',
                                         }
                                     )}
                                 </p>
@@ -731,7 +827,9 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                                 rel="noopener noreferrer"
                                                 className={`flex items-center gap-2 rounded-xl px-2.5 py-2 border text-xs transition hover:opacity-90
                                                     ${useSenderFrameStyle
-                                                        ? 'border-white/30 bg-white/10 text-white'
+                                                        ? frameIsLight
+                                                            ? 'border-black/10 bg-white/45 text-slate-900'
+                                                            : 'border-white/30 bg-white/10 text-white'
                                                         : 'border-gray-200 bg-white text-gray-700'
                                                     }`}
                                                 whileHover={{ y: -1, scale: 1.01 }}
@@ -745,11 +843,11 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                                 />
                                                 <div className="min-w-0 flex-1">
                                                     <p className="font-medium truncate">{hostname}</p>
-                                                    <p className={`truncate ${useSenderFrameStyle ? 'text-white/80' : 'text-gray-500'}`}>
+                                                    <p className={`truncate ${useSenderFrameStyle ? senderMetaTextClass : 'text-gray-500'}`}>
                                                         {pathname || link.text}
                                                     </p>
                                                 </div>
-                                                <ExternalLink size={12} className={useSenderFrameStyle ? 'text-white/80' : 'text-gray-500'} />
+                                                <ExternalLink size={12} className={useSenderFrameStyle ? senderMetaTextClass : 'text-gray-500'} />
                                             </motion.a>
                                         );
                                     })}
@@ -757,10 +855,13 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                             )}
                             {embeddableMedia && (
                                 <motion.div
-                                    className={`mt-2 overflow-hidden rounded-xl border ${useSenderFrameStyle ? 'border-white/30' : 'border-gray-200'}`}
+                                    className={`mt-2 overflow-hidden rounded-xl border ${useSenderFrameStyle
+                                        ? frameIsLight ? 'border-black/10' : 'border-white/30'
+                                        : 'border-gray-200'
+                                    }`}
                                     initial={{ opacity: 0, y: 8 }}
                                     animate={{ opacity: 1, y: 0 }}
-                                    transition={{ duration: 0.2 }}
+                                    transition={{ duration: reduceMotion ? 0 : 0.2 }}
                                 >
                                     <iframe
                                         src={embeddableMedia.src}
@@ -778,29 +879,31 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                             {renderFile()}
 
                             {/* Time */}
-                            <p
-                                className={`text-[10px] mt-1 ${message.type === 'location' ? 'px-3 pb-1' : ''} ${isAI
-                                    ? isDarkTheme
-                                        ? 'text-gray-400'
-                                        : 'text-purple-400'
-                                    : useSenderFrameStyle
-                                        ? senderMetaTextClass
-                                        : 'text-gray-400'
-                                    }`}
-                                title={format(new Date(message.createdAt), 'HH:mm:ss - dd/MM/yyyy')}
-                            >
-                                {format(new Date(message.createdAt), 'HH:mm')}
-                            </p>
-                            {isOwn && message.type !== 'system' && (
+                            {showCompactMeta && (
                                 <p
-                                    className={`text-[10px] ${senderMetaTextClass}`}
+                                    className={`text-[10px] mt-1 ${message.type === 'location' ? 'px-3 pb-1' : ''} ${isAI
+                                        ? isDarkTheme
+                                            ? 'text-gray-400'
+                                            : 'text-purple-400'
+                                        : useSenderFrameStyle
+                                            ? senderMetaTextClass
+                                            : 'text-gray-400'
+                                        }`}
+                                    title={format(new Date(message.createdAt), 'HH:mm:ss - dd/MM/yyyy')}
+                                >
+                                    {format(new Date(message.createdAt), 'HH:mm')}
+                                </p>
+                            )}
+                            {isOwn && message.type !== 'system' && (message.pending || showCompactMeta) && (
+                                <p
+                                    className={`text-[10px] ${useSenderFrameStyle ? senderMetaTextClass : 'text-gray-400'}`}
                                     title={message.pending ? 'Tin nhắn đang chờ xác nhận từ server' : 'Trạng thái xem tin nhắn'}
                                 >
                                     {message.pending
                                         ? 'Đang gửi...'
                                         : readByOthers.length > 0
-                                        ? `Đã xem${readByOthers.length > 1 ? ` (${readByOthers.length})` : ''}${latestReadAt ? ` · ${format(new Date(latestReadAt), 'HH:mm')}` : ''}`
-                                        : 'Đã gửi'}
+                                            ? `Đã xem${readByOthers.length > 1 ? ` (${readByOthers.length})` : ''}${latestReadAt ? ` · ${format(new Date(latestReadAt), 'HH:mm')}` : ''}`
+                                            : 'Đã gửi'}
                                 </p>
                             )}
                         </motion.div>
@@ -848,14 +951,41 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                         )}
 
                         {/* Message actions */}
-                        {showActions && !selectionMode && message.type !== 'system' && (
+                        {!selectionMode && message.type !== 'system' && (
+                            <button
+                                type="button"
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    setShowEmojiPicker(false);
+                                    setShowActions((prev) => !prev);
+                                }}
+                                className={`absolute ${isOwn ? '-left-8' : '-right-8'} top-0 p-1 rounded-full transition ${showActions
+                                    ? 'bg-[var(--color-primary-light)] text-[var(--color-primary)] opacity-100'
+                                    : 'text-[var(--text-tertiary)] opacity-80 hover:bg-[var(--bg-hover)]'
+                                }`}
+                                title="Mở menu hành động"
+                            >
+                                <MoreHorizontal size={14} />
+                            </button>
+                        )}
+
+                        {!selectionMode && message.type !== 'system' && (
                             <div
-                                className={`absolute ${isOwn ? '-left-24' : '-right-20'} bottom-1 flex items-center gap-1 rounded-full bg-white border border-gray-200 px-1 py-0.5 shadow-sm opacity-0 group-hover:opacity-100 transition`}
+                                className={`absolute ${isTouchDevice
+                                    ? (isOwn ? 'left-0 -top-10' : 'right-0 -top-10')
+                                    : (isOwn ? '-left-24 bottom-1' : '-right-20 bottom-1')
+                                } flex items-center gap-1 rounded-full bg-white border border-gray-200 px-1 py-0.5 shadow-sm transition ${showActions
+                                    ? 'opacity-100 pointer-events-auto'
+                                    : 'opacity-0 pointer-events-none'
+                                }`}
                             >
                                 {isOwn && onDelete && (
                                     <motion.button
-                                        onClick={() => onDelete?.(message._id)}
-                                        className="p-1 text-gray-400 hover:text-red-500 transition"
+                                        onClick={() => {
+                                            onDelete?.(message._id);
+                                            if (isTouchDevice) setShowActions(false);
+                                        }}
+                                        className="p-1 text-[var(--text-tertiary)] hover:text-red-500 transition"
                                         title="Xóa"
                                         whileHover={{ scale: 1.08 }}
                                         whileTap={{ scale: 0.92 }}
@@ -864,8 +994,11 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                     </motion.button>
                                 )}
                                 <motion.button
-                                    onClick={handleCopyMessage}
-                                    className="p-1 text-gray-400 hover:text-emerald-500 transition"
+                                    onClick={() => {
+                                        handleCopyMessage();
+                                        if (isTouchDevice) setShowActions(false);
+                                    }}
+                                    className="p-1 text-[var(--text-tertiary)] hover:text-emerald-500 transition"
                                     title="Sao chép"
                                     whileHover={{ scale: 1.08 }}
                                     whileTap={{ scale: 0.92 }}
@@ -874,8 +1007,11 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                 </motion.button>
                                 {onForward && (
                                     <motion.button
-                                        onClick={() => onForward?.(message)}
-                                        className="p-1 text-gray-400 hover:text-blue-500 transition"
+                                        onClick={() => {
+                                            onForward?.(message);
+                                            if (isTouchDevice) setShowActions(false);
+                                        }}
+                                        className="p-1 text-[var(--text-tertiary)] hover:text-blue-500 transition"
                                         title="Chuyển tiếp"
                                         whileHover={{ scale: 1.08 }}
                                         whileTap={{ scale: 0.92 }}
@@ -885,8 +1021,11 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                 )}
                                 {onPinMessage && (
                                     <motion.button
-                                        onClick={() => onPinMessage?.(message)}
-                                        className="p-1 text-gray-400 hover:text-orange-500 transition"
+                                        onClick={() => {
+                                            onPinMessage?.(message);
+                                            if (isTouchDevice) setShowActions(false);
+                                        }}
+                                        className="p-1 text-[var(--text-tertiary)] hover:text-orange-500 transition"
                                         title={message.pinned ? 'Bỏ ghim' : 'Ghim'}
                                         whileHover={{ scale: 1.08 }}
                                         whileTap={{ scale: 0.92 }}
@@ -897,9 +1036,11 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                 <motion.button
                                     onClick={(e) => {
                                         e.stopPropagation();
+                                        setShowActions(false);
+                                        setShowEmojiPicker(false);
                                         window.dispatchEvent(new CustomEvent('chat:open-bubble-frame-picker'));
                                     }}
-                                    className="p-1 text-gray-400 hover:text-fuchsia-500 transition"
+                                    className="p-1 text-[var(--text-tertiary)] hover:text-fuchsia-500 transition"
                                     title="Đổi khung chat"
                                     whileHover={{ scale: 1.08 }}
                                     whileTap={{ scale: 0.92 }}
@@ -917,8 +1058,10 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                         e.stopPropagation();
                                         setShowEmojiPicker((v) => !v);
                                     }}
-                                    className={`p-1 text-gray-400 hover:text-[var(--color-primary)] transition
-                                        ${showEmojiPicker ? 'opacity-100 text-[var(--color-primary)]' : 'opacity-0 group-hover:opacity-100'}`}
+                                    className={`p-1 text-[var(--text-tertiary)] hover:text-[var(--color-primary)] transition ${showEmojiPicker || showActions
+                                        ? 'opacity-100 text-[var(--color-primary)]'
+                                        : 'opacity-0 pointer-events-none'
+                                    }`}
                                     title="Thả cảm xúc"
                                     whileHover={{ scale: 1.08 }}
                                     whileTap={{ scale: 0.92 }}
@@ -935,7 +1078,7 @@ export default function MessageBubble({ message, isOwn, onDelete, onReact, nickn
                                         initial={{ opacity: 0, y: 8, scale: 0.9 }}
                                         animate={{ opacity: 1, y: 0, scale: 1 }}
                                         exit={{ opacity: 0, y: 8, scale: 0.9 }}
-                                        transition={{ duration: 0.16, ease: 'easeOut' }}
+                                        transition={{ duration: reduceMotion ? 0 : 0.16, ease: 'easeOut' }}
                                     >
                                         {REACTION_EMOJIS.map((emoji) => (
                                             <motion.button

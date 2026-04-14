@@ -8,7 +8,9 @@
 
 /* ─── Theme CSS Custom Properties (defaults = Blue theme) ─── */
 :root {
-  --font-ui: Arial, 'Segoe UI', sans-serif;
+  --font-ui-default: Arial, 'Segoe UI', sans-serif;
+  --font-ui-accent: 'FVF Fernando 08', Arial, 'Segoe UI', sans-serif;
+  --font-ui: var(--font-ui-default);
   --color-primary: #2563eb;
   --color-primary-hover: #1d4ed8;
   --color-primary-light: #eff6ff;
@@ -122,6 +124,30 @@ html[data-theme] .hover\:bg-gray-100:hover {
   background-color: var(--bg-hover) !important;
 }
 
+/* Semantic theme classes for component-level styling */
+html[data-theme] .theme-surface {
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+}
+
+html[data-theme] .theme-muted-surface {
+  background-color: var(--bg-secondary);
+}
+
+html[data-theme] .theme-border {
+  border-color: var(--border-color);
+}
+
+html[data-theme] .theme-input-field {
+  background-color: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border-input);
+}
+
+html[data-theme] .theme-input-field::placeholder {
+  color: var(--text-tertiary);
+}
+
 html[data-theme] input,
 html[data-theme] select,
 html[data-theme] textarea {
@@ -195,7 +221,7 @@ html[data-theme] .bg-\[var\(--bg-card\)\] {
 }
 
 .font-pixel {
-  font-family: 'FVF Fernando 08', Arial, 'Segoe UI', sans-serif;
+  font-family: var(--font-ui-accent);
   letter-spacing: 0.3px;
 }
 
@@ -310,7 +336,7 @@ html[data-theme='neon-night'] .conversation-bg {
 }
 
 html[data-theme='pixel-art'] {
-  --font-ui: 'FVF Fernando 08', Arial, 'Segoe UI', sans-serif;
+  --font-ui: var(--font-ui-accent);
 }
 
 /* Theme personalities */
@@ -388,11 +414,81 @@ html[data-theme='retro-terminal'] {
 }
 
 html[data-theme='neon-night'] {
-  --font-ui: Arial, 'Segoe UI', sans-serif;
+  --font-ui: var(--font-ui-default);
   --theme-atmosphere:
     radial-gradient(circle at 8% 10%, rgba(34, 211, 238, 0.16), transparent 36%),
     radial-gradient(circle at 92% 86%, rgba(251, 113, 133, 0.12), transparent 33%);
   --theme-shadow-lg: 0 20px 44px rgba(8, 20, 48, 0.58);
+}
+
+/* Message cluster spacing rhythm */
+.chat-message-row.chat-cluster-mid {
+  margin-bottom: 2px;
+}
+
+.chat-message-row.chat-cluster-end {
+  margin-bottom: 8px;
+}
+
+@media (max-width: 767.98px) {
+  html[data-theme='blue'] .chat-message-row.chat-cluster-end,
+  html[data-theme='light'] .chat-message-row.chat-cluster-end,
+  html[data-theme='solarized'] .chat-message-row.chat-cluster-end {
+    margin-bottom: 9px;
+  }
+
+  html[data-theme='red'] .chat-message-row.chat-cluster-end,
+  html[data-theme='yellow'] .chat-message-row.chat-cluster-end,
+  html[data-theme='brown'] .chat-message-row.chat-cluster-end {
+    margin-bottom: 10px;
+  }
+
+  html[data-theme='purple'] .chat-message-row.chat-cluster-mid,
+  html[data-theme='midnight-purple'] .chat-message-row.chat-cluster-mid {
+    margin-bottom: 2.5px;
+  }
+
+  html[data-theme='purple'] .chat-message-row.chat-cluster-end,
+  html[data-theme='midnight-purple'] .chat-message-row.chat-cluster-end {
+    margin-bottom: 10px;
+  }
+
+  html[data-theme='glassmorphism'] .chat-message-row.chat-cluster-end,
+  html[data-theme='neon-night'] .chat-message-row.chat-cluster-end {
+    margin-bottom: 11px;
+  }
+
+  html[data-theme='pixel-art'] .chat-message-row.chat-cluster-mid {
+    margin-bottom: 3px;
+  }
+
+  html[data-theme='pixel-art'] .chat-message-row.chat-cluster-end {
+    margin-bottom: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .typing-dot {
+    animation: none !important;
+    opacity: 0.65;
+  }
+
+  .theme-page-enter,
+  .animate-fade-in,
+  .animate-fade-in-up,
+  .animate-scale-up,
+  .fade-in {
+    animation: none !important;
+  }
 }
 
 html[data-theme='pixel-art'] .rounded-full {

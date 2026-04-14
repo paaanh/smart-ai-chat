@@ -49,7 +49,7 @@ export default function ChatPage() {
     };
 
     return (
-        <div className="h-dvh min-h-0 flex bg-gray-100 theme-page-enter overflow-hidden">
+        <div className="h-dvh min-h-0 flex theme-muted-surface theme-page-enter overflow-hidden">
             {/* Sidebar */}
             <ThemedSurface
                 className={`${showSidebar ? 'flex' : 'hidden'

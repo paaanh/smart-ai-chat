@@ -28,7 +28,7 @@ function applyTheme(themeId) {
         root.style.setProperty(key, value);
     });
 
-    // Toggle dark mode class for App.css overrides
+    // Toggle dark mode class for global CSS overrides
     if (theme.isDark) {
         root.classList.add('theme-dark');
     } else {

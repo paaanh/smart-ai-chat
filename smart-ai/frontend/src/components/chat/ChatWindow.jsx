@@ -6,7 +6,7 @@ import { useSocket } from '../../hooks/useSocket';
 import { useCall } from '../../hooks/useCall';
 import { useChat } from '../../hooks/useChat';
 import { useAI } from '../../hooks/useAI';
-import { AnimatePresence, motion } from 'framer-motion'; // eslint-disable-line no-unused-vars
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'; // eslint-disable-line no-unused-vars
 import MessageBubble from './MessageBubble';
 import MessageInput from './MessageInput';
 import AIToggle from './AIToggle';
@@ -37,6 +37,7 @@ import {
 
 export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled, onAIToggle, autoTranslate }) {
     const navigate = useNavigate();
+    const reduceMotion = useReducedMotion();
     const { user, updateLockStatus } = useAuth();
     const { onlineUsers, on, off, emit } = useSocket();
     const { initiateCall } = useCall();
@@ -465,6 +466,21 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
         [messages, localMessages, pendingMessages]
     );
 
+    const isClusterMate = useCallback((left, right) => {
+        if (!left || !right) return false;
+        if (left.type === 'system' || right.type === 'system') return false;
+
+        const leftSender = left.sender?._id || left.sender;
+        const rightSender = right.sender?._id || right.sender;
+        if (String(leftSender || '') !== String(rightSender || '')) return false;
+
+        const leftTime = new Date(left.createdAt).getTime();
+        const rightTime = new Date(right.createdAt).getTime();
+        if (Number.isNaN(leftTime) || Number.isNaN(rightTime)) return false;
+
+        return Math.abs(rightTime - leftTime) <= 5 * 60 * 1000;
+    }, []);
+
     const toggleMessageSelection = useCallback((messageId) => {
         setSelectedMessageIds((prev) => {
             const next = new Set(prev);
@@ -748,7 +764,7 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                         </p>
 
                         {/* Wave emoji hint */}
-                        <div className="mt-6 text-4xl animate-bounce">👋</div>
+                        <div className={`mt-6 text-4xl ${reduceMotion ? '' : 'animate-bounce'}`}>👋</div>
                     </div>
                 ) : (
                     <>
@@ -773,16 +789,22 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                         {/* Messages list — merge server messages with local-only system messages */}
                         <AnimatePresence initial={false}>
                             {allRenderableMessages
-                                .map((msg) => (
+                                .map((msg, index, list) => {
+                                    const prev = list[index - 1];
+                                    const next = list[index + 1];
+                                    const isClusterStart = !isClusterMate(prev, msg);
+                                    const isClusterEnd = !isClusterMate(msg, next);
+
+                                    return (
                                     <motion.div
                                         key={msg._id}
                                         data-message-id={msg._id}
                                         className={`transition-colors duration-500 ${msg.pending ? 'opacity-85' : ''}`}
-                                        layout
-                                        initial={{ opacity: 0, y: 10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        exit={{ opacity: 0, y: -8 }}
-                                        transition={{ duration: 0.18, ease: 'easeOut' }}
+                                        layout={!reduceMotion}
+                                        initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+                                        animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+                                        exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+                                        transition={reduceMotion ? { duration: 0 } : { duration: 0.18, ease: 'easeOut' }}
                                     >
                                         <MessageBubble
                                             message={msg}
@@ -802,9 +824,12 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                                             isSelected={selectedMessageIds.has(msg._id)}
                                             onToggleSelect={toggleMessageSelection}
                                             onQuickReply={handleQuickReply}
+                                            isClusterStart={isClusterStart}
+                                            isClusterEnd={isClusterEnd}
                                         />
                                     </motion.div>
-                                ))}
+                                );
+                                })}
                         </AnimatePresence>
                     </>
                 )}
