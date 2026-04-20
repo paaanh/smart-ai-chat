@@ -5,12 +5,13 @@ import RoomList from '../components/room/RoomList';
 import ChatWindow from '../components/chat/ChatWindow';
 import ChatInfoSidebar from '../components/chat/ChatInfoSidebar';
 import FriendPanel from '../components/friend/FriendPanel';
+import TopicPanel from '../components/topic/TopicPanel';
 import MiniAIChatBox from '../components/chat/MiniAIChatBox';
 import NoteBubbles from '../components/chat/NoteBubbles';
 import ThemedSurface from '../components/ui/ThemedSurface';
 import SkeletonBlock from '../components/ui/SkeletonBlock';
 // CallModal + IncomingCallModal are now rendered globally in App.jsx
-import { LogOut, Settings, MessageCircle, Users, ShieldCheck } from 'lucide-react';
+import { LogOut, Settings, MessageCircle, Users, ShieldCheck, Compass, HeartHandshake } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../hooks/useLanguage';
 
@@ -20,7 +21,7 @@ export default function ChatPage() {
     const navigate = useNavigate();
     const [activeRoomId, setActiveRoomId] = useState(null);
     const [showSidebar, setShowSidebar] = useState(true);
-    const [sidebarTab, setSidebarTab] = useState('chats'); // 'chats' | 'friends'
+    const [sidebarTab, setSidebarTab] = useState('chats'); // 'chats' | 'friends' | 'topics'
     const [pendingRequestCount, setPendingRequestCount] = useState(0);
     const handleRequestCountChange = useCallback((count) => setPendingRequestCount(count), []);
     const [infoRoom, setInfoRoom] = useState(null); // room object for ChatInfoSidebar
@@ -47,6 +48,27 @@ export default function ChatPage() {
     const handleToggleInfo = (room) => {
         setInfoRoom((prev) => (prev ? null : room));
     };
+
+    const handleOpenStartAction = useCallback((target) => {
+        setShowSidebar(true);
+
+        if (target === 'home') {
+            setSidebarTab('chats');
+            setActiveRoomId(null);
+            setInfoRoom(null);
+            return;
+        }
+
+        if (target === 'topics') {
+            setSidebarTab('topics');
+            return;
+        }
+
+        if (target === 'chats-search') {
+            setSidebarTab('chats');
+            window.dispatchEvent(new CustomEvent('roomlist:focus-search'));
+        }
+    }, []);
 
     return (
         <div className="h-dvh min-h-0 flex theme-muted-surface theme-page-enter overflow-hidden">
@@ -102,6 +124,14 @@ export default function ChatPage() {
                         </button>
                     )}
                     <button
+                        onClick={() => navigate('/counseling')}
+                        className="p-1.5 rounded-full transition"
+                        style={{ color: 'var(--text-secondary)' }}
+                        title="Tư vấn hỗ trợ"
+                    >
+                        <HeartHandshake size={18} />
+                    </button>
+                    <button
                         onClick={() => navigate('/settings')}
                         className="p-1.5 rounded-full transition"
                         style={{ color: 'var(--text-secondary)' }}
@@ -154,6 +184,17 @@ export default function ChatPage() {
                             </span>
                         )}
                     </button>
+                    <button
+                        onClick={() => setSidebarTab('topics')}
+                        className={`flex-1 py-2.5 text-sm font-medium transition flex items-center justify-center gap-1.5 ${sidebarTab === 'topics'
+                            ? 'text-[var(--color-primary)] border-b-2 border-[var(--color-primary)]'
+                            : 'hover:opacity-90'
+                            }`}
+                        style={sidebarTab === 'topics' ? undefined : { color: 'var(--text-secondary)' }}
+                    >
+                        <Compass size={16} />
+                        Chủ đề
+                    </button>
                 </div>
 
                 {/* Mini AI ChatBox — shows when AI bot is enabled */}
@@ -180,6 +221,9 @@ export default function ChatPage() {
                     <div className={sidebarTab === 'friends' ? 'h-full' : 'hidden'}>
                         <FriendPanel onSelectRoom={handleSelectRoom} onRequestCountChange={handleRequestCountChange} />
                     </div>
+                    <div className={sidebarTab === 'topics' ? 'h-full' : 'hidden'}>
+                        <TopicPanel onSelectRoom={handleSelectRoom} />
+                    </div>
                 </div>
             </ThemedSurface>
 
@@ -188,7 +232,15 @@ export default function ChatPage() {
                 className={`${!showSidebar ? 'flex' : 'hidden'
                     } md:flex flex-1 min-w-0 min-h-0`}
             >
-                <ChatWindow roomId={activeRoomId} onBack={handleBack} onToggleInfo={handleToggleInfo} aiBotEnabled={aiBotEnabled} onAIToggle={setAiBotEnabled} autoTranslate={autoTranslate} />
+                <ChatWindow
+                    roomId={activeRoomId}
+                    onBack={handleBack}
+                    onToggleInfo={handleToggleInfo}
+                    aiBotEnabled={aiBotEnabled}
+                    onAIToggle={setAiBotEnabled}
+                    autoTranslate={autoTranslate}
+                    onOpenStartAction={handleOpenStartAction}
+                />
 
                 {/* Chat Info Sidebar */}
                 {infoRoom && (

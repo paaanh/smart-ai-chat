@@ -13,6 +13,9 @@ router.get('/requests', friendController.getRequests);
 // GET /api/friends/sent         (lời mời đã gửi)
 router.get('/sent', friendController.getSentRequests);
 
+// GET /api/friends/suggestions  (gợi ý bạn bè)
+router.get('/suggestions', friendController.getSuggestions);
+
 // GET /api/friends/status/:userId  (trạng thái kết bạn với 1 user)
 router.get('/status/:userId', friendController.getStatus);
 

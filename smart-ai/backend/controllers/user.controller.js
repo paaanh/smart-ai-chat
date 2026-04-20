@@ -4,7 +4,7 @@ const { buildFileUrl } = require('./upload.controller');
 // ─── Cập nhật profile (hỗ trợ upload avatar + cover) ──────────────────
 exports.updateProfile = async (req, res, next) => {
     try {
-        const { username, preferredLanguage, bio, phoneNumber, address, education, hobbies, preferredBubbleFrame } = req.body;
+        const { username, preferredLanguage, bio, phoneNumber, address, education, hobbies, interests, preferredBubbleFrame } = req.body;
         const updates = {};
 
         if (username) updates.username = username;
@@ -14,6 +14,9 @@ exports.updateProfile = async (req, res, next) => {
         if (education !== undefined) updates.education = education;
         if (hobbies !== undefined) {
             updates.hobbies = typeof hobbies === 'string' ? JSON.parse(hobbies) : hobbies;
+        }
+        if (interests !== undefined) {
+            updates.interests = typeof interests === 'string' ? JSON.parse(interests) : interests;
         }
         if (preferredLanguage && SUPPORTED_LANGUAGES.includes(preferredLanguage)) {
             updates.preferredLanguage = preferredLanguage;
@@ -99,7 +102,7 @@ exports.getSupportedLanguages = (req, res) => {
 exports.getUserById = async (req, res, next) => {
     try {
         const user = await User.findById(req.params.id)
-            .select('username email avatar coverPicture bio phoneNumber address education hobbies status preferredLanguage preferredLanguageLabel preferredBubbleFrame lastSeen createdAt');
+            .select('username email avatar coverPicture bio phoneNumber address education hobbies interests status preferredLanguage preferredLanguageLabel preferredBubbleFrame lastSeen createdAt');
 
         if (!user) {
             return res.status(404).json({ error: 'User không tồn tại' });

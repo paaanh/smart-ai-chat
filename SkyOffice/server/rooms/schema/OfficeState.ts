@@ -17,12 +17,12 @@ export class Player extends Schema implements IPlayer {
 }
 
 export class Computer extends Schema implements IComputer {
-  @type({ set: 'string' }) connectedUser = new SetSchema<string>()
+  @type({ set: 'string' }) connectedUser = new SetSchema()
 }
 
 export class Whiteboard extends Schema implements IWhiteboard {
   @type('string') roomId = getRoomId()
-  @type({ set: 'string' }) connectedUser = new SetSchema<string>()
+  @type({ set: 'string' }) connectedUser = new SetSchema()
 }
 
 export class ChatMessage extends Schema implements IChatMessage {

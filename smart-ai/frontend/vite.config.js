@@ -4,6 +4,22 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  build: {
+    rollupOptions: {
+      onwarn(warning, warn) {
+        // Some third-party packages ship Next.js directives like "use client".
+        // Vite/Rollup ignores them for SPA builds, so silence this noisy warning.
+        if (
+          warning?.code === 'MODULE_LEVEL_DIRECTIVE' &&
+          typeof warning?.message === 'string' &&
+          warning.message.includes("'use client'")
+        ) {
+          return
+        }
+        warn(warning)
+      },
+    },
+  },
   define: {
     global: 'window',
     'process.env': {},

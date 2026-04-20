@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { roomAPI, userActionsAPI, resolveMediaUrl } from '../../services/api';
+import { roomAPI, userActionsAPI, friendAPI, resolveMediaUrl } from '../../services/api';
 import { useAuth } from '../../hooks/useAuth';
 import { useSocket } from '../../hooks/useSocket';
 import { useCall } from '../../hooks/useCall';
@@ -33,9 +33,13 @@ import {
     Copy,
     X,
     Reply,
+    Compass,
+    House,
+    Search,
+    UserPlus,
 } from 'lucide-react';
 
-export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled, onAIToggle, autoTranslate }) {
+export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled, onAIToggle, autoTranslate, onOpenStartAction }) {
     const navigate = useNavigate();
     const reduceMotion = useReducedMotion();
     const { user, updateLockStatus } = useAuth();
@@ -48,6 +52,7 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
     const [iBlockedThem, setIBlockedThem] = useState(false);
     const [theyBlockedMe, setTheyBlockedMe] = useState(false);
     const [lockOverlay, setLockOverlay] = useState(false);
+    const [friendshipStatus, setFriendshipStatus] = useState('none');
     const [localMessages, setLocalMessages] = useState([]);
     const [localTranslations, setLocalTranslations] = useState({});
     const messagesEndRef = useRef(null);
@@ -65,12 +70,61 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
     const [selectionMode, setSelectionMode] = useState(false);
     const [selectedMessageIds, setSelectedMessageIds] = useState(new Set());
     const [copiedSelection, setCopiedSelection] = useState(false);
+    const [startSuggestions, setStartSuggestions] = useState([]);
+    const [startSuggestionLoading, setStartSuggestionLoading] = useState(false);
+    const [startSuggestionActionId, setStartSuggestionActionId] = useState(null);
+
+    const loadStartSuggestions = useCallback(async () => {
+        setStartSuggestionLoading(true);
+        try {
+            const { data } = await friendAPI.getSuggestions();
+            const merged = [
+                ...(data.topSimilarity || []),
+                ...(data.topicAffinity || []),
+            ];
+
+            const unique = [];
+            const seen = new Set();
+            for (const item of merged) {
+                if (!item?._id || seen.has(item._id)) continue;
+                seen.add(item._id);
+                unique.push(item);
+                if (unique.length >= 6) break;
+            }
+
+            setStartSuggestions(unique);
+        } catch (error) {
+            console.error('Load start suggestions failed:', error);
+            setStartSuggestions([]);
+        } finally {
+            setStartSuggestionLoading(false);
+        }
+    }, []);
+
+    const handleStartSuggestionRequest = useCallback(async (recipientId) => {
+        setStartSuggestionActionId(recipientId);
+        try {
+            await friendAPI.sendRequest(recipientId);
+            setStartSuggestions((prev) => prev.filter((item) => item._id !== recipientId));
+        } catch (error) {
+            console.error('Send request from start suggestions failed:', error);
+        } finally {
+            setStartSuggestionActionId(null);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (!roomId) {
+            loadStartSuggestions();
+        }
+    }, [roomId, loadStartSuggestions]);
 
     // Load room info
     useEffect(() => {
         if (!roomId) return;
         const loadRoom = async () => {
             try {
+                setFriendshipStatus('none');
                 const { data } = await roomAPI.getById(roomId);
                 setRoom(data.room);
                 // Set pinned messages from populated room data
@@ -93,6 +147,9 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                         const { data: blockData } = await userActionsAPI.getBlocked();
                         const blockedIds = (blockData.blockedUsers || []).map((u) => u._id || u);
                         setIBlockedThem(blockedIds.includes(otherId));
+
+                        const { data: statusData } = await friendAPI.getStatus(otherId);
+                        setFriendshipStatus(statusData?.status || 'none');
                     }
                 }
             } catch (err) {
@@ -400,6 +457,20 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
     };
 
     const handleCall = (type) => {
+        if (!display.isGroup && friendshipStatus !== 'accepted') {
+            setLocalMessages((prev) => [
+                ...prev,
+                {
+                    _id: `local_call_block_${Date.now()}`,
+                    type: 'system',
+                    content: '📵 Chỉ có thể gọi khi hai bên đã là bạn bè.',
+                    createdAt: new Date().toISOString(),
+                    local: true,
+                },
+            ]);
+            return;
+        }
+
         if (display.isGroup) {
             const memberIds = (room?.members || [])
                 .map(m => m.user?._id || m.user)
@@ -587,11 +658,78 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
 
     if (!roomId) {
         return (
-            <div className="flex-1 flex items-center justify-center bg-gray-50">
-                <div className="text-center text-gray-400">
+            <div className="flex-1 flex items-center justify-center bg-gray-50 px-4">
+                <div className="w-full max-w-xl text-center">
                     <div className="text-6xl mb-4">💬</div>
-                    <p className="text-lg font-medium">Chọn cuộc trò chuyện để bắt đầu</p>
-                    <p className="text-sm mt-1">Hoặc tạo cuộc trò chuyện mới</p>
+                    <p className="text-xl font-semibold text-gray-700">Chọn cuộc trò chuyện để bắt đầu</p>
+                    <p className="text-sm mt-1 text-gray-400">Hoặc mở nhanh theo gợi ý bên dưới</p>
+
+                    <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <button
+                            onClick={() => onOpenStartAction?.('topics')}
+                            className="px-3 py-2.5 rounded-xl border border-gray-200 bg-white hover:border-emerald-300 hover:bg-emerald-50 transition text-left"
+                        >
+                            <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-emerald-700">
+                                <Compass size={14} />
+                                Khám phá chủ đề
+                            </span>
+                            <p className="text-[11px] text-gray-400 mt-1">Mở danh sách phòng chủ đề</p>
+                        </button>
+
+                        <button
+                            onClick={() => onOpenStartAction?.('chats-search')}
+                            className="px-3 py-2.5 rounded-xl border border-gray-200 bg-white hover:border-indigo-300 hover:bg-indigo-50 transition text-left"
+                        >
+                            <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-indigo-700">
+                                <Search size={14} />
+                                Tìm cuộc trò chuyện
+                            </span>
+                            <p className="text-[11px] text-gray-400 mt-1">Focus vào ô tìm kiếm chat</p>
+                        </button>
+                    </div>
+
+                    <div className="mt-4 rounded-2xl border border-gray-200 bg-white p-3 text-left">
+                        <p className="text-sm font-semibold text-gray-700 inline-flex items-center gap-1.5">
+                            <UserPlus size={14} className="text-[var(--color-primary)]" />
+                            Gợi ý bạn bè cho bạn
+                        </p>
+
+                        {startSuggestionLoading ? (
+                            <div className="py-6 text-center text-xs text-gray-400">
+                                <Loader2 size={14} className="animate-spin mx-auto mb-2" />
+                                Đang tải gợi ý...
+                            </div>
+                        ) : startSuggestions.length === 0 ? (
+                            <p className="py-4 text-xs text-gray-400 text-center">Hiện chưa có gợi ý phù hợp.</p>
+                        ) : (
+                            <div className="mt-2 space-y-2">
+                                {startSuggestions.map((item) => (
+                                    <div key={item._id} className="flex items-center gap-2 rounded-lg border border-gray-100 px-2.5 py-2">
+                                        <div className="w-8 h-8 rounded-full bg-[var(--color-primary)] text-white flex items-center justify-center text-sm font-semibold overflow-hidden shrink-0">
+                                            {item.avatar ? (
+                                                <img src={item.avatar} alt={item.username} className="w-full h-full object-cover" />
+                                            ) : (
+                                                item.username?.charAt(0)?.toUpperCase()
+                                            )}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium text-gray-800 truncate">{item.username}</p>
+                                            <p className="text-[11px] text-gray-400 truncate">
+                                                {(item.reasonBadges || []).slice(0, 1).join(' • ') || 'Có điểm tương đồng với bạn'}
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={() => handleStartSuggestionRequest(item._id)}
+                                            disabled={startSuggestionActionId === item._id}
+                                            className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-[var(--color-primary-light)] text-[var(--color-primary)] hover:bg-[var(--color-primary-medium)] disabled:opacity-50"
+                                        >
+                                            {startSuggestionActionId === item._id ? 'Đang gửi' : 'Kết bạn'}
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         );
@@ -646,6 +784,14 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                 {/* Actions */}
                 <div className="flex items-center gap-1 max-w-[50vw] md:max-w-none overflow-x-auto scrollbar-hide">
                     <button
+                        onClick={() => onOpenStartAction?.('home')}
+                        className="p-2 hover:bg-gray-100 rounded-full transition text-gray-600 shrink-0"
+                        title="Về trang chọn cuộc trò chuyện"
+                    >
+                        <House size={18} />
+                    </button>
+
+                    <button
                         onClick={() => {
                             if (selectionMode) {
                                 clearSelectionMode();
@@ -678,15 +824,17 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                     {/* Call buttons - available for both 1-1 and group */}
                     <button
                         onClick={() => handleCall('audio')}
-                        className="p-2 hover:bg-gray-100 rounded-full transition text-gray-600 shrink-0"
-                        title="Gọi thoại"
+                        disabled={!display.isGroup && friendshipStatus !== 'accepted'}
+                        className="p-2 hover:bg-gray-100 rounded-full transition text-gray-600 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                        title={!display.isGroup && friendshipStatus !== 'accepted' ? 'Chỉ gọi được khi đã là bạn bè' : 'Gọi thoại'}
                     >
                         <Phone size={18} />
                     </button>
                     <button
                         onClick={() => handleCall('video')}
-                        className="p-2 hover:bg-gray-100 rounded-full transition text-gray-600 shrink-0"
-                        title="Gọi video"
+                        disabled={!display.isGroup && friendshipStatus !== 'accepted'}
+                        className="p-2 hover:bg-gray-100 rounded-full transition text-gray-600 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                        title={!display.isGroup && friendshipStatus !== 'accepted' ? 'Chỉ gọi được khi đã là bạn bè' : 'Gọi video'}
                     >
                         <Video size={18} />
                     </button>

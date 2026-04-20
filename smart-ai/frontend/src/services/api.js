@@ -251,12 +251,33 @@ export const friendAPI = {
     getAll: () => api.get('/friends'),
     getRequests: () => api.get('/friends/requests'),
     getSent: () => api.get('/friends/sent'),
+    getSuggestions: () => api.get('/friends/suggestions'),
     getStatus: (userId) => api.get(`/friends/status/${encodeURIComponent(userId)}`),
     sendRequest: (recipientId) => api.post('/friends/request', { recipientId }),
     accept: (id) => api.put(`/friends/${id}/accept`),
     reject: (id) => api.put(`/friends/${id}/reject`),
     cancelRequest: (id) => api.delete(`/friends/request/${id}`),
     remove: (id) => api.delete(`/friends/${id}`),
+};
+
+// ── Counseling endpoints ───────────────────────────────────────
+export const counselingAPI = {
+    getCategories: () => api.get('/counseling/categories'),
+    createSession: (payload) => api.post('/counseling/sessions', payload),
+    getSessions: () => api.get('/counseling/sessions'),
+    getSession: (id) => api.get(`/counseling/sessions/${id}`),
+    sendMessage: (id, content) => api.post(`/counseling/sessions/${id}/messages`, { content }),
+    closeSession: (id) => api.put(`/counseling/sessions/${id}/close`),
+};
+
+// ── Topic endpoints ───────────────────────────────────────────
+export const topicAPI = {
+    create: (payload) => api.post('/topics', payload),
+    getAll: (params) => api.get('/topics', { params }),
+    getById: (id) => api.get(`/topics/${id}`),
+    join: (id) => api.post(`/topics/${id}/join`),
+    leave: (id) => api.delete(`/topics/${id}/leave`),
+    getMyTopics: () => api.get('/topics/my'),
 };
 
 // ── Upload endpoints ───────────────────────────────────────────

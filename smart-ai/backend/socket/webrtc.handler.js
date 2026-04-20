@@ -1,6 +1,7 @@
 const { User } = require('../models/User');
 const Message = require('../models/Message');
 const Room = require('../models/Room');
+const Friendship = require('../models/Friendship');
 
 // ─── Active Calls Tracker (in-memory) ─────────────────────────────────
 const activeCalls = new Map(); // roomId → { callType, callerId, participants[], startTime, isGroup, roomName }
@@ -14,6 +15,11 @@ module.exports = (io, socket) => {
         return user?.socketId || null;
     };
 
+    const ensureFriendship = async (sourceUserId, targetUserId) => {
+        if (!targetUserId || sourceUserId.toString() === targetUserId.toString()) return false;
+        return Friendship.areFriends(sourceUserId, targetUserId);
+    };
+
     // ═══════════════════════════════════════════════════════════════════
     // ─── Call Management ──────────────────────────────────────────────
     // ═══════════════════════════════════════════════════════════════════
@@ -24,7 +30,11 @@ module.exports = (io, socket) => {
             console.log(`📞 ${socket.user.username} initiating ${callType} call in room ${roomId}`);
 
             // Normalize: accept both singular targetUserId and plural targetUserIds
-            const targets = targetUserIds || (targetUserId ? [targetUserId] : []);
+            const targets = [...new Set((targetUserIds || (targetUserId ? [targetUserId] : [])).filter(Boolean))];
+
+            if (!targets.length) {
+                return socket.emit('call:error', { roomId, error: 'Không có người nhận cuộc gọi' });
+            }
 
             // Kiểm tra nếu room đang có cuộc gọi
             if (activeCalls.has(roomId)) {
@@ -36,7 +46,28 @@ module.exports = (io, socket) => {
 
             // Check if this is a group call
             const room = await Room.findById(roomId).lean();
+            if (!room) {
+                return socket.emit('call:error', { roomId, error: 'Phòng gọi không tồn tại' });
+            }
+
+            const isCallerMember = room.members?.some((member) => member.user.toString() === userId);
+            if (!isCallerMember) {
+                return socket.emit('call:error', { roomId, error: 'Bạn không phải thành viên của phòng' });
+            }
+
             const isGroup = room?.type === 'group';
+
+            // Friend-gated policy: chỉ gọi được khi đã là bạn bè accepted
+            for (const targetId of targets) {
+                const isFriend = await ensureFriendship(userId, targetId);
+                if (!isFriend) {
+                    return socket.emit('call:error', {
+                        roomId,
+                        error: 'Chỉ có thể gọi cho người đã là bạn bè',
+                        targetUserId: targetId,
+                    });
+                }
+            }
 
             // Tạo call record
             activeCalls.set(roomId, {
@@ -103,6 +134,17 @@ module.exports = (io, socket) => {
             const call = activeCalls.get(roomId);
             if (!call) {
                 return socket.emit('call:error', { roomId, error: 'Cuộc gọi đã kết thúc hoặc không tồn tại' });
+            }
+
+            // Defense-in-depth: nếu không còn quan hệ bạn bè thì không cho nhận cuộc gọi
+            if (callerId) {
+                const isFriend = await ensureFriendship(userId, callerId);
+                if (!isFriend) {
+                    return socket.emit('call:error', {
+                        roomId,
+                        error: 'Không thể nhận cuộc gọi vì hai bên chưa là bạn bè',
+                    });
+                }
             }
 
             // Get existing participants BEFORE adding the new one
@@ -252,6 +294,14 @@ module.exports = (io, socket) => {
         try {
             const call = activeCalls.get(roomId);
             if (!call) return socket.emit('call:error', { roomId, error: 'Cuộc gọi không tồn tại' });
+
+            const isFriend = await ensureFriendship(userId, targetUserId);
+            if (!isFriend) {
+                return socket.emit('call:error', {
+                    roomId,
+                    error: 'Chỉ có thể mời người đã là bạn bè vào cuộc gọi',
+                });
+            }
 
             if (call.participants.includes(targetUserId)) {
                 return socket.emit('call:error', { roomId, error: 'Người này đã trong cuộc gọi' });

@@ -1,5 +1,6 @@
 const Room = require('../models/Room');
 const Message = require('../models/Message');
+const ChatDuration = require('../models/ChatDuration');
 const { User } = require('../models/User');
 const { translateForRoom, getTranslationForUser } = require('../services/translation.service');
 const { filterMessage } = require('../utils/badWordFilter');
@@ -90,6 +91,31 @@ module.exports = (io, socket) => {
             }
 
             const message = await Message.create(messageData);
+
+            // ── Track tương tác cho direct chat (cặp user) ──
+            if (room.type === 'direct') {
+                const otherMember = room.members.find((m) => m.user.toString() !== userId.toString());
+                if (otherMember) {
+                    const participants = [userId.toString(), otherMember.user.toString()].sort();
+                    await ChatDuration.findOneAndUpdate(
+                        { participants },
+                        {
+                            $setOnInsert: {
+                                participants,
+                                roomId: room._id,
+                            },
+                            $set: {
+                                roomId: room._id,
+                                lastInteraction: new Date(),
+                            },
+                            $inc: {
+                                totalMessages: 1,
+                            },
+                        },
+                        { upsert: true, new: true, setDefaultsOnInsert: true }
+                    );
+                }
+            }
 
             const populatedMessage = await Message.findById(message._id)
                 .populate('sender', 'username avatar googlePicture preferredLanguage preferredBubbleFrame');

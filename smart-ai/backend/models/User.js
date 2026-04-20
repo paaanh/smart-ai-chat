@@ -103,6 +103,10 @@ const userSchema = new mongoose.Schema({
         type: [String],
         default: [],
     },
+    interests: {
+        type: [String],
+        default: [],
+    },
 
     // ===== TÍNH NĂNG DỊCH THUẬT CÁ NHÂN HÓA =====
     preferredLanguage: {

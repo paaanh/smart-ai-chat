@@ -48,7 +48,7 @@ const roomSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ['direct', 'group'],
+        enum: ['direct', 'group', 'topic'],
         required: true,
     },
     members: [memberSchema],

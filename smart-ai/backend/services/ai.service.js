@@ -59,6 +59,23 @@ const SYSTEM_PROMPT = `Bạn là "Smart AI Assistant" - trợ lý thông minh tr
 5. KHÔNG bịa đặt thông tin, nếu không biết hãy nói rõ.
 6. Format tin nhắn dễ đọc, dùng emoji khi phù hợp.`;
 
+const COUNSELING_CATEGORY_PROMPTS = {
+    tam_ly: 'Bạn là trợ lý tư vấn tâm lý. Trọng tâm: lắng nghe, đồng cảm, giúp người dùng ổn định cảm xúc và gợi ý bước hành động nhỏ, an toàn.',
+    phap_luat: 'Bạn là trợ lý thông tin pháp luật cơ bản. Trọng tâm: giải thích quyền lợi phổ thông, quy trình xử lý, và khuyến nghị liên hệ đơn vị pháp lý chính thống.',
+    bao_luc_gia_dinh: 'Bạn là trợ lý hỗ trợ nạn nhân bạo lực gia đình. Trọng tâm: an toàn trước tiên, nhận diện dấu hiệu nguy hiểm, kế hoạch thoát hiểm, và khuyến nghị gọi hỗ trợ khẩn cấp.',
+    suc_khoe: 'Bạn là trợ lý thông tin sức khỏe phổ thông. Trọng tâm: chăm sóc cơ bản, dinh dưỡng, theo dõi dấu hiệu, và khuyến nghị đi khám khi có nguy cơ.',
+    giao_duc: 'Bạn là trợ lý giáo dục và hướng nghiệp. Trọng tâm: định hướng học tập, kỹ năng nghề, cơ hội học bổng và cách lên kế hoạch ngắn hạn.',
+};
+
+const COUNSELING_SAFETY_PROMPT = `Quy tắc bắt buộc:
+1) Luôn trả lời bằng tiếng Việt, giọng điệu nhẹ nhàng, tôn trọng, không phán xét.
+2) Không chẩn đoán y khoa, không đưa kết luận pháp lý tuyệt đối.
+3) Nếu người dùng có dấu hiệu nguy cơ tự hại hoặc bị bạo lực nghiêm trọng, ưu tiên khuyến nghị liên hệ người thân tin cậy và đường dây nóng hỗ trợ khẩn cấp.
+4) Trả lời ngắn gọn, thực tế, có bước hành động cụ thể ngay hôm nay.
+5) Không yêu cầu thông tin nhạy cảm không cần thiết.`;
+
+const stripUnsafePrefix = (value = '') => value.replace(/^assistant:\s*/i, '').trim();
+
 // ─── Init AI ──────────────────────────────────────────────────────────
 const initAI = () => {
     const apiKey = process.env.GROQ_API_KEY;
@@ -340,6 +357,47 @@ Hãy phản hồi hữu ích, ngắn gọn (tối đa 150 từ). Nếu tin nhắ
     }
 };
 
+// ─── AI Counseling ───────────────────────────────────────────────────
+const generateCounselingResponse = async (message, category, history = []) => {
+    if (!groq) {
+        return '⚠️ AI chưa được khởi tạo. Vui lòng thử lại sau.';
+    }
+
+    if (!rateLimiter.canMakeRequest()) {
+        const waitSeconds = Math.ceil(rateLimiter.getWaitTime() / 1000);
+        return `⚠️ Hệ thống đang bận, vui lòng thử lại sau ${waitSeconds} giây.`;
+    }
+
+    try {
+        const categoryPrompt = COUNSELING_CATEGORY_PROMPTS[category] || COUNSELING_CATEGORY_PROMPTS.tam_ly;
+        const messages = [
+            {
+                role: 'system',
+                content: `${categoryPrompt}\n\n${COUNSELING_SAFETY_PROMPT}`,
+            },
+        ];
+
+        history.slice(-20).forEach((item) => {
+            if (!item?.content) return;
+            const role = item.role === 'assistant' ? 'assistant' : 'user';
+            messages.push({ role, content: String(item.content) });
+        });
+
+        messages.push({ role: 'user', content: message });
+
+        const result = await callWithRetry(async () => chatCompletion(messages));
+        const clean = stripUnsafePrefix(result);
+
+        return clean || 'Mình đang ở đây để lắng nghe bạn. Bạn có thể chia sẻ thêm điều đang làm bạn lo lắng nhất lúc này không?';
+    } catch (error) {
+        console.error('❌ [AI Counseling] Error:', error.message);
+        if (error.status === 429 || error.message?.includes('429') || error.message?.includes('Rate limit')) {
+            return '⚠️ Tư vấn AI đang bận, bạn thử lại sau ít phút nhé.';
+        }
+        return '⚠️ Hệ thống tư vấn đang gặp lỗi tạm thời. Bạn có thể thử lại sau hoặc liên hệ đường dây hỗ trợ gần nhất.';
+    }
+};
+
 // ─── AI Bot: Tóm tắt cuộc trò chuyện ─────────────────────────────────
 const summarizeConversation = async (roomId, messageCount = 50) => {
     if (!groq) {
@@ -490,6 +548,7 @@ module.exports = {
     translateText,
     translateBatch,
     generateAIResponse,
+    generateCounselingResponse,
     summarizeConversation,
     summarizeCallAudio,
     analyzeScreenImage,

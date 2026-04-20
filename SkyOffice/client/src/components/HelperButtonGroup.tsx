@@ -12,7 +12,6 @@ import CloseIcon from '@mui/icons-material/Close'
 import LightbulbIcon from '@mui/icons-material/Lightbulb'
 import ArrowRightIcon from '@mui/icons-material/ArrowRight'
 import GitHubIcon from '@mui/icons-material/GitHub'
-import TwitterIcon from '@mui/icons-material/Twitter'
 import VideogameAssetIcon from '@mui/icons-material/VideogameAsset'
 import VideogameAssetOffIcon from '@mui/icons-material/VideogameAssetOff'
 
@@ -209,15 +208,10 @@ export default function HelperButtonGroup() {
         <Tooltip title="Visit Our GitHub">
           <StyledFab
             size="small"
-            href="https://github.com/kevinshen56714/SkyOffice"
+            href="https://github.com/paaanh/smart-ai-chat"
             target="_blank"
           >
             <GitHubIcon />
-          </StyledFab>
-        </Tooltip>
-        <Tooltip title="Follow Us on Twitter">
-          <StyledFab size="small" href="https://twitter.com/SkyOfficeApp" target="_blank">
-            <TwitterIcon />
           </StyledFab>
         </Tooltip>
         <Tooltip title="Switch Background Theme">

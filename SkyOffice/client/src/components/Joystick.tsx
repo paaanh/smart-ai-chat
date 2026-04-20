@@ -53,6 +53,9 @@ const JoystickItem = (props: Props) => {
   return (
     <Joystick
       size={75}
+      throttle={16}
+      sticky={false}
+      followCursor={false}
       baseColor="#4b4b4b70"
       stickColor="#42eacb80"
       stop={() => {

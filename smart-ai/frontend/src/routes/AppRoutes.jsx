@@ -8,6 +8,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import { useLocation } from 'react-router-dom';
+// eslint-disable-next-line no-unused-vars
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAuth } from '../hooks/useAuth';
 
@@ -23,6 +24,7 @@ const ProfilePage = lazy(() => import('../pages/ProfilePage'));
 const GroupProfilePage = lazy(() => import('../pages/GroupProfilePage'));
 const AdminPage = lazy(() => import('../pages/AdminPage'));
 const OfficePage = lazy(() => import('../pages/OfficePage'));
+const CounselingPage = lazy(() => import('../pages/CounselingPage'));
 
 // ── Loading fallback ───────────────────────────────────────────
 function LoadingScreen() {
@@ -176,6 +178,14 @@ export default function AppRoutes() {
                             element={
                                 <PrivateRoute>
                                     <OfficePage />
+                                </PrivateRoute>
+                            }
+                        />
+                        <Route
+                            path="/counseling"
+                            element={
+                                <PrivateRoute>
+                                    <CounselingPage />
                                 </PrivateRoute>
                             }
                         />

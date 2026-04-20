@@ -71,7 +71,7 @@ export default class MyPlayer extends Player {
           break
         case ItemType.VENDINGMACHINE:
           // hacky and hard-coded, but leaving it as is for now
-          const url = 'https://www.buymeacoffee.com/skyoffice'
+          const url = 'https://www.facebook.com/phucanh.tran.12764/'
           openURL(url)
           break
       }

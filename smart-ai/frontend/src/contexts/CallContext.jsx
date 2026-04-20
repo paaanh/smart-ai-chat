@@ -560,6 +560,15 @@ export function CallProvider({ children }) {
             cleanup();
         };
 
+        const handleCallError = ({ error }) => {
+            const message = error || 'Không thể thực hiện cuộc gọi';
+            setCallError(message);
+            emitToast(`📵 ${message}`, { duration: 3500 });
+            if (!callState.active) {
+                cleanup();
+            }
+        };
+
         // ── 1-1: callee accepted → caller creates initiator peer ──
         const handleAccepted = async ({ userId: acceptedUserId }) => {
             console.log('[Call] Call accepted by', acceptedUserId);
@@ -717,6 +726,7 @@ export function CallProvider({ children }) {
         on('call:rejected', handleRejected);
         on('call:ended', handleEnded);
         on('call:timeout', handleTimeout);
+        on('call:error', handleCallError);
         on('call:accepted', handleAccepted);
         on('call:participant-joined', handleParticipantJoined);
         on('call:existing-participants', handleExistingParticipants);
@@ -732,6 +742,7 @@ export function CallProvider({ children }) {
             off('call:rejected', handleRejected);
             off('call:ended', handleEnded);
             off('call:timeout', handleTimeout);
+            off('call:error', handleCallError);
             off('call:accepted', handleAccepted);
             off('call:participant-joined', handleParticipantJoined);
             off('call:existing-participants', handleExistingParticipants);

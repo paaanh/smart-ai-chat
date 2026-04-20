@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import styled from 'styled-components'
 import JoystickItem from './Joystick'
 
@@ -11,9 +11,21 @@ import { JoystickMovement } from './Joystick'
 const Backdrop = styled.div`
   position: fixed;
   bottom: 100px;
-  right: 32px;
+  right: 24px;
   max-height: 50%;
-  max-width: 100%;
+  max-width: calc(100% - 24px);
+  z-index: 20;
+  pointer-events: none;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+
+  @media (max-width: 650px) {
+    bottom: 88px;
+    left: 16px;
+    right: auto;
+    max-width: calc(100% - 32px);
+  }
 `
 
 const Wrapper = styled.div`
@@ -27,6 +39,12 @@ const Wrapper = styled.div`
 const JoystickWrapper = styled.div`
   margin-top: auto;
   align-self: flex-end;
+  pointer-events: auto;
+  touch-action: none;
+
+  @media (max-width: 650px) {
+    align-self: flex-start;
+  }
 `
 export const minimumScreenWidthSize = 650 //px
 
@@ -46,22 +64,22 @@ export default function MobileVirtualJoystick() {
   const showJoystick = useAppSelector((state) => state.user.showJoystick)
   const showChat = useAppSelector((state) => state.chat.showChat)
   const hasSmallScreen = isSmallScreen(minimumScreenWidthSize)
-  const game = phaserGame.scene.keys.game as Game
+  const game = phaserGame.scene.keys.game as Game | undefined
 
-  useEffect(() => {}, [showJoystick, showChat])
+  const shouldShowJoystick = !(showChat && hasSmallScreen) && showJoystick
 
   const handleMovement = (movement: JoystickMovement) => {
     game.myPlayer?.handleJoystickMovement(movement)
   }
 
+  if (!shouldShowJoystick) return null
+
   return (
     <Backdrop>
       <Wrapper>
-        {!(showChat && hasSmallScreen) && showJoystick && (
-          <JoystickWrapper>
-            <JoystickItem onDirectionChange={handleMovement}></JoystickItem>
-          </JoystickWrapper>
-        )}
+        <JoystickWrapper>
+          <JoystickItem onDirectionChange={handleMovement}></JoystickItem>
+        </JoystickWrapper>
       </Wrapper>
     </Backdrop>
   )
