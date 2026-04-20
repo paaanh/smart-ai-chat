@@ -262,7 +262,11 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
             animate={{ opacity: 1, y: 0 }}
         >
             <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-[var(--color-primary)] flex items-center justify-center text-white font-medium shrink-0 overflow-hidden">
+                <div 
+                    className="w-10 h-10 rounded-full bg-[var(--color-primary)] flex items-center justify-center text-white font-medium shrink-0 overflow-hidden cursor-pointer hover:ring-2 hover:ring-[var(--color-primary-ring)] transition"
+                    onClick={() => navigate(`/profile/${u._id}`)}
+                    title="Xem hồ sơ"
+                >
                     {u.avatar || u.googlePicture ? (
                         <img src={u.avatar || u.googlePicture} alt={u.username} className="w-full h-full object-cover" />
                     ) : (

@@ -705,15 +705,24 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                             <div className="mt-2 space-y-2">
                                 {startSuggestions.map((item) => (
                                     <div key={item._id} className="flex items-center gap-2 rounded-lg border border-gray-100 px-2.5 py-2">
-                                        <div className="w-8 h-8 rounded-full bg-[var(--color-primary)] text-white flex items-center justify-center text-sm font-semibold overflow-hidden shrink-0">
-                                            {item.avatar ? (
-                                                <img src={item.avatar} alt={item.username} className="w-full h-full object-cover" />
+                                        <div 
+                                            className="w-8 h-8 rounded-full bg-[var(--color-primary)] text-white flex items-center justify-center text-sm font-semibold overflow-hidden shrink-0 cursor-pointer hover:ring-2 hover:ring-[var(--color-primary-ring)] transition"
+                                            onClick={() => navigate(`/profile/${item._id}`)}
+                                            title="Xem hồ sơ"
+                                        >
+                                            {item.avatar || item.googlePicture ? (
+                                                <img src={item.avatar || item.googlePicture} alt={item.username} className="w-full h-full object-cover" />
                                             ) : (
                                                 item.username?.charAt(0)?.toUpperCase()
                                             )}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium text-gray-800 truncate">{item.username}</p>
+                                            <p className="text-sm font-medium text-gray-800 truncate flex items-center gap-2">
+                                                {item.username}
+                                                <span className="text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full border border-green-200">
+                                                    {item.similarityScore || item.topicAffinityScore || 0}%
+                                                </span>
+                                            </p>
                                             <p className="text-[11px] text-gray-400 truncate">
                                                 {(item.reasonBadges || []).slice(0, 1).join(' • ') || 'Có điểm tương đồng với bạn'}
                                             </p>
