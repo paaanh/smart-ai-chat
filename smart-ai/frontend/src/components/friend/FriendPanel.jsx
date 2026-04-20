@@ -20,6 +20,7 @@ import {
     X,
     Check,
     Bell,
+    Sparkles,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -29,10 +30,11 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
     const { t } = useLanguage();
     const { on, off, onlineUsers } = useSocket();
     const navigate = useNavigate();
-    const [tab, setTab] = useState('friends'); // friends | requests | search
+    const [tab, setTab] = useState('friends'); // friends | requests | search | suggestions
     const [friends, setFriends] = useState([]);
     const [requests, setRequests] = useState([]);
     const [sentRequests, setSentRequests] = useState([]);
+    const [suggestions, setSuggestions] = useState({ topSimilarity: [], topicAffinity: [] });
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -43,14 +45,16 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
     const loadData = useCallback(async () => {
         setLoading(true);
         try {
-            const [friendsRes, requestsRes, sentRes] = await Promise.all([
+            const [friendsRes, requestsRes, sentRes, suggestionsRes] = await Promise.all([
                 friendAPI.getAll(),
                 friendAPI.getRequests(),
                 friendAPI.getSent(),
+                friendAPI.getSuggestions(),
             ]);
             setFriends(friendsRes.data.friends || []);
             setRequests(requestsRes.data.requests || []);
             setSentRequests(sentRes.data.requests || []);
+            setSuggestions(suggestionsRes.data || { topSimilarity: [], topicAffinity: [] });
         } catch (err) {
             console.error('Load friends error:', err);
         } finally {
@@ -250,6 +254,73 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
         </div>
     );
 
+    const renderSuggestionItem = (u, score) => (
+        <motion.div
+            key={u._id}
+            className={`flex flex-col gap-2 p-3 rounded-xl border border-gray-100 ${isGlassTheme ? 'bg-white/40 hover:bg-white/60' : 'bg-gray-50 hover:bg-gray-100'} transition`}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+        >
+            <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-[var(--color-primary)] flex items-center justify-center text-white font-medium shrink-0 overflow-hidden">
+                    {u.avatar || u.googlePicture ? (
+                        <img src={u.avatar || u.googlePicture} alt={u.username} className="w-full h-full object-cover" />
+                    ) : (
+                        u.username.charAt(0).toUpperCase()
+                    )}
+                </div>
+                <div className="flex-1 min-w-0">
+                    <p className="font-medium text-gray-900 text-sm truncate flex items-center gap-2">
+                        {u.username}
+                        <span className="text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full border border-green-200">
+                            {score}%
+                        </span>
+                    </p>
+                    <p className="text-[11px] text-gray-500 truncate mt-0.5">
+                        {u.preferredLanguageLabel || u.preferredLanguage}
+                    </p>
+                </div>
+                {u.friendStatus === 'pending' && u.isRequester ? (
+                    <button
+                        onClick={() => handleCancelRequest(u.friendshipId)}
+                        disabled={actionLoading === u.friendshipId}
+                        className="p-2 text-red-500 bg-red-50 hover:bg-red-100 rounded-full transition disabled:opacity-50"
+                        title={t('friendPanel.cancelRequest')}
+                    >
+                        {actionLoading === u.friendshipId ? (
+                            <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                            <X size={16} />
+                        )}
+                    </button>
+                ) : (
+                    <button
+                        onClick={() => handleSendRequest(u._id)}
+                        disabled={actionLoading === u._id}
+                        className="p-2 text-[var(--color-primary)] bg-[var(--color-primary-light)] hover:bg-[var(--color-primary-medium)] rounded-full transition disabled:opacity-50"
+                        title={t('friendPanel.addFriend')}
+                    >
+                        {actionLoading === u._id ? (
+                            <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                            <UserPlus size={16} />
+                        )}
+                    </button>
+                )}
+            </div>
+            
+            {u.reasonBadges && u.reasonBadges.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pl-[52px]">
+                    {u.reasonBadges.map((badge, idx) => (
+                        <span key={idx} className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 whitespace-nowrap">
+                            {badge}
+                        </span>
+                    ))}
+                </div>
+            )}
+        </motion.div>
+    );
+
     return (
         <div className={`h-full flex flex-col border-r border-gray-200 ${isGlassTheme ? 'glass-panel' : 'bg-white'} ${isPixelTheme ? 'font-pixel' : ''}`}>
             {/* Header */}
@@ -297,6 +368,16 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
                     >
                         <UserPlus size={14} className="inline mr-1" />
                         {t('friendPanel.tabAdd')}
+                    </button>
+                    <button
+                        onClick={() => setTab('suggestions')}
+                        className={`flex-1 py-1.5 text-xs font-medium rounded-md transition ${tab === 'suggestions'
+                            ? 'bg-white text-[var(--color-primary)] shadow-sm'
+                            : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                    >
+                        <Sparkles size={14} className="inline mr-1" />
+                        Gợi ý
                     </button>
                 </div>
             </div>
@@ -479,6 +560,41 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
                             </div>
                         )}
                     </>
+                )}
+
+                {/* ── Suggestions Tab ── */}
+                {!loading && tab === 'suggestions' && (
+                    <div className="p-4 space-y-6">
+                        {suggestions.topSimilarity?.length > 0 && (
+                            <div>
+                                <h3 className="text-xs font-semibold text-[var(--color-primary)] uppercase flex items-center gap-1.5 mb-3 px-1">
+                                    <Users size={14} /> Gợi ý theo độ tương đồng
+                                </h3>
+                                <div className="space-y-2">
+                                    {suggestions.topSimilarity.map((u) => renderSuggestionItem(u, u.similarityScore))}
+                                </div>
+                            </div>
+                        )}
+
+                        {suggestions.topicAffinity?.length > 0 && (
+                            <div>
+                                <h3 className="text-xs font-semibold text-purple-600 uppercase flex items-center gap-1.5 mb-3 px-1">
+                                    <MessageCircle size={14} /> Cùng chung chủ đề
+                                </h3>
+                                <div className="space-y-2">
+                                    {suggestions.topicAffinity.map((u) => renderSuggestionItem(u, u.topicAffinityScore))}
+                                </div>
+                            </div>
+                        )}
+
+                        {suggestions.topSimilarity?.length === 0 && suggestions.topicAffinity?.length === 0 && (
+                            <div className="p-8 text-center text-gray-400">
+                                <Sparkles size={40} className="mx-auto mb-2 opacity-50" />
+                                <p className="text-sm">Chưa có gợi ý phù hợp cho bạn lúc này.</p>
+                                <p className="text-xs mt-1">Hãy tham gia câu lạc bộ, trò chuyện, hoặc thiết lập sở thích của bạn để nhận gợi ý!</p>
+                            </div>
+                        )}
+                    </div>
                 )}
 
                 {/* ── Search / Add Friend Tab ── */}
