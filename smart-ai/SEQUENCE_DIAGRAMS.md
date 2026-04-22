@@ -364,3 +364,4 @@ sequenceDiagram
 ---
 
 Neu ban muon, minh co the tach tiep theo tung endpoint chi tiet (1 endpoint = 1 sequence diagram rieng) cho tai lieu SRS/SDD.
+

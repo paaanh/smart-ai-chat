@@ -138,8 +138,8 @@ export default function RoomList({ activeRoomId, onSelectRoom }) {
     };
 
     const getRoomDisplay = (room) => {
-        if (room.type === 'group') {
-            return { name: room.name, avatar: null, isGroup: true };
+        if (room.type === 'group' || room.type === 'topic' || room.type === 'counseling') {
+            return { name: room.name, avatar: room.groupAvatar ? resolveMediaUrl(room.groupAvatar) : null, isGroup: true };
         }
         // Direct: show nickname if set, otherwise the other person's name
         const other = room.members?.find((m) => {

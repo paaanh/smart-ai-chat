@@ -183,7 +183,10 @@ exports.leaveTopic = async (req, res, next) => {
         room.members = room.members.filter((item) => item.user.toString() !== req.user._id.toString());
 
         if (leavingMember.role === 'admin' && room.members.length > 0) {
-            room.members[0].role = 'admin';
+            const hasOtherAdmins = room.members.some(m => m.role === 'admin');
+            if (!hasOtherAdmins) {
+                room.members[0].role = 'admin';
+            }
         }
 
         if (room.members.length === 0) {
@@ -218,3 +221,63 @@ exports.getMyTopics = async (req, res, next) => {
         next(error);
     }
 };
+
+// ─── Cập nhật thông tin phòng chủ đề (creator + admin) ────────────────
+exports.updateTopicSettings = async (req, res, next) => {
+    try {
+        const { title, description } = req.body;
+        const topic = await TopicRoom.findById(req.params.id);
+        if (!topic || !topic.isActive) {
+            return res.status(404).json({ error: 'Phòng chủ đề không tồn tại' });
+        }
+
+        const room = await Room.findById(topic.room);
+        if (!room) {
+            return res.status(404).json({ error: 'Room của chủ đề không tồn tại' });
+        }
+
+        // Kiểm tra quyền: creator hoặc admin trong room
+        const isCreator = topic.creator.toString() === req.user._id.toString();
+        const memberEntry = room.members.find((m) => m.user.toString() === req.user._id.toString());
+        const isAdmin = memberEntry?.role === 'admin';
+
+        if (!isCreator && !isAdmin) {
+            return res.status(403).json({ error: 'Chỉ người tạo hoặc admin mới có quyền chỉnh sửa' });
+        }
+
+        // Cập nhật
+        if (title !== undefined && title.trim()) {
+            topic.title = title.trim();
+            room.name = title.trim();
+        }
+        if (description !== undefined) {
+            topic.description = description.trim();
+            room.description = description.trim();
+        }
+
+        await Promise.all([topic.save(), room.save()]);
+
+        // Emit realtime cho thành viên
+        const io = req.app.get('io');
+        if (io) {
+            io.to(room._id.toString()).emit('topic:settings-updated', {
+                topicId: topic._id,
+                roomId: room._id,
+                title: topic.title,
+                description: topic.description,
+            });
+        }
+
+        const populated = await TopicRoom.findById(topic._id)
+            .populate('creator', 'username avatar googlePicture')
+            .populate({
+                path: 'room',
+                populate: { path: 'members.user', select: 'username avatar googlePicture status' },
+            });
+
+        res.json({ topic: populated });
+    } catch (error) {
+        next(error);
+    }
+};
+

@@ -34,6 +34,7 @@ import {
     X,
     Reply,
     Compass,
+    HeartHandshake,
     House,
     Search,
     UserPlus,
@@ -426,10 +427,10 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
     // Room display info
     const getRoomDisplay = () => {
         if (!room) return { name: '', isOnline: false };
-        if (room.type === 'group') {
+        if (room.type === 'group' || room.type === 'topic' || room.type === 'counseling') {
             return {
                 name: room.name,
-                subtitle: `${room.members?.length || 0} thành viên`,
+                subtitle: room.type === 'counseling' ? 'Phiên tư vấn' : `${room.members?.length || 0} thành viên`,
                 isOnline: false,
                 isGroup: true,
             };
@@ -664,7 +665,7 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                     <p className="text-xl font-semibold text-gray-700">Chọn cuộc trò chuyện để bắt đầu</p>
                     <p className="text-sm mt-1 text-gray-400">Hoặc mở nhanh theo gợi ý bên dưới</p>
 
-                    <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-2">
                         <button
                             onClick={() => onOpenStartAction?.('topics')}
                             className="px-3 py-2.5 rounded-xl border border-gray-200 bg-white hover:border-emerald-300 hover:bg-emerald-50 transition text-left"
@@ -685,6 +686,17 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                                 Tìm cuộc trò chuyện
                             </span>
                             <p className="text-[11px] text-gray-400 mt-1">Focus vào ô tìm kiếm chat</p>
+                        </button>
+
+                        <button
+                            onClick={() => onOpenStartAction?.('counseling')}
+                            className="px-3 py-2.5 rounded-xl border border-gray-200 bg-white hover:border-rose-300 hover:bg-rose-50 transition text-left"
+                        >
+                            <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-rose-700">
+                                <HeartHandshake size={14} />
+                                Tư vấn
+                            </span>
+                            <p className="text-[11px] text-gray-400 mt-1">Mở trang tư vấn hỗ trợ</p>
                         </button>
                     </div>
 
@@ -820,15 +832,6 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                         onToggle={handleToggleAI}
                         onSummarize={() => summarize(20)}
                     />
-
-                    {/* Enter Office button — joins SkyOffice virtual office */}
-                    <button
-                        onClick={() => navigate('/office')}
-                        className="p-2 hover:bg-indigo-50 rounded-full transition text-indigo-400 shrink-0"
-                        title="Vào Virtual Office 🏢"
-                    >
-                        <Building2 size={18} />
-                    </button>
 
                     {/* Call buttons - available for both 1-1 and group */}
                     <button

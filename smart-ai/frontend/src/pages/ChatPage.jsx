@@ -12,13 +12,15 @@ import ThemedSurface from '../components/ui/ThemedSurface';
 import SkeletonBlock from '../components/ui/SkeletonBlock';
 // CallModal + IncomingCallModal are now rendered globally in App.jsx
 import { LogOut, Settings, MessageCircle, Users, ShieldCheck, Compass, HeartHandshake } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useLanguage } from '../hooks/useLanguage';
+import { useEffect } from 'react';
 
 export default function ChatPage() {
     const { user, logout } = useAuth();
     const { t } = useLanguage();
     const navigate = useNavigate();
+    const location = useLocation();
     const [activeRoomId, setActiveRoomId] = useState(null);
     const [showSidebar, setShowSidebar] = useState(true);
     const [sidebarTab, setSidebarTab] = useState('chats'); // 'chats' | 'friends' | 'topics'
@@ -29,15 +31,22 @@ export default function ChatPage() {
     const [autoTranslate, setAutoTranslate] = useState(false);
     const { toggleBot } = useAI(activeRoomId);
 
-    const handleSelectRoom = (roomId) => {
+    const handleSelectRoom = useCallback((roomId) => {
         setActiveRoomId(roomId);
         setSidebarTab('chats');
         setInfoRoom(null);
-        // On mobile, hide sidebar when room selected
         if (window.innerWidth < 768) {
             setShowSidebar(false);
         }
-    };
+    }, []);
+
+    useEffect(() => {
+        if (location.state?.roomId) {
+            handleSelectRoom(location.state.roomId);
+            // clear state so it doesn't reopen on refresh
+            window.history.replaceState({}, document.title);
+        }
+    }, [location.state, handleSelectRoom]);
 
     const handleBack = () => {
         setShowSidebar(true);
@@ -64,11 +73,16 @@ export default function ChatPage() {
             return;
         }
 
+        if (target === 'counseling') {
+            navigate('/counseling');
+            return;
+        }
+
         if (target === 'chats-search') {
             setSidebarTab('chats');
             window.dispatchEvent(new CustomEvent('roomlist:focus-search'));
         }
-    }, []);
+    }, [navigate]);
 
     return (
         <div className="h-dvh min-h-0 flex theme-muted-surface theme-page-enter overflow-hidden">
@@ -123,14 +137,6 @@ export default function ChatPage() {
                             <ShieldCheck size={18} />
                         </button>
                     )}
-                    <button
-                        onClick={() => navigate('/counseling')}
-                        className="p-1.5 rounded-full transition"
-                        style={{ color: 'var(--text-secondary)' }}
-                        title="Tư vấn hỗ trợ"
-                    >
-                        <HeartHandshake size={18} />
-                    </button>
                     <button
                         onClick={() => navigate('/settings')}
                         className="p-1.5 rounded-full transition"
@@ -194,6 +200,14 @@ export default function ChatPage() {
                     >
                         <Compass size={16} />
                         Chủ đề
+                    </button>
+                    <button
+                        onClick={() => navigate('/counseling')}
+                        className="flex-1 py-2.5 text-sm font-medium transition flex items-center justify-center gap-1.5 hover:opacity-90"
+                        style={{ color: 'var(--text-secondary)' }}
+                    >
+                        <HeartHandshake size={16} />
+                        {t('chatPage.counseling')}
                     </button>
                 </div>
 

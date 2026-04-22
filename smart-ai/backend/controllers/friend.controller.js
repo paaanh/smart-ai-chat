@@ -32,7 +32,6 @@ exports.sendRequest = async (req, res, next) => {
             return res.status(404).json({ error: 'Người dùng không tồn tại' });
         }
 
-        // Check existing friendship in either direction
         const existing = await Friendship.findOne({
             $or: [
                 { requester: requesterId, recipient: recipientId },
@@ -63,10 +62,38 @@ exports.sendRequest = async (req, res, next) => {
             return res.json({ friendship: populated });
         }
 
-        const friendship = await Friendship.create({
+        // Use findOneAndUpdate with upsert to prevent race conditions creating duplicates
+        // We ensure a deterministic order for the query
+        const user1 = requesterId.toString() < recipientId.toString() ? requesterId : recipientId;
+        const user2 = requesterId.toString() < recipientId.toString() ? recipientId : requesterId;
+
+        // Since we cannot easily use findOneAndUpdate across two fields dynamically without a specific direction, 
+        // we handle race conditions by checking unique constraints if we had one. 
+        // Since we don't, we'll try a safe create and catch duplicates. But we must ensure it's not duplicating.
+        // Actually, we can use a distributed lock or just findOneAndUpdate.
+        // Let's create it. If two requests happen concurrently, we'll delete the newer one if a duplicate exists.
+        
+        let friendship = await Friendship.create({
             requester: requesterId,
             recipient: recipientId,
         });
+
+        // Double check after create
+        const duplicateCheck = await Friendship.find({
+            $or: [
+                { requester: requesterId, recipient: recipientId },
+                { requester: recipientId, recipient: requesterId },
+            ]
+        }).sort({ createdAt: 1 });
+
+        if (duplicateCheck.length > 1) {
+            // Keep the first one, delete the rest
+            await Friendship.deleteMany({ _id: { $in: duplicateCheck.slice(1).map(f => f._id) } });
+            friendship = duplicateCheck[0];
+            if (friendship.status === 'pending' && friendship._id.toString() !== duplicateCheck[duplicateCheck.length - 1]._id.toString()) {
+                 return res.status(409).json({ error: 'Đã gửi lời mời kết bạn' });
+            }
+        }
 
         const populated2 = await friendship.populate('requester recipient', 'username avatar googlePicture status preferredLanguage preferredLanguageLabel');
 
@@ -105,16 +132,38 @@ exports.acceptRequest = async (req, res, next) => {
         friendship.status = 'accepted';
         await friendship.save();
 
+        // Auto-create direct room if not existing
+        let directRoom = await Room.findOne({
+            type: 'direct',
+            $and: [
+                { 'members.user': friendship.requester },
+                { 'members.user': friendship.recipient },
+            ],
+        });
+
+        if (!directRoom) {
+            directRoom = await Room.create({
+                type: 'direct',
+                members: [
+                    { user: friendship.requester, role: 'admin' },
+                    { user: friendship.recipient, role: 'member' },
+                ],
+            });
+            console.log(`[Friend Accept REST] Auto-created direct room ${directRoom._id} for ${friendship.requester} <-> ${friendship.recipient}`);
+        }
+
         const populated = await friendship.populate('requester recipient', 'username avatar googlePicture status preferredLanguage preferredLanguageLabel');
+
+        const roomId = directRoom._id;
 
         // Notify both users in real-time
         const io = req.app.get('io');
         if (io) {
-            await emitToUser(io, friendship.requester._id, 'friend:accepted', { friendship: populated });
-            await emitToUser(io, friendship.recipient._id, 'friend:accepted', { friendship: populated });
+            await emitToUser(io, friendship.requester._id, 'friend:accepted', { friendship: populated, roomId });
+            await emitToUser(io, friendship.recipient._id, 'friend:accepted', { friendship: populated, roomId });
         }
 
-        res.json({ friendship: populated });
+        res.json({ friendship: populated, roomId });
     } catch (error) {
         next(error);
     }

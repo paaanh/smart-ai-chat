@@ -1,6 +1,6 @@
 const Room = require('../models/Room');
 const Message = require('../models/Message');
-const { summarizeConversation, getAIStats, generateAIResponse, translateText, summarizeCallAudio, analyzeScreenImage } = require('../services/ai.service');
+const { summarizeConversation, getAIStats, generateAIResponse, translateText, analyzeScreenImage } = require('../services/ai.service');
 
 module.exports = (io, socket) => {
     const userId = socket.user._id.toString();
@@ -178,39 +178,7 @@ module.exports = (io, socket) => {
         }
     });
 
-    // ─── ai:summarize-call ──────────────────────────────────────────────
-    // Summarize a recorded call using Gemini audio understanding
-    socket.on('ai:summarize-call', async ({ roomId, audioBase64, mimeType }) => {
-        try {
-            if (!roomId || !audioBase64) {
-                return socket.emit('ai:error', { roomId, error: 'Dữ liệu audio không hợp lệ' });
-            }
 
-            console.log(`🎙️ [AI Call Summary] Processing call recording for room ${roomId} (${Math.round(audioBase64.length / 1024)}KB base64)`);
-
-            const summary = await summarizeCallAudio(audioBase64, mimeType || 'audio/webm');
-
-            if (summary) {
-                const tempMessage = {
-                    _id: `ai-call-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-                    room: roomId,
-                    type: 'ai-response',
-                    content: `📞 **Tóm tắt cuộc gọi**\n\n${summary}`,
-                    aiMetadata: { isAIResponse: true, model: 'gemini-2.5-flash' },
-                    createdAt: new Date(),
-                };
-                socket.emit('ai:chat-response', { roomId, message: tempMessage });
-            } else {
-                socket.emit('ai:error', { roomId, error: 'Không thể tóm tắt cuộc gọi. Thử lại sau.' });
-            }
-        } catch (error) {
-            console.error(`❌ [AI Call Summary] Error:`, error.message);
-            socket.emit('ai:error', {
-                roomId,
-                error: 'AI gặp lỗi khi tóm tắt cuộc gọi.',
-            });
-        }
-    });
 
     // ─── ai:analyze-screen ────────────────────────────────────────────────
     // Analyze a screenshot from screen sharing using Gemini vision

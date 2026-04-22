@@ -5,7 +5,7 @@ import { useSocket } from '../hooks/useSocket';
 import { userAPI, friendAPI, roomAPI, resolveMediaUrl } from '../services/api';
 import {
     ArrowLeft, MapPin, GraduationCap, Phone, Mail, Heart, Edit3,
-    MessageCircle, UserX, Loader2, Calendar, Shield
+    MessageCircle, UserX, Loader2, Calendar, Shield, UserPlus
 } from 'lucide-react';
 import { format } from 'date-fns';
 import EditProfileModal from '../components/profile/EditProfileModal';
@@ -180,6 +180,37 @@ export default function ProfilePage() {
                                     <MessageCircle size={16} />
                                     Nhắn tin
                                 </button>
+                                
+                                {(!friendStatus || friendStatus === 'none') && (
+                                    <button
+                                        onClick={async () => {
+                                            setActionLoading(true);
+                                            try {
+                                                await friendAPI.sendRequest(id);
+                                                setFriendStatus('pending');
+                                            } catch (err) {
+                                                console.error('Add friend error:', err);
+                                            } finally {
+                                                setActionLoading(false);
+                                            }
+                                        }}
+                                        disabled={actionLoading}
+                                        className="flex items-center gap-2 px-5 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 font-medium rounded-xl transition disabled:opacity-50"
+                                    >
+                                        {actionLoading ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16} />}
+                                        Kết bạn
+                                    </button>
+                                )}
+
+                                {friendStatus === 'pending' && (
+                                    <button
+                                        disabled={true}
+                                        className="flex items-center gap-2 px-5 py-2.5 bg-gray-100 text-gray-500 font-medium rounded-xl disabled:opacity-75"
+                                    >
+                                        Đã gửi yêu cầu
+                                    </button>
+                                )}
+
                                 {friendStatus === 'accepted' && (
                                     <button
                                         onClick={handleUnfriend}

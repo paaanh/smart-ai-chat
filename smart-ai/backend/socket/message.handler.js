@@ -156,9 +156,75 @@ module.exports = (io, socket) => {
             }
 
             // ═════════════════════════════════════════════════════════════════
-            // BƯỚC 3: (AI Bot response đã chuyển sang Mini AI ChatBox riêng)
-            // AI chỉ phản hồi khi user gõ trực tiếp trong Mini AI Box
+            // BƯỚC 3: AI Counseling Bot Response
             // ═════════════════════════════════════════════════════════════════
+            if (room.type === 'counseling' && type === 'text') {
+                const CounselingSession = require('../models/CounselingSession');
+                const session = await CounselingSession.findOne({ room: roomId, status: 'active' });
+                
+                if (session) {
+                    const isMentioningAI = content.toLowerCase().includes('@aiweise');
+                    
+                    if (session.aiActive || isMentioningAI) {
+                        const { generateCounselingResponse } = require('../services/ai.service');
+                        
+                        // Emit typing status for AI
+                        io.to(roomId).emit('room:typing', { roomId, userId: 'ai-bot', username: 'AI Tư vấn' });
+                        
+                        try {
+                            const history = await Message.find({ room: roomId }).sort({ createdAt: 1 }).limit(20);
+                            const mappedHistory = history.map(msg => ({
+                                role: msg.aiMetadata?.isAIResponse ? 'assistant' : (msg.sender.toString() === session.user.toString() ? 'user' : 'system'),
+                                content: msg.content
+                            }));
+                            
+                            const aiReply = await generateCounselingResponse(content, session.category, mappedHistory);
+                            
+                            const aiMessage = await Message.create({
+                                room: roomId,
+                                sender: session.user, // Dummy sender so schema passes
+                                type: 'ai-response',
+                                content: aiReply,
+                                aiMetadata: { isAIResponse: true, model: 'gemini' }
+                            });
+                            
+                            const populatedAI = await Message.findById(aiMessage._id).populate('sender', 'username avatar googlePicture');
+                            await Room.findByIdAndUpdate(roomId, { lastMessage: aiMessage._id });
+                            
+                            io.to(roomId).emit('room:stop-typing', { roomId, userId: 'ai-bot' });
+                            
+                            if (session.expert) {
+                                // If expert is in the room, only show AI reply to the user (private AI message)
+                                const userDoc = await User.findById(session.user).select('socketId').lean();
+                                if (userDoc?.socketId) {
+                                    io.to(userDoc.socketId).emit('message:received', { message: populatedAI });
+                                    io.to(userDoc.socketId).emit('room:new-message', {
+                                        roomId,
+                                        lastMessage: populatedAI,
+                                        senderId: 'ai-bot',
+                                    });
+                                }
+                            } else {
+                                // Broadcast to all
+                                io.to(roomId).emit('message:received', { message: populatedAI });
+                                for (const member of room.members) {
+                                    const memberDoc = await User.findById(member.user).select('socketId').lean();
+                                    if (memberDoc?.socketId) {
+                                        io.to(memberDoc.socketId).emit('room:new-message', {
+                                            roomId,
+                                            lastMessage: populatedAI,
+                                            senderId: 'ai-bot',
+                                        });
+                                    }
+                                }
+                            }
+                        } catch (err) {
+                            console.error('AI Counseling error:', err.message);
+                            io.to(roomId).emit('room:stop-typing', { roomId, userId: 'ai-bot' });
+                        }
+                    }
+                }
+            }
 
         } catch (error) {
             console.error('message:send error:', error.message);

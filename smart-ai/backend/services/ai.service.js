@@ -463,30 +463,6 @@ const getAIStats = () => ({
     },
 });
 
-// ─── AI: Tóm tắt cuộc gọi từ audio ──────────────────────────────────
-const summarizeCallAudio = async (audioBase64, mimeType = 'audio/webm') => {
-    if (!groq) {
-        console.error('❌ [AI Call] groq is null');
-        return '⚠️ AI chưa được khởi tạo.';
-    }
-
-    if (!rateLimiter.canMakeRequest()) {
-        return '⚠️ AI đang bận, thử lại sau nhé!';
-    }
-
-    try {
-        console.log(`🎙️ [AI Call] Summarizing call audio (${Math.round(audioBase64.length / 1024)}KB)`);
-
-        // Groq hiện không hỗ trợ audio input trực tiếp như Gemini
-        // Trả về thông báo phù hợp
-        console.warn('⚠️ [AI Call] Audio summarization not supported with Groq. Skipping.');
-        return '⚠️ Tính năng tóm tắt cuộc gọi tạm thời không khả dụng với Groq API.';
-    } catch (error) {
-        console.error('❌ [AI Call] Error:', error.message);
-        return null;
-    }
-};
-
 // ─── AI: Phân tích ảnh chụp màn hình ──────────────────────────────────────────
 const analyzeScreenImage = async (imageBase64) => {
     if (!groq) {
@@ -550,7 +526,6 @@ module.exports = {
     generateAIResponse,
     generateCounselingResponse,
     summarizeConversation,
-    summarizeCallAudio,
     analyzeScreenImage,
     getAIStats,
 };

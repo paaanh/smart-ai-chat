@@ -1,5 +1,6 @@
 const Friendship = require('../models/Friendship');
 const { User } = require('../models/User');
+const Room = require('../models/Room');
 
 module.exports = (io, socket) => {
     const userId = socket.user._id;
@@ -63,18 +64,41 @@ module.exports = (io, socket) => {
             friendship.status = 'accepted';
             await friendship.save();
 
+            // Auto-create direct room if not existing
+            let directRoom = await Room.findOne({
+                type: 'direct',
+                $and: [
+                    { 'members.user': friendship.requester },
+                    { 'members.user': friendship.recipient },
+                ],
+            });
+
+            if (!directRoom) {
+                directRoom = await Room.create({
+                    type: 'direct',
+                    members: [
+                        { user: friendship.requester, role: 'admin' },
+                        { user: friendship.recipient, role: 'member' },
+                    ],
+                });
+                console.log(`[Friend Accept] Auto-created direct room ${directRoom._id} for ${friendship.requester} <-> ${friendship.recipient}`);
+            }
+
             const populated = await friendship.populate(
                 'requester recipient',
                 'username avatar googlePicture status preferredLanguage preferredLanguageLabel'
             );
 
-            // Notify both users
-            socket.emit('friend:accepted', { friendship: populated });
+            const roomId = directRoom._id;
+
+            // Notify both users with roomId
+            socket.emit('friend:accepted', { friendship: populated, roomId });
 
             const requester = await User.findById(friendship.requester);
             if (requester?.socketId) {
                 io.to(requester.socketId).emit('friend:accepted', {
                     friendship: populated,
+                    roomId,
                 });
             }
         } catch (error) {

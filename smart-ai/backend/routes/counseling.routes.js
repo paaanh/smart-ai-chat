@@ -8,7 +8,8 @@ router.get('/categories', counselingController.getCategories);
 router.post('/sessions', counselingController.createSession);
 router.get('/sessions', counselingController.getSessions);
 router.get('/sessions/:id', counselingController.getSessionById);
-router.post('/sessions/:id/messages', counselingController.sendMessage);
 router.put('/sessions/:id/close', counselingController.closeSession);
+router.post('/sessions/:id/join', counselingController.joinExpert);
+router.put('/sessions/:id/ai', counselingController.toggleAI);
 
 module.exports = router;

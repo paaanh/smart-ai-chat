@@ -1,27 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { counselingAPI } from '../services/api';
-import { ArrowLeft, HeartHandshake, Send, ShieldAlert, PhoneCall } from 'lucide-react';
+import { ArrowLeft, HeartHandshake, ShieldAlert } from 'lucide-react';
+import SkeletonBlock from '../components/ui/SkeletonBlock';
 
 export default function CounselingPage() {
     const navigate = useNavigate();
 
     const [categories, setCategories] = useState([]);
-    const [hotlines, setHotlines] = useState([]);
     const [disclaimer, setDisclaimer] = useState('');
-
     const [sessions, setSessions] = useState([]);
-    const [activeSessionId, setActiveSessionId] = useState(null);
-    const [activeSession, setActiveSession] = useState(null);
-
-    const [draft, setDraft] = useState('');
     const [loading, setLoading] = useState(true);
-    const [sending, setSending] = useState(false);
-
-    const activeCategoryTitle = useMemo(() => {
-        const found = categories.find((item) => item.key === activeSession?.category);
-        return found?.title || 'Tư vấn hỗ trợ';
-    }, [categories, activeSession?.category]);
 
     const loadBootstrap = async () => {
         setLoading(true);
@@ -32,14 +21,8 @@ export default function CounselingPage() {
             ]);
 
             setCategories(categoryRes.data.categories || []);
-            setHotlines(categoryRes.data.hotlines || []);
             setDisclaimer(categoryRes.data.disclaimer || '');
-
-            const list = sessionRes.data.sessions || [];
-            setSessions(list);
-            if (list.length > 0) {
-                setActiveSessionId(list[0]._id);
-            }
+            setSessions(sessionRes.data.sessions || []);
         } catch (error) {
             console.error('Load counseling bootstrap failed:', error);
         } finally {
@@ -47,23 +30,9 @@ export default function CounselingPage() {
         }
     };
 
-    const loadSession = async (sessionId) => {
-        if (!sessionId) return;
-        try {
-            const { data } = await counselingAPI.getSession(sessionId);
-            setActiveSession(data.session || null);
-        } catch (error) {
-            console.error('Load counseling session failed:', error);
-        }
-    };
-
     useEffect(() => {
         loadBootstrap();
     }, []);
-
-    useEffect(() => {
-        loadSession(activeSessionId);
-    }, [activeSessionId]);
 
     const handleCreateSession = async (category) => {
         try {
@@ -71,222 +40,121 @@ export default function CounselingPage() {
                 category,
                 isAnonymous: true,
             });
-
-            const newSession = data.session;
-            setSessions((prev) => [
-                {
-                    _id: newSession._id,
-                    category: newSession.category,
-                    title: newSession.title || 'Phiên tư vấn mới',
-                    status: newSession.status,
-                    isAnonymous: newSession.isAnonymous,
-                    messageCount: newSession.messages?.length || 0,
-                    lastMessage: newSession.messages?.[newSession.messages.length - 1],
-                    updatedAt: newSession.updatedAt,
-                },
-                ...prev,
-            ]);
-            setActiveSessionId(newSession._id);
-            setActiveSession(newSession);
+            navigate('/', { state: { roomId: data.roomId } });
         } catch (error) {
             console.error('Create counseling session failed:', error);
         }
     };
 
-    const handleSend = async () => {
-        const content = draft.trim();
-        if (!activeSessionId || !content || sending) return;
-
-        setSending(true);
-        setDraft('');
-        try {
-            const { data } = await counselingAPI.sendMessage(activeSessionId, content);
-            setActiveSession(data.session || null);
-
-            setSessions((prev) => prev.map((item) => {
-                if (item._id !== activeSessionId) return item;
-                const updated = data.session;
-                return {
-                    ...item,
-                    title: updated.title || item.title,
-                    status: updated.status,
-                    messageCount: updated.messages?.length || item.messageCount,
-                    lastMessage: updated.messages?.[updated.messages.length - 1] || item.lastMessage,
-                    updatedAt: updated.updatedAt,
-                };
-            }));
-        } catch (error) {
-            console.error('Send counseling message failed:', error);
-            setDraft(content);
-        } finally {
-            setSending(false);
-        }
-    };
-
-    const handleCloseSession = async () => {
-        if (!activeSessionId) return;
-        try {
-            const { data } = await counselingAPI.closeSession(activeSessionId);
-            setActiveSession(data.session);
-            setSessions((prev) => prev.map((item) => (
-                item._id === activeSessionId
-                    ? { ...item, status: 'closed' }
-                    : item
-            )));
-        } catch (error) {
-            console.error('Close counseling session failed:', error);
-        }
+    const handleOpenSession = (roomId) => {
+        if (!roomId) return;
+        navigate('/', { state: { roomId } });
     };
 
     return (
-        <div className="h-dvh bg-linear-to-br from-emerald-50 via-orange-50 to-white flex flex-col">
-            <div className="h-14 border-b border-emerald-100 bg-white/80 backdrop-blur px-4 flex items-center justify-between">
+        <div className="h-dvh flex flex-col theme-muted-surface font-sans">
+            <div className="h-14 border-b px-4 flex items-center justify-between" style={{ borderColor: 'var(--border-color)', backgroundColor: 'var(--bg-card)' }}>
                 <button
                     onClick={() => navigate('/')}
-                    className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
+                    className="inline-flex items-center gap-2 text-sm transition"
+                    style={{ color: 'var(--text-secondary)' }}
                 >
                     <ArrowLeft size={16} />
                     Quay lại chat
                 </button>
-                <div className="inline-flex items-center gap-2 text-emerald-700 font-semibold">
+                <div className="inline-flex items-center gap-2 font-semibold" style={{ color: 'var(--color-primary)' }}>
                     <HeartHandshake size={18} />
-                    Tư vấn hỗ trợ
+                    Tư vấn AI & Chuyên gia
                 </div>
-                <div className="text-xs text-gray-500">Ẩn danh mặc định</div>
+                <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Ẩn danh mặc định</div>
             </div>
 
-            <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[320px_1fr]">
-                <aside className="border-r border-emerald-100 bg-white/80 backdrop-blur p-3 overflow-y-auto">
-                    <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 mb-3">
-                        <div className="inline-flex items-center gap-2 text-amber-700 font-semibold text-sm mb-1">
-                            <ShieldAlert size={15} />
-                            Lưu ý quan trọng
-                        </div>
-                        <p className="text-xs text-amber-700 leading-relaxed">
-                            {disclaimer || 'AI chỉ hỗ trợ tham khảo thông tin, không thay thế chuyên gia.'}
-                        </p>
-                    </div>
-
-                    <h3 className="text-sm font-semibold text-gray-700 mb-2">Bắt đầu phiên mới</h3>
-                    <div className="space-y-2 mb-4">
-                        {categories.map((item) => (
-                            <button
-                                key={item.key}
-                                onClick={() => handleCreateSession(item.key)}
-                                className="w-full text-left p-2.5 rounded-lg border border-emerald-100 hover:border-emerald-300 hover:bg-emerald-50 transition"
-                            >
-                                <p className="text-sm font-medium text-gray-800">{item.title}</p>
-                                <p className="text-xs text-gray-500 mt-0.5">{item.description}</p>
-                            </button>
-                        ))}
-                    </div>
-
-                    <h3 className="text-sm font-semibold text-gray-700 mb-2">Phiên đã tạo</h3>
-                    <div className="space-y-2 mb-4">
-                        {loading && <p className="text-sm text-gray-400">Đang tải phiên tư vấn...</p>}
-                        {!loading && sessions.length === 0 && (
-                            <p className="text-sm text-gray-400">Bạn chưa có phiên tư vấn nào.</p>
-                        )}
-                        {sessions.map((session) => (
-                            <button
-                                key={session._id}
-                                onClick={() => setActiveSessionId(session._id)}
-                                className={`w-full text-left p-2.5 rounded-lg border transition ${
-                                    activeSessionId === session._id
-                                        ? 'border-emerald-400 bg-emerald-50'
-                                        : 'border-gray-200 hover:border-gray-300 bg-white'
-                                }`}
-                            >
-                                <p className="text-sm font-medium text-gray-800 truncate">{session.title || 'Phiên tư vấn'}</p>
-                                <p className="text-xs text-gray-500 mt-0.5 truncate">{session.lastMessage?.content || 'Chưa có tin nhắn'}</p>
-                                <p className="text-[11px] mt-1 text-gray-400">
-                                    {session.status === 'closed' ? 'Đã đóng' : 'Đang hoạt động'}
-                                </p>
-                            </button>
-                        ))}
-                    </div>
-
-                    <h3 className="text-sm font-semibold text-gray-700 mb-2">Đường dây nóng</h3>
-                    <div className="space-y-2">
-                        {hotlines.map((item) => (
-                            <div key={item.phone} className="rounded-lg border border-orange-200 bg-orange-50 p-2.5">
-                                <p className="text-xs text-orange-700">{item.name}</p>
-                                <p className="text-sm font-semibold text-orange-800 inline-flex items-center gap-1">
-                                    <PhoneCall size={13} />
-                                    {item.phone}
-                                </p>
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 md:p-8">
+                <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
+                    
+                    {/* Left Column: Categories */}
+                    <div className="space-y-6">
+                        <div className="rounded-xl p-4 border" style={{ backgroundColor: 'color-mix(in srgb, var(--color-warning) 10%, var(--bg-card))', borderColor: 'color-mix(in srgb, var(--color-warning) 30%, transparent)' }}>
+                            <div className="inline-flex items-center gap-2 font-semibold text-sm mb-1.5" style={{ color: 'var(--color-warning)' }}>
+                                <ShieldAlert size={16} />
+                                Lưu ý quan trọng
                             </div>
-                        ))}
-                    </div>
-                </aside>
+                            <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                                {disclaimer || 'AI chỉ hỗ trợ tham khảo thông tin, không thay thế chuyên gia.'}
+                            </p>
+                        </div>
 
-                <section className="min-h-0 flex flex-col">
-                    <div className="h-14 border-b border-gray-100 px-4 flex items-center justify-between bg-white/60">
                         <div>
-                            <p className="text-sm text-gray-500">Danh mục</p>
-                            <h2 className="font-semibold text-gray-800">{activeCategoryTitle}</h2>
+                            <h3 className="text-lg font-bold mb-4" style={{ color: 'var(--text-primary)' }}>Chọn chủ đề tư vấn</h3>
+                            <div className="grid gap-3">
+                                {categories.map((item) => (
+                                    <button
+                                        key={item.key}
+                                        onClick={() => handleCreateSession(item.key)}
+                                        className="text-left p-4 rounded-xl border transition hover:-translate-y-0.5"
+                                        style={{ 
+                                            backgroundColor: 'var(--bg-card)', 
+                                            borderColor: 'var(--border-color)'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            e.currentTarget.style.borderColor = 'var(--color-primary)';
+                                            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.05)';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.style.borderColor = 'var(--border-color)';
+                                            e.currentTarget.style.boxShadow = 'none';
+                                        }}
+                                    >
+                                        <p className="font-semibold text-[15px] mb-1" style={{ color: 'var(--text-primary)' }}>{item.title}</p>
+                                        <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>{item.description}</p>
+                                    </button>
+                                ))}
+                            </div>
                         </div>
-                        {activeSession && activeSession.status !== 'closed' && (
-                            <button
-                                onClick={handleCloseSession}
-                                className="text-xs px-3 py-1.5 rounded-full border border-gray-300 text-gray-600 hover:bg-gray-50"
-                            >
-                                Đóng phiên
-                            </button>
-                        )}
                     </div>
 
-                    <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3 bg-white/40">
-                        {!activeSession && (
-                            <div className="h-full flex items-center justify-center text-gray-400 text-sm">
-                                Hãy chọn một phiên hoặc tạo phiên tư vấn mới.
-                            </div>
-                        )}
-                        {(activeSession?.messages || []).map((msg, idx) => (
-                            <div
-                                key={`${msg.timestamp || idx}-${idx}`}
-                                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                            >
-                                <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${
-                                    msg.role === 'user'
-                                        ? 'bg-emerald-600 text-white'
-                                        : msg.role === 'assistant'
-                                            ? 'bg-white border border-emerald-100 text-gray-800'
-                                            : 'bg-amber-50 border border-amber-200 text-amber-800'
-                                }`}>
-                                    <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                    {/* Right Column: Active Sessions */}
+                    <div>
+                        <h3 className="text-lg font-bold mb-4" style={{ color: 'var(--text-primary)' }}>Phiên tư vấn của bạn</h3>
+                        <div className="space-y-3">
+                            {loading ? (
+                                Array.from({ length: 3 }).map((_, i) => (
+                                    <SkeletonBlock key={i} className="h-20 w-full rounded-xl" />
+                                ))
+                            ) : sessions.length === 0 ? (
+                                <div className="text-center p-8 rounded-xl border border-dashed" style={{ borderColor: 'var(--border-color)', color: 'var(--text-tertiary)' }}>
+                                    Bạn chưa có phiên tư vấn nào.
                                 </div>
-                            </div>
-                        ))}
-                    </div>
-
-                    <div className="border-t border-gray-200 p-3 bg-white/80">
-                        <div className="flex items-end gap-2">
-                            <textarea
-                                value={draft}
-                                onChange={(e) => setDraft(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter' && !e.shiftKey) {
-                                        e.preventDefault();
-                                        handleSend();
-                                    }
-                                }}
-                                rows={2}
-                                disabled={!activeSession || activeSession.status === 'closed' || sending}
-                                className="flex-1 resize-none rounded-xl border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:bg-gray-100"
-                                placeholder={activeSession?.status === 'closed' ? 'Phiên đã đóng' : 'Nhập câu hỏi của bạn...'}
-                            />
-                            <button
-                                onClick={handleSend}
-                                disabled={!activeSession || activeSession.status === 'closed' || !draft.trim() || sending}
-                                className="h-10 w-10 rounded-full bg-emerald-600 text-white flex items-center justify-center disabled:opacity-40"
-                                title="Gửi"
-                            >
-                                <Send size={16} />
-                            </button>
+                            ) : (
+                                sessions.map((session) => (
+                                    <button
+                                        key={session._id}
+                                        onClick={() => handleOpenSession(session.room?._id)}
+                                        className="w-full text-left p-4 rounded-xl border transition hover:bg-black/5 dark:hover:bg-white/5"
+                                        style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}
+                                    >
+                                        <div className="flex items-start justify-between mb-2">
+                                            <p className="font-semibold text-[15px] truncate pr-3" style={{ color: 'var(--color-primary)' }}>
+                                                {session.title || 'Phiên tư vấn'}
+                                            </p>
+                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase shrink-0 ${session.status === 'active' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}`}>
+                                                {session.status === 'active' ? 'Đang mở' : 'Đã đóng'}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-4 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                                            <span>Danh mục: {categories.find(c => c.key === session.category)?.title || session.category}</span>
+                                            {session.expert && (
+                                                <span className="inline-flex items-center gap-1 text-[var(--color-primary)]">
+                                                    <HeartHandshake size={12} /> Có chuyên gia
+                                                </span>
+                                            )}
+                                        </div>
+                                    </button>
+                                ))
+                            )}
                         </div>
                     </div>
-                </section>
+                </div>
             </div>
         </div>
     );

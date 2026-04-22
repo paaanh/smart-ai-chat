@@ -23,7 +23,6 @@ const SettingsPage = lazy(() => import('../pages/SettingsPage'));
 const ProfilePage = lazy(() => import('../pages/ProfilePage'));
 const GroupProfilePage = lazy(() => import('../pages/GroupProfilePage'));
 const AdminPage = lazy(() => import('../pages/AdminPage'));
-const OfficePage = lazy(() => import('../pages/OfficePage'));
 const CounselingPage = lazy(() => import('../pages/CounselingPage'));
 
 // ── Loading fallback ───────────────────────────────────────────
@@ -170,14 +169,6 @@ export default function AppRoutes() {
                             element={
                                 <PrivateRoute>
                                     <AdminPage />
-                                </PrivateRoute>
-                            }
-                        />
-                        <Route
-                            path="/office"
-                            element={
-                                <PrivateRoute>
-                                    <OfficePage />
                                 </PrivateRoute>
                             }
                         />

@@ -28,6 +28,7 @@ export const translations = {
             logout: 'Đăng xuất',
             messages: 'Tin nhắn',
             friends: 'Bạn bè',
+            counseling: 'Tư vấn',
         },
         settings: {
             title: 'Cài đặt',
@@ -120,6 +121,7 @@ export const translations = {
             logout: 'Log out',
             messages: 'Messages',
             friends: 'Friends',
+            counseling: 'Counseling',
         },
         settings: {
             title: 'Settings',

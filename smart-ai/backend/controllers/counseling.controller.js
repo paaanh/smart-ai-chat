@@ -1,5 +1,6 @@
 const CounselingSession = require('../models/CounselingSession');
-const { generateCounselingResponse } = require('../services/ai.service');
+const Room = require('../models/Room');
+const Message = require('../models/Message');
 
 const COUNSELING_CATEGORIES = [
     {
@@ -53,21 +54,35 @@ exports.createSession = async (req, res, next) => {
             return res.status(400).json({ error: 'Danh mục tư vấn không hợp lệ' });
         }
 
-        const session = await CounselingSession.create({
-            userId: req.user._id,
-            category,
-            title: (title || '').trim(),
-            isAnonymous: !!isAnonymous,
-            messages: [
-                {
-                    role: 'system',
-                    content: 'Chào bạn, mình là trợ lý tư vấn AI. Bạn có thể chia sẻ điều bạn đang cần hỗ trợ.',
-                    timestamp: new Date(),
-                },
-            ],
+        const roomName = title ? title.trim() : `Tư vấn: ${COUNSELING_CATEGORIES.find(c => c.key === category).title}`;
+
+        // Create Room
+        const room = await Room.create({
+            name: roomName,
+            type: 'counseling',
+            members: [{ user: req.user._id, role: 'admin' }],
         });
 
-        res.status(201).json({ session });
+        // Create Counseling Session
+        const session = await CounselingSession.create({
+            room: room._id,
+            user: req.user._id,
+            category,
+            title: roomName,
+            isAnonymous: !!isAnonymous,
+            aiActive: true,
+        });
+
+        // Add welcome message from AI
+        const welcomeMessage = await Message.create({
+            room: room._id,
+            sender: req.user._id,
+            type: 'ai-response',
+            content: `Chào bạn, mình là trợ lý tư vấn AI chuyên mục ${COUNSELING_CATEGORIES.find(c => c.key === category).title}. Bạn có thể chia sẻ điều bạn đang cần hỗ trợ.`,
+            aiMetadata: { isAIResponse: true },
+        });
+
+        res.status(201).json({ session, room, roomId: room._id, welcomeMessage });
     } catch (error) {
         next(error);
     }
@@ -75,26 +90,13 @@ exports.createSession = async (req, res, next) => {
 
 exports.getSessions = async (req, res, next) => {
     try {
-        const sessions = await CounselingSession.find({ userId: req.user._id })
+        const sessions = await CounselingSession.find({ user: req.user._id })
+            .populate('room', 'name type updatedAt')
+            .populate('expert', 'username avatar')
             .sort({ updatedAt: -1 })
             .lean();
 
-        const data = sessions.map((item) => {
-            const lastMessage = item.messages?.[item.messages.length - 1] || null;
-            return {
-                _id: item._id,
-                category: item.category,
-                title: item.title || 'Phiên tư vấn',
-                status: item.status,
-                isAnonymous: item.isAnonymous,
-                messageCount: item.messages?.length || 0,
-                lastMessage,
-                createdAt: item.createdAt,
-                updatedAt: item.updatedAt,
-            };
-        });
-
-        res.json({ sessions: data });
+        res.json({ sessions });
     } catch (error) {
         next(error);
     }
@@ -102,62 +104,18 @@ exports.getSessions = async (req, res, next) => {
 
 exports.getSessionById = async (req, res, next) => {
     try {
-        const session = await CounselingSession.findById(req.params.id);
+        const session = await CounselingSession.findById(req.params.id)
+            .populate('room', 'name type')
+            .populate('expert', 'username avatar');
+            
         if (!session) return res.status(404).json({ error: 'Phiên tư vấn không tồn tại' });
 
-        if (session.userId.toString() !== req.user._id.toString()) {
+        if (session.user.toString() !== req.user._id.toString() && 
+            (!session.expert || session.expert._id.toString() !== req.user._id.toString())) {
             return res.status(403).json({ error: 'Không có quyền truy cập phiên này' });
         }
 
         res.json({ session });
-    } catch (error) {
-        next(error);
-    }
-};
-
-exports.sendMessage = async (req, res, next) => {
-    try {
-        const { content } = req.body;
-        if (!content || !content.trim()) {
-            return res.status(400).json({ error: 'Nội dung không được để trống' });
-        }
-
-        const session = await CounselingSession.findById(req.params.id);
-        if (!session) return res.status(404).json({ error: 'Phiên tư vấn không tồn tại' });
-
-        if (session.userId.toString() !== req.user._id.toString()) {
-            return res.status(403).json({ error: 'Không có quyền truy cập phiên này' });
-        }
-
-        if (session.status === 'closed') {
-            return res.status(400).json({ error: 'Phiên tư vấn đã đóng' });
-        }
-
-        const userMessage = {
-            role: 'user',
-            content: content.trim(),
-            timestamp: new Date(),
-        };
-        session.messages.push(userMessage);
-
-        if (!session.title) {
-            session.title = content.trim().slice(0, 60);
-        }
-
-        const aiReply = await generateCounselingResponse(content.trim(), session.category, session.messages);
-        const assistantMessage = {
-            role: 'assistant',
-            content: aiReply,
-            timestamp: new Date(),
-        };
-        session.messages.push(assistantMessage);
-
-        await session.save();
-
-        res.json({
-            message: assistantMessage,
-            session,
-        });
     } catch (error) {
         next(error);
     }
@@ -168,14 +126,81 @@ exports.closeSession = async (req, res, next) => {
         const session = await CounselingSession.findById(req.params.id);
         if (!session) return res.status(404).json({ error: 'Phiên tư vấn không tồn tại' });
 
-        if (session.userId.toString() !== req.user._id.toString()) {
+        if (session.user.toString() !== req.user._id.toString()) {
             return res.status(403).json({ error: 'Không có quyền truy cập phiên này' });
         }
 
         session.status = 'closed';
+        session.aiActive = false;
         await session.save();
 
         res.json({ message: 'Đã đóng phiên tư vấn', session });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// Expert joins the counseling session
+exports.joinExpert = async (req, res, next) => {
+    try {
+        const session = await CounselingSession.findById(req.params.id);
+        if (!session) return res.status(404).json({ error: 'Phiên tư vấn không tồn tại' });
+
+        if (session.status === 'closed') {
+            return res.status(400).json({ error: 'Phiên tư vấn đã đóng' });
+        }
+
+        if (session.expert) {
+            return res.status(400).json({ error: 'Phiên đã có chuyên gia phụ trách' });
+        }
+
+        const room = await Room.findById(session.room);
+        if (!room) return res.status(404).json({ error: 'Room không tồn tại' });
+
+        // Add expert to room
+        room.members.push({ user: req.user._id, role: 'admin' });
+        await room.save();
+
+        // Update session
+        session.expert = req.user._id;
+        session.aiActive = false; // Turn off AI when expert joins
+        await session.save();
+
+        const io = req.app.get('io');
+        if (io) {
+            io.to(room._id.toString()).emit('counseling:expert-joined', {
+                expertId: req.user._id,
+                sessionId: session._id,
+                roomId: room._id
+            });
+        }
+
+        res.json({ message: 'Đã tham gia tư vấn', session, roomId: room._id });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// Toggle AI by @aiWeise
+exports.toggleAI = async (req, res, next) => {
+    try {
+        const { active } = req.body;
+        const session = await CounselingSession.findById(req.params.id);
+        if (!session) return res.status(404).json({ error: 'Phiên tư vấn không tồn tại' });
+
+        session.aiActive = !!active;
+        await session.save();
+
+        const io = req.app.get('io');
+        if (io) {
+            io.to(session.room.toString()).emit('counseling:ai-toggled', {
+                aiActive: session.aiActive,
+                sessionId: session._id,
+                roomId: session.room
+            });
+        }
+
+        res.json({ session });
     } catch (error) {
         next(error);
     }

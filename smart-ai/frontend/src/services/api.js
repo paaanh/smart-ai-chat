@@ -266,8 +266,9 @@ export const counselingAPI = {
     createSession: (payload) => api.post('/counseling/sessions', payload),
     getSessions: () => api.get('/counseling/sessions'),
     getSession: (id) => api.get(`/counseling/sessions/${id}`),
-    sendMessage: (id, content) => api.post(`/counseling/sessions/${id}/messages`, { content }),
     closeSession: (id) => api.put(`/counseling/sessions/${id}/close`),
+    joinExpert: (id) => api.post(`/counseling/sessions/${id}/join`),
+    toggleAI: (id, active) => api.put(`/counseling/sessions/${id}/ai`, { active }),
 };
 
 // ── Topic endpoints ───────────────────────────────────────────
@@ -278,6 +279,7 @@ export const topicAPI = {
     join: (id) => api.post(`/topics/${id}/join`),
     leave: (id) => api.delete(`/topics/${id}/leave`),
     getMyTopics: () => api.get('/topics/my'),
+    updateSettings: (id, data) => api.put(`/topics/${id}/settings`, data),
 };
 
 // ── Upload endpoints ───────────────────────────────────────────

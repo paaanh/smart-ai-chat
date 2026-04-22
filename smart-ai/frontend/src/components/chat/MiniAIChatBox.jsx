@@ -3,7 +3,7 @@ import { useSocket } from '../../hooks/useSocket';
 import { useCall } from '../../hooks/useCall';
 import { useTheme } from '../../hooks/useTheme';
 import { useLanguage } from '../../hooks/useLanguage';
-import { Bot, Send, Loader2, X, Trash2, Languages, FileText, Mic, Monitor, ChevronDown, ChevronUp } from 'lucide-react';
+import { Bot, Send, Loader2, X, Trash2, Languages, FileText, Monitor, ChevronDown, ChevronUp } from 'lucide-react';
 
 export default function MiniAIChatBox({ roomId, onClose, onAutoTranslateChange }) {
     const { emit, on, off } = useSocket();
@@ -14,15 +14,9 @@ export default function MiniAIChatBox({ roomId, onClose, onAutoTranslateChange }
     const [messages, setMessages] = useState([]);
     const [thinking, setThinking] = useState(false);
     const [autoTranslate, setAutoTranslate] = useState(false);
-    const [callRecord, setCallRecord] = useState(false);
     const [showFeatures, setShowFeatures] = useState(true);
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
-
-    // Call recording refs
-    const mediaRecorderRef = useRef(null);
-    const audioChunksRef = useRef([]);
-    const isRecordingRef = useRef(false);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -76,115 +70,7 @@ export default function MiniAIChatBox({ roomId, onClose, onAutoTranslateChange }
         onAutoTranslateChange?.(autoTranslate);
     }, [autoTranslate, onAutoTranslateChange]);
 
-    // ── Call Recording: start/stop based on callState + callRecord toggle ──
-    useEffect(() => {
-        // Start recording when call becomes active AND callRecord is enabled
-        if (callRecord && callState.active && remoteStream && !isRecordingRef.current) {
-            startCallRecording();
-        }
-        // Stop recording when call ends
-        if (isRecordingRef.current && !callState.active) {
-            stopCallRecording();
-        }
-    }, [callState.active, remoteStream, callRecord]);
 
-    // Cleanup recording on unmount
-    useEffect(() => {
-        return () => {
-            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-                mediaRecorderRef.current.stop();
-            }
-        };
-    }, []);
-
-    const startCallRecording = () => {
-        try {
-            // Mix local + remote audio into one stream
-            const audioCtx = new AudioContext();
-            const destination = audioCtx.createMediaStreamDestination();
-
-            if (localStream) {
-                const localSource = audioCtx.createMediaStreamSource(localStream);
-                localSource.connect(destination);
-            }
-            if (remoteStream) {
-                const remoteSource = audioCtx.createMediaStreamSource(remoteStream);
-                remoteSource.connect(destination);
-            }
-
-            const mixedStream = destination.stream;
-            const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-                ? 'audio/webm;codecs=opus'
-                : 'audio/webm';
-
-            const recorder = new MediaRecorder(mixedStream, { mimeType });
-            audioChunksRef.current = [];
-
-            recorder.ondataavailable = (e) => {
-                if (e.data.size > 0) audioChunksRef.current.push(e.data);
-            };
-
-            recorder.onstop = () => {
-                const blob = new Blob(audioChunksRef.current, { type: mimeType });
-                isRecordingRef.current = false;
-                if (blob.size > 0) {
-                    summarizeCallAudio(blob);
-                }
-            };
-
-            recorder.start(1000); // Collect data every second
-            mediaRecorderRef.current = recorder;
-            isRecordingRef.current = true;
-
-            setMessages((prev) => [...prev, {
-                role: 'ai', id: `rec-start-${Date.now()}`,
-                content: t('miniAi.recordingStarted')
-            }]);
-
-            console.log('[MiniAI] Call recording started');
-        } catch (err) {
-            console.error('[MiniAI] Failed to start recording:', err);
-            setMessages((prev) => [...prev, {
-                role: 'ai', id: `rec-err-${Date.now()}`, isError: true,
-                content: t('miniAi.recordErrorPrefix') + err.message
-            }]);
-        }
-    };
-
-    const stopCallRecording = () => {
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-            mediaRecorderRef.current.stop();
-            console.log('[MiniAI] Call recording stopped');
-        }
-    };
-
-    const summarizeCallAudio = async (audioBlob) => {
-        setThinking(true);
-        setMessages((prev) => [...prev, {
-            role: 'ai', id: `rec-processing-${Date.now()}`,
-            content: t('miniAi.summarizeAfterCall')
-        }]);
-
-        try {
-            // Convert blob to base64 for socket transmission
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                const base64 = reader.result.split(',')[1];
-                emit('ai:summarize-call', {
-                    roomId,
-                    audioBase64: base64,
-                    mimeType: audioBlob.type,
-                });
-            };
-            reader.readAsDataURL(audioBlob);
-        } catch (err) {
-            setThinking(false);
-            setMessages((prev) => [...prev, {
-                role: 'ai', id: `rec-fail-${Date.now()}`, isError: true,
-                content: t('miniAi.audioProcessErrorPrefix') + err.message
-            }]);
-        }
-    };
 
     const handleSummarize = () => {
         setThinking(true);
@@ -359,24 +245,7 @@ export default function MiniAIChatBox({ roomId, onClose, onAutoTranslateChange }
                         </button>
                     </div>
 
-                    {/* Call Record & Summary */}
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <Mic size={13} className={isRecordingRef.current ? 'text-red-500 animate-pulse' : ''} style={isRecordingRef.current ? undefined : { color: 'var(--color-primary)' }} />
-                            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                                {t('miniAi.callRecordSummary')}
-                                {isRecordingRef.current && <span className="text-red-500 text-[10px] ml-1">{t('miniAi.rec')}</span>}
-                            </span>
-                        </div>
-                        <button
-                            onClick={() => setCallRecord((v) => !v)}
-                            disabled={callState.active}
-                            title={callState.active ? t('miniAi.cannotToggleInCall') : ''}
-                            className={`relative w-8 h-4.5 rounded-full transition-colors ${callRecord ? 'bg-red-400' : 'bg-gray-300'} ${callState.active ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
-                            <span className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 bg-white rounded-full shadow transition-transform ${callRecord ? 'translate-x-3.5' : ''}`} />
-                        </button>
-                    </div>
+
 
                     {/* Screen Analysis (visible when screen sharing) */}
                     {screenSharing && screenStream && (

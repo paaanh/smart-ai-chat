@@ -1,27 +1,20 @@
 const mongoose = require('mongoose');
 
-const counselingMessageSchema = new mongoose.Schema({
-    role: {
-        type: String,
-        enum: ['user', 'assistant', 'system'],
-        required: true,
-    },
-    content: {
-        type: String,
-        required: true,
-        trim: true,
-    },
-    timestamp: {
-        type: Date,
-        default: Date.now,
-    },
-}, { _id: false });
-
 const counselingSessionSchema = new mongoose.Schema({
-    userId: {
+    room: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Room',
+        required: true,
+    },
+    user: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         required: true,
+    },
+    expert: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null,
     },
     category: {
         type: String,
@@ -33,14 +26,14 @@ const counselingSessionSchema = new mongoose.Schema({
         trim: true,
         default: '',
     },
-    messages: {
-        type: [counselingMessageSchema],
-        default: [],
-    },
     status: {
         type: String,
         enum: ['active', 'closed'],
         default: 'active',
+    },
+    aiActive: {
+        type: Boolean,
+        default: true,
     },
     isAnonymous: {
         type: Boolean,

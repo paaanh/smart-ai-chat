@@ -10,5 +10,6 @@ router.get('/my', topicController.getMyTopics);
 router.get('/:id', topicController.getTopicById);
 router.post('/:id/join', topicController.joinTopic);
 router.delete('/:id/leave', topicController.leaveTopic);
+router.put('/:id/settings', topicController.updateTopicSettings);
 
 module.exports = router;

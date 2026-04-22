@@ -180,8 +180,11 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
     const handleAccept = async (friendshipId) => {
         setActionLoading(friendshipId);
         try {
-            await friendAPI.accept(friendshipId);
+            const { data } = await friendAPI.accept(friendshipId);
             await loadData();
+            if (data.roomId) {
+                onSelectRoom?.(data.roomId);
+            }
         } catch (err) {
             console.error('Accept error:', err);
         } finally {

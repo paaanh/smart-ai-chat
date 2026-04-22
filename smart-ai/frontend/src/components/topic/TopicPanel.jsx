@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { topicAPI } from '../../services/api';
-import { Compass, Plus, Users, Search, Loader2 } from 'lucide-react';
+import { useTheme } from '../../hooks/useTheme';
+import { useAuth } from '../../hooks/useAuth';
+import { Compass, Plus, Users, Search, Loader2, Pencil, Check, X } from 'lucide-react';
 
 const CATEGORY_OPTIONS = [
     { value: '', label: 'Tất cả' },
@@ -13,6 +15,8 @@ const CATEGORY_OPTIONS = [
 ];
 
 export default function TopicPanel({ onSelectRoom }) {
+    const { themeId } = useTheme();
+    const { user } = useAuth();
     const [topics, setTopics] = useState([]);
     const [myTopics, setMyTopics] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -29,6 +33,14 @@ export default function TopicPanel({ onSelectRoom }) {
         category: 'tam_ly',
         tags: '',
     });
+
+    // Inline edit state
+    const [editingTopicId, setEditingTopicId] = useState(null);
+    const [editForm, setEditForm] = useState({ title: '', description: '' });
+    const [savingEdit, setSavingEdit] = useState(false);
+
+    const isGlassTheme = themeId === 'glassmorphism' || themeId === 'neon-night';
+    const isPixelTheme = themeId === 'pixel-art';
 
     const loadTopics = useCallback(async () => {
         setLoading(true);
@@ -97,11 +109,65 @@ export default function TopicPanel({ onSelectRoom }) {
         }
     };
 
+    const startEditing = (topic) => {
+        setEditingTopicId(topic._id);
+        setEditForm({ title: topic.title || '', description: topic.description || '' });
+    };
+
+    const cancelEditing = () => {
+        setEditingTopicId(null);
+        setEditForm({ title: '', description: '' });
+    };
+
+    const handleUpdateSettings = async () => {
+        if (!editingTopicId || !editForm.title.trim()) return;
+        try {
+            setSavingEdit(true);
+            await topicAPI.updateSettings(editingTopicId, {
+                title: editForm.title.trim(),
+                description: editForm.description.trim(),
+            });
+            setEditingTopicId(null);
+            await loadTopics();
+        } catch (error) {
+            console.error('Update topic settings failed:', error);
+        } finally {
+            setSavingEdit(false);
+        }
+    };
+
+    const canEditTopic = (topic) => {
+        if (!user?._id) return false;
+        // Creator
+        if (topic.creator?._id === user._id || topic.creator === user._id) return true;
+        // Admin in room
+        const memberEntry = topic.room?.members?.find((m) => {
+            const uid = m.user?._id || m.user;
+            return uid === user._id;
+        });
+        return memberEntry?.role === 'admin';
+    };
+
     return (
-        <div className="h-full flex flex-col border-r border-gray-200 bg-white">
-            <div className="p-4 border-b border-gray-100">
+        <div
+            className={`h-full flex flex-col ${isGlassTheme ? 'glass-panel' : ''} ${isPixelTheme ? 'font-pixel' : ''}`}
+            style={{
+                backgroundColor: 'var(--bg-card)',
+                borderColor: 'var(--border-color)',
+            }}
+        >
+            <div
+                className="p-4 border-b"
+                style={{
+                    borderColor: 'var(--border-color)',
+                    backgroundColor: isGlassTheme ? 'rgba(255,255,255,0.05)' : undefined,
+                }}
+            >
                 <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-xl font-bold text-gray-900 inline-flex items-center gap-2">
+                    <h2
+                        className="text-xl font-bold inline-flex items-center gap-2"
+                        style={{ color: 'var(--text-primary)' }}
+                    >
                         <Compass size={18} />
                         Chủ đề
                     </h2>
@@ -115,19 +181,28 @@ export default function TopicPanel({ onSelectRoom }) {
                 </div>
 
                 <div className="relative mb-2">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-tertiary)' }} />
                     <input
                         value={q}
                         onChange={(e) => setQ(e.target.value)}
                         placeholder="Tìm theo tiêu đề hoặc tag"
-                        className="w-full pl-8 pr-3 py-2 bg-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-ring)]"
+                        className="w-full pl-8 pr-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-ring)]"
+                        style={{
+                            backgroundColor: 'var(--bg-secondary)',
+                            color: 'var(--text-primary)',
+                            borderColor: 'var(--border-color)',
+                        }}
                     />
                 </div>
 
                 <select
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
-                    className="w-full bg-gray-100 rounded-lg text-sm px-3 py-2 focus:outline-none"
+                    className="w-full rounded-lg text-sm px-3 py-2 focus:outline-none"
+                    style={{
+                        backgroundColor: 'var(--bg-secondary)',
+                        color: 'var(--text-primary)',
+                    }}
                 >
                     {CATEGORY_OPTIONS.map((option) => (
                         <option key={option.value} value={option.value}>{option.label}</option>
@@ -136,25 +211,46 @@ export default function TopicPanel({ onSelectRoom }) {
             </div>
 
             {showCreate && (
-                <div className="p-3 border-b border-gray-100 bg-gray-50 space-y-2">
+                <div
+                    className="p-3 border-b space-y-2"
+                    style={{
+                        borderColor: 'var(--border-color)',
+                        backgroundColor: 'var(--bg-secondary)',
+                    }}
+                >
                     <input
                         value={createForm.title}
                         onChange={(e) => setCreateForm((prev) => ({ ...prev, title: e.target.value }))}
                         placeholder="Tên phòng chủ đề"
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                        style={{
+                            borderColor: 'var(--border-color)',
+                            backgroundColor: 'var(--bg-input, var(--bg-card))',
+                            color: 'var(--text-primary)',
+                        }}
                     />
                     <textarea
                         value={createForm.description}
                         onChange={(e) => setCreateForm((prev) => ({ ...prev, description: e.target.value }))}
                         placeholder="Mô tả ngắn"
                         rows={2}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none"
+                        className="w-full border rounded-lg px-3 py-2 text-sm resize-none"
+                        style={{
+                            borderColor: 'var(--border-color)',
+                            backgroundColor: 'var(--bg-input, var(--bg-card))',
+                            color: 'var(--text-primary)',
+                        }}
                     />
                     <div className="grid grid-cols-2 gap-2">
                         <select
                             value={createForm.category}
                             onChange={(e) => setCreateForm((prev) => ({ ...prev, category: e.target.value }))}
-                            className="border border-gray-300 rounded-lg px-2 py-2 text-sm"
+                            className="border rounded-lg px-2 py-2 text-sm"
+                            style={{
+                                borderColor: 'var(--border-color)',
+                                backgroundColor: 'var(--bg-input, var(--bg-card))',
+                                color: 'var(--text-primary)',
+                            }}
                         >
                             {CATEGORY_OPTIONS.filter((x) => x.value).map((option) => (
                                 <option key={option.value} value={option.value}>{option.label}</option>
@@ -164,7 +260,12 @@ export default function TopicPanel({ onSelectRoom }) {
                             value={createForm.tags}
                             onChange={(e) => setCreateForm((prev) => ({ ...prev, tags: e.target.value }))}
                             placeholder="tags, cách, dấu, phẩy"
-                            className="border border-gray-300 rounded-lg px-2 py-2 text-sm"
+                            className="border rounded-lg px-2 py-2 text-sm"
+                            style={{
+                                borderColor: 'var(--border-color)',
+                                backgroundColor: 'var(--bg-input, var(--bg-card))',
+                                color: 'var(--text-primary)',
+                            }}
                         />
                     </div>
                     <button
@@ -179,25 +280,126 @@ export default function TopicPanel({ onSelectRoom }) {
 
             <div className="flex-1 overflow-y-auto">
                 {loading && (
-                    <div className="py-8 text-center text-gray-400 text-sm">
+                    <div className="py-8 text-center text-sm" style={{ color: 'var(--text-tertiary)' }}>
                         <Loader2 size={16} className="animate-spin mx-auto mb-2" />
                         Đang tải chủ đề...
                     </div>
                 )}
 
                 {!loading && myTopics.length > 0 && (
-                    <div className="p-3 border-b border-gray-100">
-                        <p className="text-xs font-semibold text-gray-400 uppercase mb-2">Chủ đề của bạn</p>
+                    <div
+                        className="p-3 border-b"
+                        style={{ borderColor: 'var(--border-color)' }}
+                    >
+                        <p
+                            className="text-xs font-semibold uppercase mb-2"
+                            style={{ color: 'var(--text-tertiary)' }}
+                        >
+                            Chủ đề của bạn
+                        </p>
                         <div className="space-y-2">
                             {myTopics.map((topic) => (
-                                <button
-                                    key={topic._id}
-                                    onClick={() => onSelectRoom?.(topic.room?._id)}
-                                    className="w-full text-left p-2.5 rounded-lg bg-emerald-50 border border-emerald-100 hover:bg-emerald-100 transition"
-                                >
-                                    <p className="text-sm font-medium text-emerald-800 truncate">{topic.title}</p>
-                                    <p className="text-xs text-emerald-600 truncate">{topic.description || 'Không có mô tả'}</p>
-                                </button>
+                                <div key={topic._id}>
+                                    {editingTopicId === topic._id ? (
+                                        /* Inline edit form */
+                                        <div
+                                            className="p-2.5 rounded-lg border space-y-2"
+                                            style={{
+                                                borderColor: 'var(--color-primary)',
+                                                backgroundColor: 'var(--bg-secondary)',
+                                            }}
+                                        >
+                                            <input
+                                                value={editForm.title}
+                                                onChange={(e) => setEditForm((prev) => ({ ...prev, title: e.target.value }))}
+                                                placeholder="Tên phòng"
+                                                className="w-full border rounded-md px-2 py-1.5 text-sm"
+                                                style={{
+                                                    borderColor: 'var(--border-color)',
+                                                    backgroundColor: 'var(--bg-input, var(--bg-card))',
+                                                    color: 'var(--text-primary)',
+                                                }}
+                                                autoFocus
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') handleUpdateSettings();
+                                                    if (e.key === 'Escape') cancelEditing();
+                                                }}
+                                            />
+                                            <input
+                                                value={editForm.description}
+                                                onChange={(e) => setEditForm((prev) => ({ ...prev, description: e.target.value }))}
+                                                placeholder="Mô tả"
+                                                className="w-full border rounded-md px-2 py-1.5 text-xs"
+                                                style={{
+                                                    borderColor: 'var(--border-color)',
+                                                    backgroundColor: 'var(--bg-input, var(--bg-card))',
+                                                    color: 'var(--text-primary)',
+                                                }}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') handleUpdateSettings();
+                                                    if (e.key === 'Escape') cancelEditing();
+                                                }}
+                                            />
+                                            <div className="flex justify-end gap-1.5">
+                                                <button
+                                                    onClick={cancelEditing}
+                                                    className="p-1 rounded-md transition"
+                                                    style={{ color: 'var(--text-secondary)' }}
+                                                    title="Hủy"
+                                                >
+                                                    <X size={14} />
+                                                </button>
+                                                <button
+                                                    onClick={handleUpdateSettings}
+                                                    disabled={savingEdit || !editForm.title.trim()}
+                                                    className="p-1 rounded-md text-white disabled:opacity-50"
+                                                    style={{ backgroundColor: 'var(--color-primary)' }}
+                                                    title="Lưu"
+                                                >
+                                                    {savingEdit ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        /* Normal display */
+                                        <div className="flex items-center gap-1">
+                                            <button
+                                                onClick={() => onSelectRoom?.(topic.room?._id)}
+                                                className={`flex-1 text-left p-2.5 rounded-lg border transition ${isGlassTheme
+                                                    ? 'bg-white/10 border-white/20 hover:bg-white/20'
+                                                    : ''
+                                                }`}
+                                                style={isGlassTheme ? undefined : {
+                                                    backgroundColor: 'color-mix(in srgb, var(--color-primary) 8%, var(--bg-card))',
+                                                    borderColor: 'color-mix(in srgb, var(--color-primary) 20%, var(--border-color))',
+                                                }}
+                                            >
+                                                <p
+                                                    className="text-sm font-medium truncate"
+                                                    style={{ color: 'var(--color-primary)' }}
+                                                >
+                                                    {topic.title}
+                                                </p>
+                                                <p
+                                                    className="text-xs truncate"
+                                                    style={{ color: 'var(--text-secondary)' }}
+                                                >
+                                                    {topic.description || 'Không có mô tả'}
+                                                </p>
+                                            </button>
+                                            {canEditTopic(topic) && (
+                                                <button
+                                                    onClick={() => startEditing(topic)}
+                                                    className="p-1.5 rounded-full transition shrink-0"
+                                                    style={{ color: 'var(--text-secondary)' }}
+                                                    title="Đổi tên"
+                                                >
+                                                    <Pencil size={13} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
                             ))}
                         </div>
                     </div>
@@ -206,17 +408,37 @@ export default function TopicPanel({ onSelectRoom }) {
                 {!loading && (
                     <div className="p-3 space-y-2">
                         {filteredTopics.length === 0 && (
-                            <div className="py-8 text-center text-gray-400 text-sm">
+                            <div className="py-8 text-center text-sm" style={{ color: 'var(--text-tertiary)' }}>
                                 Không có phòng chủ đề phù hợp.
                             </div>
                         )}
 
                         {filteredTopics.map((topic) => (
-                            <div key={topic._id} className="p-3 rounded-xl border border-gray-200 hover:border-gray-300 transition">
+                            <div
+                                key={topic._id}
+                                className={`p-3 rounded-xl border transition ${isGlassTheme
+                                    ? 'bg-white/5 border-white/10 hover:bg-white/15 hover:border-white/25'
+                                    : ''
+                                }`}
+                                style={isGlassTheme ? undefined : {
+                                    borderColor: 'var(--border-color)',
+                                    backgroundColor: 'var(--bg-card)',
+                                }}
+                            >
                                 <div className="flex items-start justify-between gap-2">
                                     <div className="min-w-0">
-                                        <p className="text-sm font-semibold text-gray-800 truncate">{topic.title}</p>
-                                        <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{topic.description || 'Không có mô tả'}</p>
+                                        <p
+                                            className="text-sm font-semibold truncate"
+                                            style={{ color: 'var(--text-primary)' }}
+                                        >
+                                            {topic.title}
+                                        </p>
+                                        <p
+                                            className="text-xs mt-0.5 line-clamp-2"
+                                            style={{ color: 'var(--text-secondary)' }}
+                                        >
+                                            {topic.description || 'Không có mô tả'}
+                                        </p>
                                     </div>
                                     <button
                                         onClick={() => handleJoinTopic(topic)}
@@ -230,10 +452,22 @@ export default function TopicPanel({ onSelectRoom }) {
                                 <div className="flex items-center justify-between mt-2">
                                     <div className="flex flex-wrap gap-1">
                                         {(topic.tags || []).slice(0, 3).map((tag) => (
-                                            <span key={tag} className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">#{tag}</span>
+                                            <span
+                                                key={tag}
+                                                className="text-[11px] px-2 py-0.5 rounded-full"
+                                                style={{
+                                                    backgroundColor: 'var(--bg-secondary)',
+                                                    color: 'var(--text-secondary)',
+                                                }}
+                                            >
+                                                #{tag}
+                                            </span>
                                         ))}
                                     </div>
-                                    <span className="text-[11px] text-gray-400 inline-flex items-center gap-1">
+                                    <span
+                                        className="text-[11px] inline-flex items-center gap-1"
+                                        style={{ color: 'var(--text-tertiary)' }}
+                                    >
                                         <Users size={12} />
                                         {topic.memberCount || topic.room?.members?.length || 0}
                                     </span>

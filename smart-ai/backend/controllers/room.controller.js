@@ -192,22 +192,25 @@ exports.leaveRoom = async (req, res, next) => {
             return res.status(403).json({ error: 'Bạn không phải thành viên' });
         }
 
-        // If owner of group is leaving, they must select a new owner
-        if (room.type === 'group' && leavingMember.role === 'admin') {
+        // If an admin is leaving, ensure there is at least one admin left
+        if (leavingMember.role === 'admin') {
             const otherMembers = room.members.filter(m => m.user.toString() !== leavingUserId);
             if (otherMembers.length > 0) {
-                if (!newOwnerId) {
-                    return res.status(400).json({
-                        error: 'Bạn là chủ nhóm. Vui lòng chọn thành viên mới làm trưởng nhóm trước khi rời.',
-                        requireOwnerTransfer: true,
-                        members: otherMembers.map(m => m.user),
-                    });
+                const hasOtherAdmins = otherMembers.some(m => m.role === 'admin');
+                if (!hasOtherAdmins) {
+                    if (newOwnerId) {
+                        const newOwner = otherMembers.find(m => m.user.toString() === newOwnerId);
+                        if (newOwner) {
+                            newOwner.role = 'admin';
+                        } else {
+                            // Fallback if invalid newOwnerId is provided
+                            otherMembers[0].role = 'admin';
+                        }
+                    } else {
+                        // Fault tolerance: Auto-promote the first available member if newOwnerId is missing
+                        otherMembers[0].role = 'admin';
+                    }
                 }
-                const newOwner = otherMembers.find(m => m.user.toString() === newOwnerId);
-                if (!newOwner) {
-                    return res.status(400).json({ error: 'Thành viên được chọn không hợp lệ' });
-                }
-                newOwner.role = 'admin';
             }
         }
 
