@@ -179,7 +179,7 @@ exports.addMember = async (req, res, next) => {
 exports.leaveRoom = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const { newOwnerId } = req.body;
+        const { newOwnerId } = req.body || {};
 
         const room = await Room.findById(id);
         if (!room) {
