@@ -250,6 +250,39 @@ module.exports = (io, socket) => {
         }
     });
 
+    // ─── message:edit ───────────────────────────────────────────────────
+    socket.on('message:edit', async ({ messageId, roomId, content }) => {
+        try {
+            if (!messageId || !content || !content.trim()) return;
+            const message = await Message.findById(messageId);
+            if (!message) return;
+            if (message.sender.toString() !== userId.toString()) {
+                return socket.emit('error', { message: 'Không thể sửa tin nhắn của người khác' });
+            }
+            if (message.type !== 'text') {
+                return socket.emit('error', { message: 'Chỉ có thể sửa tin nhắn dạng văn bản' });
+            }
+            if (message.deleted) {
+                return socket.emit('error', { message: 'Tin nhắn đã bị xoá' });
+            }
+
+            message.content = content.trim();
+            message.editedAt = new Date();
+            // Stale translations: clear so they re-translate on demand
+            if (Array.isArray(message.translations)) message.translations = [];
+            await message.save();
+
+            io.to(roomId || message.room.toString()).emit('message:edited', {
+                messageId: message._id,
+                roomId: message.room.toString(),
+                content: message.content,
+                editedAt: message.editedAt,
+            });
+        } catch (error) {
+            console.error('message:edit error:', error.message);
+        }
+    });
+
     // ─── message:delete ─────────────────────────────────────────────────
     socket.on('message:delete', async ({ messageId, roomId }) => {
         try {

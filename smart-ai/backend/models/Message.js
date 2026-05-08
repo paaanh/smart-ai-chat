@@ -72,6 +72,7 @@ const messageSchema = new mongoose.Schema({
     }],
 
     deleted: { type: Boolean, default: false },
+    editedAt: { type: Date, default: null },
 
     // ===== POLL =====
     poll: {
@@ -107,6 +108,14 @@ const messageSchema = new mongoose.Schema({
     replyToNote: {
         type: String,
         default: null,
+    },
+
+    // ===== CALL EVENT (system messages for call lifecycle) =====
+    callEvent: {
+        kind: { type: String, enum: ['started', 'ended', null], default: null }, // 'started' | 'ended'
+        callType: { type: String, enum: ['audio', 'video', null], default: null },
+        isGroup: { type: Boolean, default: false },
+        durationSec: { type: Number, default: 0 }, // only when ended
     },
     
     // ===== SOFT DELETE PER USER =====

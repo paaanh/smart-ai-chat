@@ -6,6 +6,7 @@ const webrtcHandler = require('./webrtc.handler');
 const aiHandler = require('./ai.handler');
 const messageHandler = require('./message.handler');
 const friendHandler = require('./friend.handler');
+const presence = require('./presence');
 
 const initializeSocket = (io) => {
     // ─── Middleware xác thực Socket ────────────────────────────────────
@@ -13,6 +14,7 @@ const initializeSocket = (io) => {
 
     io.on('connection', async (socket) => {
         const user = socket.user;
+        const userId = user._id.toString();
 
         // ─── Kiểm tra maintenance mode ────────────────────────────────
         if (!['sub_admin', 'super_admin'].includes(user.role)) {
@@ -26,20 +28,23 @@ const initializeSocket = (io) => {
         console.log(`🟢 ${user.username} connected (socket: ${socket.id})`);
 
         // Join personal room so admin can target user by userId
-        socket.join(user._id.toString());
+        socket.join(userId);
 
-        // Cập nhật trạng thái online & socketId
+        const becameOnline = presence.addSocket(userId, socket.id);
+
+        // Send current online list to the newly connected client (initial sync)
+        socket.emit('presence:init', { onlineUsers: presence.getOnlineUserIds() });
+
+        // Always update socketId to latest (used by emit-to-user code paths)
         await User.findByIdAndUpdate(user._id, {
             status: 'online',
             socketId: socket.id,
             lastOnline: new Date(),
         });
 
-        // Broadcast user online cho tất cả
-        socket.broadcast.emit('user:online', {
-            userId: user._id,
-            status: 'online',
-        });
+        if (becameOnline) {
+            socket.broadcast.emit('user:online', { userId, status: 'online' });
+        }
 
         // ─── Đăng ký tất cả handlers ──────────────────────────────────
         chatHandler(io, socket);
@@ -50,18 +55,18 @@ const initializeSocket = (io) => {
 
         // ─── Disconnect ────────────────────────────────────────────────
         socket.on('disconnect', async () => {
-            console.log(`🔴 ${user.username} disconnected`);
+            console.log(`🔴 ${user.username} disconnected (socket: ${socket.id})`);
 
-            await User.findByIdAndUpdate(user._id, {
-                status: 'offline',
-                socketId: null,
-                lastSeen: new Date(),
-            });
-
-            socket.broadcast.emit('user:offline', {
-                userId: user._id,
-                lastSeen: new Date(),
-            });
+            const becameOffline = presence.removeSocket(userId, socket.id);
+            if (becameOffline) {
+                const lastSeen = new Date();
+                await User.findByIdAndUpdate(user._id, {
+                    status: 'offline',
+                    socketId: null,
+                    lastSeen,
+                });
+                socket.broadcast.emit('user:offline', { userId, lastSeen });
+            }
         });
     });
 };

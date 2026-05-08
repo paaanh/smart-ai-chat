@@ -85,10 +85,7 @@ export default function GroupProfilePage() {
     };
 
     const handleGoToChat = () => {
-        navigate('/');
-        setTimeout(() => {
-            window.dispatchEvent(new CustomEvent('select-room', { detail: id }));
-        }, 100);
+        navigate('/', { state: { roomId: id } });
     };
 
     if (loading) {

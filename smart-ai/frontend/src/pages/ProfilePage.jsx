@@ -63,11 +63,7 @@ export default function ProfilePage() {
     const handleMessage = async () => {
         try {
             const { data } = await roomAPI.create({ type: 'direct', memberIds: [id] });
-            navigate('/');
-            // Small delay to let ChatPage mount then select room
-            setTimeout(() => {
-                window.dispatchEvent(new CustomEvent('select-room', { detail: data.room._id }));
-            }, 100);
+            navigate('/', { state: { roomId: data.room._id } });
         } catch (err) {
             console.error('Start chat error:', err);
         }
