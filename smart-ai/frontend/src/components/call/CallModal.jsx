@@ -17,6 +17,8 @@ import {
     Wifi,
     Signal,
     Zap,
+    Pin,
+    PinOff,
 } from 'lucide-react';
 import { resolveMediaUrl } from '../../services/api';
 import { useDraggable } from '../../hooks/useDraggable';
@@ -45,7 +47,7 @@ function getLastItemStyle(count) {
 }
 
 // ── Single video tile component with speaking glow ──
-function VideoTile({ stream, label, muted = false, mirror = false, isAudioOnly = false, avatar, style }) {
+function VideoTile({ stream, label, muted = false, mirror = false, isAudioOnly = false, avatar, style, onPin, isPinned, pinnable = false, fit = 'cover' }) {
     const videoRef = useRef(null);
     const [isSpeaking, setIsSpeaking] = useState(false);
 
@@ -88,8 +90,8 @@ function VideoTile({ stream, label, muted = false, mirror = false, isAudioOnly =
 
     return (
         <div
-            className={`relative bg-gray-800 rounded-xl overflow-hidden min-h-0 transition-shadow duration-300 ${isSpeaking ? 'ring-2 ring-green-400 shadow-[0_0_18px_rgba(74,222,128,0.45)]' : ''
-                }`}
+            className={`group/tile relative bg-gray-800 rounded-xl overflow-hidden min-h-0 transition-shadow duration-300 ${isSpeaking ? 'ring-2 ring-green-400 shadow-[0_0_18px_rgba(74,222,128,0.45)]' : ''
+                } ${isPinned ? 'ring-2 ring-yellow-400' : ''}`}
             style={style}
         >
             {stream && (hasVideoTrack && !isAudioOnly) ? (
@@ -98,7 +100,7 @@ function VideoTile({ stream, label, muted = false, mirror = false, isAudioOnly =
                     autoPlay
                     playsInline
                     muted={muted}
-                    className="w-full h-full object-cover"
+                    className={`w-full h-full ${fit === 'contain' ? 'object-contain' : 'object-cover'}`}
                     style={mirror ? { transform: 'scaleX(-1)' } : undefined}
                 />
             ) : (
@@ -120,6 +122,19 @@ function VideoTile({ stream, label, muted = false, mirror = false, isAudioOnly =
                 {isSpeaking && <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />}
                 {label}
             </div>
+            {pinnable && onPin && (
+                <button
+                    onClick={(e) => { e.stopPropagation(); onPin(); }}
+                    className={`absolute top-2 right-2 p-1.5 rounded-full backdrop-blur-sm transition ${
+                        isPinned
+                            ? 'bg-yellow-400/90 text-black opacity-100'
+                            : 'bg-black/50 text-white opacity-0 group-hover/tile:opacity-100 hover:bg-black/70'
+                    }`}
+                    title={isPinned ? 'Bỏ ghim' : 'Ghim tile'}
+                >
+                    {isPinned ? <PinOff size={14} /> : <Pin size={14} />}
+                </button>
+            )}
         </div>
     );
 }
@@ -164,7 +179,9 @@ export default function CallModal() {
     const [showControls, setShowControls] = useState(true);
     const [showInvitePanel, setShowInvitePanel] = useState(false);
     const [showSettingsPanel, setShowSettingsPanel] = useState(false);
+    const [pinnedTileId, setPinnedTileId] = useState(null);
     const controlsTimerRef = useRef(null);
+    const groupScreenVideoRef = useRef(null);
 
     // Draggable call toolbar (persisted to localStorage)
     const toolbarDrag = useDraggable('callToolbar:position');
@@ -363,6 +380,44 @@ export default function CallModal() {
         return tiles;
     }, [isGroup, localStream, remoteStreams, participants]);
 
+    // ── Detect group screen sharer (self or remote) ──
+    const groupScreenShare = useMemo(() => {
+        if (!isGroup) return null;
+        if (screenSharing && screenStream) {
+            return { stream: screenStream, label: 'Bạn', isLocal: true };
+        }
+        const entries = Object.entries(remoteScreenStreams || {});
+        if (entries.length > 0) {
+            const [uid, stream] = entries[0];
+            const p = participants.find(pp => pp._id === uid);
+            return { stream, label: p?.username || 'Đang chia sẻ', isLocal: false, userId: uid };
+        }
+        return null;
+    }, [isGroup, screenSharing, screenStream, remoteScreenStreams, participants]);
+
+    // Auto-clear pin if pinned tile no longer exists
+    useEffect(() => {
+        if (pinnedTileId && !groupTiles.some(t => t.id === pinnedTileId)) {
+            setPinnedTileId(null);
+        }
+    }, [pinnedTileId, groupTiles]);
+
+    // Pin gets cleared when screen share takes priority (avoid stale state on resume)
+    useEffect(() => {
+        if (groupScreenShare && pinnedTileId) setPinnedTileId(null);
+    }, [groupScreenShare, pinnedTileId]);
+
+    const pinnedTile = pinnedTileId ? groupTiles.find(t => t.id === pinnedTileId) : null;
+    const otherTiles = pinnedTile ? groupTiles.filter(t => t.id !== pinnedTileId) : groupTiles;
+
+    // Attach group screen video element
+    useEffect(() => {
+        const el = groupScreenVideoRef.current;
+        if (!el) return;
+        if (groupScreenShare?.stream) { el.srcObject = groupScreenShare.stream; el.play().catch(() => { }); }
+        else { el.srcObject = null; }
+    }, [groupScreenShare]);
+
     if (!callState.active && !callState.outgoing) return null;
 
     // ═════════════════════════════════════════════════════════
@@ -439,26 +494,63 @@ export default function CallModal() {
                 {/* ═══ GROUP CALL GRID ═══ */}
                 {isGroup ? (
                     groupTiles.length > 1 && isVideoCall ? (
-                        screenSharing && screenStream ? (
-                            /* Screen sharing in group — screen dominant center, webcams sidebar */
-                            <div className="absolute inset-0 flex">
-                                <div className="flex-1 relative bg-black flex items-center justify-center">
+                        groupScreenShare ? (
+                            /* Screen share in group (self or remote) — main + thumbnails (sidebar on md+, bottom row on mobile) */
+                            <div className="absolute inset-0 flex flex-col md:flex-row">
+                                <div className="flex-1 relative bg-black flex items-center justify-center min-h-0">
                                     <video
-                                        ref={screenVideoRef}
-                                        autoPlay playsInline muted
+                                        ref={groupScreenVideoRef}
+                                        autoPlay playsInline muted={groupScreenShare.isLocal}
                                         style={{ objectFit: 'contain', maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto' }}
                                     />
-                                    <div className="absolute top-3 left-3 bg-blue-600/80 text-white text-xs px-2.5 py-1 rounded-full flex items-center gap-1.5 backdrop-blur-sm z-10">
-                                        <ScreenShare size={12} /> Bạn đang chia sẻ màn hình
+                                    <div className={`absolute top-3 left-3 ${groupScreenShare.isLocal ? 'bg-blue-600/80' : 'bg-green-600/80'} text-white text-xs px-2.5 py-1 rounded-full flex items-center gap-1.5 backdrop-blur-sm z-10`}>
+                                        <ScreenShare size={12} />
+                                        {groupScreenShare.isLocal ? 'Bạn đang chia sẻ màn hình' : `${groupScreenShare.label} đang chia sẻ màn hình`}
                                     </div>
                                 </div>
-                                <div className="w-52 bg-gray-900/80 flex flex-col items-start p-2 gap-2 shrink-0 overflow-y-auto">
+                                <div className="md:w-52 md:h-auto h-28 bg-gray-900/80 flex md:flex-col flex-row md:items-start items-stretch p-2 gap-2 shrink-0 md:overflow-y-auto overflow-x-auto">
                                     {groupTiles.map(tile => (
-                                        <div key={tile.id} className="w-full rounded-xl overflow-hidden border border-white/10" style={{ aspectRatio: '4/3' }}>
+                                        <div key={tile.id} className="md:w-full w-32 shrink-0 rounded-xl overflow-hidden border border-white/10" style={{ aspectRatio: '4/3' }}>
                                             <VideoTile stream={tile.stream} label={tile.label} muted={tile.muted} mirror={tile.mirror} avatar={tile.avatar} />
                                         </div>
                                     ))}
                                 </div>
+                            </div>
+                        ) : pinnedTile ? (
+                            /* Pinned tile — main + thumbnails sidebar */
+                            <div className="absolute inset-0 flex flex-col md:flex-row">
+                                <div className="flex-1 relative bg-black flex items-center justify-center min-h-0 p-1">
+                                    <div className="w-full h-full">
+                                        <VideoTile
+                                            stream={pinnedTile.stream}
+                                            label={pinnedTile.label}
+                                            muted={pinnedTile.muted}
+                                            mirror={pinnedTile.mirror}
+                                            avatar={pinnedTile.avatar}
+                                            isPinned
+                                            pinnable
+                                            fit="contain"
+                                            onPin={() => setPinnedTileId(null)}
+                                        />
+                                    </div>
+                                </div>
+                                {otherTiles.length > 0 && (
+                                    <div className="md:w-52 md:h-auto h-28 bg-gray-900/80 flex md:flex-col flex-row md:items-start items-stretch p-2 gap-2 shrink-0 md:overflow-y-auto overflow-x-auto">
+                                        {otherTiles.map(tile => (
+                                            <div key={tile.id} className="md:w-full w-32 shrink-0 rounded-xl overflow-hidden border border-white/10" style={{ aspectRatio: '4/3' }}>
+                                                <VideoTile
+                                                    stream={tile.stream}
+                                                    label={tile.label}
+                                                    muted={tile.muted}
+                                                    mirror={tile.mirror}
+                                                    avatar={tile.avatar}
+                                                    pinnable
+                                                    onPin={() => setPinnedTileId(tile.id)}
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             /* Normal group video grid — even: symmetric, odd: last centered */
@@ -471,6 +563,8 @@ export default function CallModal() {
                                         muted={tile.muted}
                                         mirror={tile.mirror}
                                         avatar={tile.avatar}
+                                        pinnable
+                                        onPin={() => setPinnedTileId(tile.id)}
                                         style={shouldCenterLast(groupTiles.length) && i === groupTiles.length - 1
                                             ? getLastItemStyle(groupTiles.length) : undefined}
                                     />
