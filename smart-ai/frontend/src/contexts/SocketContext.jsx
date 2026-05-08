@@ -36,8 +36,12 @@ export function SocketProvider({ children }) {
 
         socket.on('disconnect', () => setConnected(false));
 
+        socket.on('presence:init', ({ onlineUsers: ids }) => {
+            setOnlineUsers(Array.isArray(ids) ? ids : []);
+        });
+
         socket.on('user:online', ({ userId }) => {
-            setOnlineUsers((prev) => [...new Set([...prev, userId])]);
+            setOnlineUsers((prev) => (prev.includes(userId) ? prev : [...prev, userId]));
         });
 
         socket.on('user:offline', ({ userId }) => {

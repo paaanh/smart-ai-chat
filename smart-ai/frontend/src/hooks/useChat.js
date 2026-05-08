@@ -17,9 +17,20 @@ export function useChat(roomId) {
             const { data } = await roomAPI.getMessages(roomId, page);
             const msgs = data.messages || [];
             if (page === 1) {
-                setMessages(msgs);
+                // Merge with any messages already received via socket while fetching,
+                // dedupe by _id so concurrent socket pushes don't double up.
+                setMessages((prev) => {
+                    if (!prev.length) return msgs;
+                    const seen = new Set(msgs.map((m) => m._id));
+                    const extras = prev.filter((m) => m._id && !seen.has(m._id));
+                    return [...msgs, ...extras];
+                });
             } else {
-                setMessages((prev) => [...msgs, ...prev]);
+                setMessages((prev) => {
+                    const existingIds = new Set(prev.map((m) => m._id));
+                    const fresh = msgs.filter((m) => !existingIds.has(m._id));
+                    return [...fresh, ...prev];
+                });
             }
             setHasMore(data.hasMore ?? msgs.length >= 50);
             pageRef.current = page;

@@ -471,6 +471,39 @@ export default function MessageBubble({
         return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     };
 
+    // Derive a short uppercase label for the file (e.g. "PDF", "SVG", "DOCX")
+    const getFileTypeLabel = (mimeType, fileName) => {
+        const mime = (mimeType || '').toLowerCase();
+        const mimeMap = {
+            'image/svg+xml': 'SVG',
+            'image/jpeg': 'JPEG',
+            'image/png': 'PNG',
+            'image/gif': 'GIF',
+            'image/webp': 'WEBP',
+            'application/pdf': 'PDF',
+            'text/plain': 'TEXT',
+            'text/csv': 'CSV',
+            'application/zip': 'ZIP',
+            'application/x-rar-compressed': 'RAR',
+            'application/x-7z-compressed': '7Z',
+            'application/msword': 'DOC',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
+            'application/vnd.ms-excel': 'XLS',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'XLSX',
+            'application/vnd.ms-powerpoint': 'PPT',
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PPTX',
+            'application/json': 'JSON',
+        };
+        if (mimeMap[mime]) return mimeMap[mime];
+        const ext = (fileName || '').split('.').pop();
+        if (ext && ext.length <= 5 && ext !== fileName) return ext.toUpperCase();
+        if (mime.startsWith('image/')) return 'IMAGE';
+        if (mime.startsWith('video/')) return 'VIDEO';
+        if (mime.startsWith('audio/')) return 'AUDIO';
+        if (mime.startsWith('text/')) return 'TEXT';
+        return 'FILE';
+    };
+
     // Pick icon based on mimeType
     const getFileIcon = (mimeType) => {
         if (!mimeType) return File;
@@ -496,6 +529,7 @@ export default function MessageBubble({
         };
         let fileName = rawName;
         try { fileName = decodeURIComponent(rawName); } catch { /* already decoded */ }
+        const fileTypeLabel = getFileTypeLabel(mimeType, fileName);
 
         if (message.type === 'image' || mimeType?.startsWith('image/')) {
             return (
@@ -524,6 +558,7 @@ export default function MessageBubble({
                 href={resolvedUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                title={fileName}
                 className={`flex items-center gap-3 mt-1 px-3 py-2.5 rounded-2xl max-w-[280px] w-fit cursor-pointer transition-all duration-150 group/file
                     ${useSenderFrameStyle
                         ? frameIsLight
@@ -551,7 +586,7 @@ export default function MessageBubble({
                 </div>
                 <div className="min-w-0 flex-1">
                     <p className={`text-sm font-medium truncate ${useSenderFrameStyle ? senderContentTextClass : 'text-[var(--text-primary)]'}`}>
-                        {fileName || 'file'}
+                        {fileTypeLabel}
                     </p>
                     {size > 0 && (
                         <p className={`text-xs mt-0.5 ${useSenderFrameStyle ? senderMetaTextClass : 'text-[var(--text-tertiary)]'}`}>

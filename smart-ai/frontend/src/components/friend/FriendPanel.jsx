@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { friendAPI, userAPI, roomAPI } from '../../services/api';
+import { friendAPI, userAPI, roomAPI, resolveMediaUrl } from '../../services/api';
 import { useSocket } from '../../hooks/useSocket';
 import { useAuth } from '../../hooks/useAuth';
 import { useTheme } from '../../hooks/useTheme';
@@ -111,16 +111,35 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
             );
         };
 
+        const handleProfileUpdated = ({ userId, username, avatar, updatedAt }) => {
+            const patch = { username, avatar, updatedAt };
+            const merge = (u) => (u && u._id === userId ? { ...u, ...patch } : u);
+            setFriends((prev) => prev.map(merge));
+            setRequests((prev) => prev.map((r) => ({
+                ...r,
+                requester: merge(r.requester),
+                recipient: merge(r.recipient),
+            })));
+            setSentRequests((prev) => prev.map((r) => ({
+                ...r,
+                requester: merge(r.requester),
+                recipient: merge(r.recipient),
+            })));
+            setSearchResults((prev) => prev.map(merge));
+        };
+
         on('friend:request-received', handleRequestReceived);
         on('friend:accepted', handleAccepted);
         on('friend:rejected', handleRejected);
         on('friend:request-cancelled', handleRequestCancelled);
+        on('user:profile-updated', handleProfileUpdated);
 
         return () => {
             off('friend:request-received', handleRequestReceived);
             off('friend:accepted', handleAccepted);
             off('friend:rejected', handleRejected);
             off('friend:request-cancelled', handleRequestCancelled);
+            off('user:profile-updated', handleProfileUpdated);
         };
     }, [on, off, user]);
 
@@ -271,7 +290,7 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
                     title="Xem hồ sơ"
                 >
                     {u.avatar || u.googlePicture ? (
-                        <img src={u.avatar || u.googlePicture} alt={u.username} className="w-full h-full object-cover" />
+                        <img src={resolveMediaUrl(u.avatar || u.googlePicture, u.updatedAt)} alt={u.username} className="w-full h-full object-cover" />
                     ) : (
                         u.username.charAt(0).toUpperCase()
                     )}
@@ -431,7 +450,7 @@ export default function FriendPanel({ onSelectRoom, onRequestCountChange }) {
                                                 title={t('friendPanel.viewProfile')}
                                             >
                                                 {friend.avatar ? (
-                                                    <img src={friend.avatar} alt={friend.username} className="w-full h-full object-cover" />
+                                                    <img src={resolveMediaUrl(friend.avatar, friend.updatedAt)} alt={friend.username} className="w-full h-full object-cover" />
                                                 ) : (
                                                     friend.username?.charAt(0).toUpperCase()
                                                 )}

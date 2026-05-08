@@ -152,9 +152,18 @@ export const getMediaUrlCandidates = (value) => {
     return candidates;
 };
 
-export const resolveMediaUrl = (value) => {
+export const resolveMediaUrl = (value, version) => {
     const candidates = getMediaUrlCandidates(value);
-    return candidates[0] || value;
+    const url = candidates[0] || value;
+    if (!url || typeof url !== 'string' || !version) return url;
+    // Skip cache busting for data: URIs and external assets that already have query strings.
+    if (url.startsWith('data:') || url.startsWith('blob:')) return url;
+    const v = encodeURIComponent(
+        typeof version === 'string' || typeof version === 'number'
+            ? version
+            : new Date(version).getTime()
+    );
+    return url.includes('?') ? `${url}&v=${v}` : `${url}?v=${v}`;
 };
 
 const api = axios.create({
