@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { counselingAPI } from '../services/api';
 import { ArrowLeft, HeartHandshake, ShieldAlert } from 'lucide-react';
@@ -34,7 +34,10 @@ export default function CounselingPage() {
         loadBootstrap();
     }, []);
 
+    const creatingRef = useRef(false);
     const handleCreateSession = async (category) => {
+        if (creatingRef.current) return;
+        creatingRef.current = true;
         try {
             const { data } = await counselingAPI.createSession({
                 category,
@@ -43,6 +46,8 @@ export default function CounselingPage() {
             navigate('/', { state: { roomId: data.roomId } });
         } catch (error) {
             console.error('Create counseling session failed:', error);
+        } finally {
+            creatingRef.current = false;
         }
     };
 

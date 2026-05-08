@@ -19,6 +19,7 @@ import {
     Zap,
 } from 'lucide-react';
 import { resolveMediaUrl } from '../../services/api';
+import { useDraggable } from '../../hooks/useDraggable';
 
 // ── Smart grid: returns inline style for CSS Grid ──
 // Even counts → perfectly symmetric. Odd counts → last item centered.
@@ -129,6 +130,8 @@ export default function CallModal() {
         localStream,
         remoteStream,
         remoteStreams,
+        remoteScreenStream,
+        remoteScreenStreams,
         participants,
         callError,
         screenSharing,
@@ -162,6 +165,9 @@ export default function CallModal() {
     const [showInvitePanel, setShowInvitePanel] = useState(false);
     const [showSettingsPanel, setShowSettingsPanel] = useState(false);
     const controlsTimerRef = useRef(null);
+
+    // Draggable call toolbar (persisted to localStorage)
+    const toolbarDrag = useDraggable('callToolbar:position');
 
     // ── Draggable PiP state ──
     const pipRef = useRef(null);
@@ -241,6 +247,7 @@ export default function CallModal() {
     // ── For 1-1 backward compat ──
     const localVideoRef = useRef(null);
     const remoteVideoRef = useRef(null);
+    const remoteScreenVideoRef = useRef(null);
 
     // Attach local stream (1-1) — re-run when layout changes (hasRemote/pipMode/screenSharing)
     useEffect(() => {
@@ -265,6 +272,14 @@ export default function CallModal() {
         if (remoteStream) { el.srcObject = remoteStream; el.play().catch(() => { }); }
         else { el.srcObject = null; }
     }, [remoteStream, pipMode]);
+
+    // Attach remote screen share stream (1-1)
+    useEffect(() => {
+        const el = remoteScreenVideoRef.current;
+        if (!el) return;
+        if (remoteScreenStream) { el.srcObject = remoteScreenStream; el.play().catch(() => { }); }
+        else { el.srcObject = null; }
+    }, [remoteScreenStream, remoteScreenSharing, callState.active]);
 
     // Attach screen share stream
     useEffect(() => {
@@ -553,11 +568,11 @@ export default function CallModal() {
                                     </div>
                                 </div>
                             ) : remoteScreenSharing ? (
-                                /* 1-1: Remote is sharing screen — screen dominant, your webcam sidebar */
+                                /* 1-1: Remote is sharing screen — screen dominant, remote webcam + your webcam in sidebar */
                                 <div className="absolute inset-0 flex">
                                     <div className="flex-1 relative bg-black flex items-center justify-center">
                                         <video
-                                            ref={remoteVideoRef}
+                                            ref={remoteScreenVideoRef}
                                             autoPlay playsInline
                                             style={{ objectFit: 'contain', maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto' }}
                                         />
@@ -566,6 +581,10 @@ export default function CallModal() {
                                         </div>
                                     </div>
                                     <div className="w-52 bg-gray-900/80 flex flex-col items-start p-2 gap-3 shrink-0">
+                                        <div className="w-full relative rounded-xl overflow-hidden border border-white/10 shadow-lg" style={{ aspectRatio: '4/3' }}>
+                                            <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                                            <div className="absolute bottom-1.5 left-1.5 bg-black/50 px-2 py-0.5 rounded-full text-white text-[10px] backdrop-blur-sm">{displayName}</div>
+                                        </div>
                                         <div className="w-full relative rounded-xl overflow-hidden border border-white/10 shadow-lg" style={{ aspectRatio: '4/3' }}>
                                             <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" style={{ transform: 'scaleX(-1)' }} />
                                             <div className="absolute bottom-1.5 left-1.5 bg-black/50 px-2 py-0.5 rounded-full text-white text-[10px] backdrop-blur-sm">Bạn</div>
@@ -686,7 +705,13 @@ export default function CallModal() {
 
             {/* ═══ Floating Toolbar — always on top ═══ */}
             <div className={`absolute bottom-0 left-0 right-0 z-50 flex justify-center pb-8 pt-16 bg-linear-to-t from-black/60 to-transparent transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-                <div className="flex items-center gap-3 bg-white/10 backdrop-blur-2xl px-5 py-2.5 rounded-2xl border border-white/10 shadow-2xl">
+                <div
+                    ref={toolbarDrag.ref}
+                    style={{ ...toolbarDrag.style, ...toolbarDrag.dragHandleProps.style }}
+                    onMouseDown={toolbarDrag.dragHandleProps.onMouseDown}
+                    onDoubleClick={toolbarDrag.dragHandleProps.onDoubleClick}
+                    title="Kéo để di chuyển · Nhấp đúp để đặt lại"
+                    className="flex items-center gap-3 bg-white/10 backdrop-blur-2xl px-5 py-2.5 rounded-2xl border border-white/10 shadow-2xl select-none">
                     <button
                         onClick={handleToggleAudio}
                         className={`p-3 rounded-full transition-all duration-200 ${audioMuted ? 'bg-red-500 text-white shadow-lg shadow-red-500/30' : 'bg-white/10 text-white hover:bg-white/20'}`}

@@ -54,6 +54,22 @@ exports.createSession = async (req, res, next) => {
             return res.status(400).json({ error: 'Danh mục tư vấn không hợp lệ' });
         }
 
+        // Idempotency: nếu đã có session active cho user+category này → trả về session hiện tại,
+        // tránh tạo trùng do double click hoặc retry network.
+        const existing = await CounselingSession.findOne({
+            user: req.user._id,
+            category,
+            status: 'active',
+        }).populate('room');
+        if (existing) {
+            return res.status(200).json({
+                session: existing,
+                room: existing.room,
+                roomId: existing.room?._id || existing.room,
+                reused: true,
+            });
+        }
+
         const roomName = title ? title.trim() : `Tư vấn: ${COUNSELING_CATEGORIES.find(c => c.key === category).title}`;
 
         // Create Room

@@ -46,7 +46,7 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
     const { user, updateLockStatus } = useAuth();
     const { onlineUsers, on, off, emit } = useSocket();
     const { initiateCall } = useCall();
-    const { messages, loading, hasMore, typingUsers, sendMessage, sendLocation, deleteMessage, loadMore, startTyping, markRead, reactToMessage } = useChat(roomId);
+    const { messages, loading, hasMore, typingUsers, sendMessage, sendLocation, deleteMessage, editMessage, loadMore, startTyping, markRead, reactToMessage } = useChat(roomId);
     const { toggleBot, summarize } = useAI(roomId);
 
     const [room, setRoom] = useState(null);
@@ -976,6 +976,7 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                                             }
                                             localTranslation={localTranslations[msg._id]}
                                             onDelete={deleteMessage}
+                                            onEdit={editMessage}
                                             onReact={reactToMessage}
                                             onForward={(msg) => setForwardMsg(msg)}
                                             onPinMessage={handlePinMessage}

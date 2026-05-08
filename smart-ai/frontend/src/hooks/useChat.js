@@ -159,7 +159,14 @@ export function useChat(roomId) {
             );
         };
 
+        const handleEdited = ({ messageId, content, editedAt }) => {
+            setMessages((prev) =>
+                prev.map((m) => (m._id === messageId ? { ...m, content, editedAt, translations: [] } : m))
+            );
+        };
+
         on('message:received', handleNewMessage);
+        on('message:edited', handleEdited);
         on('message:deleted', handleDeleted);
         on('room:typing', handleTyping);
         on('room:stop-typing', handleStopTyping);
@@ -175,6 +182,7 @@ export function useChat(roomId) {
 
         return () => {
             off('message:received', handleNewMessage);
+            off('message:edited', handleEdited);
             off('message:deleted', handleDeleted);
             off('room:typing', handleTyping);
             off('room:stop-typing', handleStopTyping);
@@ -222,6 +230,14 @@ export function useChat(roomId) {
         [roomId, emit]
     );
 
+    const editMessage = useCallback(
+        (messageId, content) => {
+            if (!messageId || !content?.trim()) return;
+            emit('message:edit', { messageId, roomId, content: content.trim() });
+        },
+        [roomId, emit]
+    );
+
     const startTyping = useCallback(() => {
         emit('room:typing', { roomId });
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -252,6 +268,7 @@ export function useChat(roomId) {
         sendMessage,
         sendLocation,
         deleteMessage,
+        editMessage,
         loadMore,
         startTyping,
         markRead,

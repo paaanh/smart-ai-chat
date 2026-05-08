@@ -72,6 +72,7 @@ const messageSchema = new mongoose.Schema({
     }],
 
     deleted: { type: Boolean, default: false },
+    editedAt: { type: Date, default: null },
 
     // ===== POLL =====
     poll: {

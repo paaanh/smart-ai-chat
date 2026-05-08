@@ -81,6 +81,11 @@ export function CallProvider({ children }) {
     const [screenSharing, setScreenSharing] = useState(false);
     const [screenStream, setScreenStream] = useState(null);
     const [remoteScreenSharing, setRemoteScreenSharing] = useState(false);
+    // Separate camera vs screen streams from remote peers so a screen share
+    // doesn't overwrite their webcam feed (1-1 case).
+    const [remoteScreenStream, setRemoteScreenStream] = useState(null);
+    // Group case: userId → screen stream
+    const [remoteScreenStreams, setRemoteScreenStreams] = useState({});
     const [pipMode, setPipMode] = useState(false);
 
     // ── Device Selection ──
@@ -225,6 +230,9 @@ export function CallProvider({ children }) {
         setLocalStream(null);
         setRemoteStream(null);
         setRemoteStreams({});
+        setRemoteScreenStream(null);
+        setRemoteScreenStreams({});
+        setRemoteScreenSharing(false);
         setParticipants([]);
         setCallError(null);
         setScreenSharing(false);
@@ -379,9 +387,15 @@ export function CallProvider({ children }) {
         });
 
         peer.on('stream', (remoteStr) => {
-            console.log('[Peer] Remote stream received!');
-            remoteStreamRef.current = remoteStr;
-            setRemoteStream(remoteStr);
+            // First stream = camera; any subsequent stream is treated as screen share.
+            if (!remoteStreamRef.current) {
+                console.log('[Peer] Remote camera stream received');
+                remoteStreamRef.current = remoteStr;
+                setRemoteStream(remoteStr);
+            } else {
+                console.log('[Peer] Remote screen stream received');
+                setRemoteScreenStream(remoteStr);
+            }
             setCallState((prev) => ({ ...prev, active: true, incoming: false }));
         });
 
@@ -433,8 +447,16 @@ export function CallProvider({ children }) {
         });
 
         peer.on('stream', (remoteStr) => {
-            console.log(`[GroupCall] Stream received from ${targetId}`);
-            setRemoteStreams(prev => ({ ...prev, [targetId]: remoteStr }));
+            // First stream from this peer = camera; subsequent = screen share.
+            const hasCamera = !!peersRef.current[targetId]?._cameraStreamReceived;
+            if (!hasCamera) {
+                console.log(`[GroupCall] Camera stream from ${targetId}`);
+                if (peersRef.current[targetId]) peersRef.current[targetId]._cameraStreamReceived = true;
+                setRemoteStreams(prev => ({ ...prev, [targetId]: remoteStr }));
+            } else {
+                console.log(`[GroupCall] Screen stream from ${targetId}`);
+                setRemoteScreenStreams(prev => ({ ...prev, [targetId]: remoteStr }));
+            }
             setCallState(prev => ({ ...prev, active: true, incoming: false }));
         });
 
@@ -719,6 +741,18 @@ export function CallProvider({ children }) {
         const handleRemoteScreenShare = ({ fromUserId, sharing }) => {
             console.log('[Call] Remote screen-share status:', sharing, 'from:', fromUserId);
             setRemoteScreenSharing(!!sharing);
+            if (!sharing) {
+                // Clear cached screen stream so the UI returns to camera-only.
+                setRemoteScreenStream(null);
+                if (fromUserId) {
+                    setRemoteScreenStreams(prev => {
+                        if (!prev[fromUserId]) return prev;
+                        const next = { ...prev };
+                        delete next[fromUserId];
+                        return next;
+                    });
+                }
+            }
         };
 
         on('call:incoming', handleIncoming);
@@ -931,20 +965,17 @@ export function CallProvider({ children }) {
             ? Object.values(peersRef.current)
             : (peerRef.current ? [peerRef.current] : []);
 
-        if (screenStreamRef.current) {
-            screenStreamRef.current.getTracks().forEach((t) => t.stop());
+        const stream = screenStreamRef.current;
+        if (stream && peers.length > 0) {
+            for (const peer of peers) {
+                try { peer.removeStream(stream); } catch (e) { console.warn('[Call] removeStream failed:', e.message); }
+            }
+        }
+        if (stream) {
+            stream.getTracks().forEach((t) => t.stop());
             screenStreamRef.current = null;
         }
-        const originalTrack = originalVideoTrackRef.current;
-        if (originalTrack && peers.length > 0) {
-            for (const peer of peers) {
-                const pc = peer._pc;
-                if (!pc) continue;
-                const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
-                if (sender) await sender.replaceTrack(originalTrack);
-            }
-            originalVideoTrackRef.current = null;
-        }
+        originalVideoTrackRef.current = null;
         setScreenSharing(false);
         setScreenStream(null);
         if (isGroup) {
@@ -974,19 +1005,11 @@ export function CallProvider({ children }) {
                 screenStreamRef.current = newScreenStream;
                 const screenTrack = newScreenStream.getVideoTracks()[0];
 
-                // Save original camera track (from first peer)
-                const firstPc = peers[0]?._pc;
-                if (firstPc) {
-                    const sender = firstPc.getSenders().find((s) => s.track?.kind === 'video');
-                    if (sender) originalVideoTrackRef.current = sender.track;
-                }
-
-                // Replace on all peers
+                // Add screen as a SECOND stream so the camera track stays active
+                // and the remote peer receives both streams. simple-peer triggers
+                // its own renegotiation when addStream is called.
                 for (const peer of peers) {
-                    const pc = peer._pc;
-                    if (!pc) continue;
-                    const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
-                    if (sender) await sender.replaceTrack(screenTrack);
+                    try { peer.addStream(newScreenStream); } catch (e) { console.warn('[Call] addStream failed:', e.message); }
                 }
 
                 // Listen for browser "Stop sharing" button — uses stopScreenShareDirect
@@ -1013,6 +1036,8 @@ export function CallProvider({ children }) {
                 localStream,
                 remoteStream,
                 remoteStreams,
+                remoteScreenStream,
+                remoteScreenStreams,
                 participants,
                 callError,
                 screenSharing,

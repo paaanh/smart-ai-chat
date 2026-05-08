@@ -1,6 +1,6 @@
 import { useAuth } from '../../hooks/useAuth';
 import { format } from 'date-fns';
-import { Bot, Trash2, Globe, ChevronDown, ChevronUp, FileText, FileArchive, FileSpreadsheet, FileImage, FileVideo, FileAudio, File, Download, SmilePlus, Forward, Pin, Copy, Check, ExternalLink, Smile, MoreHorizontal } from 'lucide-react';
+import { Bot, Trash2, Globe, ChevronDown, ChevronUp, FileText, FileArchive, FileSpreadsheet, FileImage, FileVideo, FileAudio, File, Download, SmilePlus, Forward, Pin, Copy, Check, ExternalLink, Smile, MoreHorizontal, Edit3, X } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'; // eslint-disable-line no-unused-vars
@@ -77,6 +77,7 @@ export default function MessageBubble({
     message,
     isOwn,
     onDelete,
+    onEdit,
     onReact,
     nicknames,
     localTranslation,
@@ -98,6 +99,8 @@ export default function MessageBubble({
     const [showActions, setShowActions] = useState(false);
     const [lightbox, setLightbox] = useState(null);
     const [imgError, setImgError] = useState(false);
+    const [editing, setEditing] = useState(false);
+    const [editDraft, setEditDraft] = useState('');
     const [mediaCandidateIndex, setMediaCandidateIndex] = useState(0);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [shouldShake, setShouldShake] = useState(false);
@@ -822,7 +825,50 @@ export default function MessageBubble({
                                     <StickerCard sticker={stickerPayload.sticker} size="lg" />
                                 </div>
                             )}
-                            {displayText && message.type !== 'location' && (
+                            {editing && message.type === 'text' ? (
+                                <div className="flex flex-col gap-1.5 min-w-[200px]">
+                                    <textarea
+                                        autoFocus
+                                        value={editDraft}
+                                        onChange={(e) => setEditDraft(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Escape') {
+                                                e.preventDefault();
+                                                setEditing(false);
+                                            }
+                                            if (e.key === 'Enter' && !e.shiftKey) {
+                                                e.preventDefault();
+                                                const next = editDraft.trim();
+                                                if (next && next !== message.content) onEdit?.(message._id, next);
+                                                setEditing(false);
+                                            }
+                                        }}
+                                        className="text-sm px-2 py-1.5 rounded-lg bg-white/90 text-gray-900 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none"
+                                        rows={Math.min(4, Math.max(1, editDraft.split('\n').length))}
+                                    />
+                                    <div className="flex items-center gap-2 text-[11px] text-gray-500">
+                                        <span>Enter để lưu · Esc để huỷ</span>
+                                        <button
+                                            onClick={() => setEditing(false)}
+                                            className="ml-auto inline-flex items-center gap-0.5 hover:text-red-500"
+                                            type="button"
+                                        >
+                                            <X size={12} /> Huỷ
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                const next = editDraft.trim();
+                                                if (next && next !== message.content) onEdit?.(message._id, next);
+                                                setEditing(false);
+                                            }}
+                                            className="inline-flex items-center gap-0.5 text-blue-600 hover:text-blue-700"
+                                            type="button"
+                                        >
+                                            <Check size={12} /> Lưu
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : displayText && message.type !== 'location' && (
                                 <p className={`${isEmojiOnlyMessage ? `${emojiSizeClass} text-center` : 'text-sm'} whitespace-pre-wrap wrap-break-word`}>
                                     {renderRichText(
                                         displayText,
@@ -838,6 +884,11 @@ export default function MessageBubble({
                                             inlineCodeClassName: useSenderFrameStyle ? senderInlineCodeClassName : 'bg-black/10',
                                             codeBlockClassName: useSenderFrameStyle ? senderCodeBlockClassName : 'bg-black/10',
                                         }
+                                    )}
+                                    {message.editedAt && (
+                                        <span className={`ml-1 text-[10px] italic ${useSenderFrameStyle ? senderMetaTextClass : 'text-[var(--text-tertiary)]'}`}>
+                                            (đã chỉnh sửa)
+                                        </span>
                                     )}
                                 </p>
                             )}
@@ -1014,6 +1065,21 @@ export default function MessageBubble({
                                     : 'opacity-0 pointer-events-none'
                                 }`}
                             >
+                                {isOwn && onEdit && message.type === 'text' && !message.deleted && (
+                                    <motion.button
+                                        onClick={() => {
+                                            setEditDraft(message.content || '');
+                                            setEditing(true);
+                                            if (isTouchDevice) setShowActions(false);
+                                        }}
+                                        className="p-1 text-[var(--text-tertiary)] hover:text-blue-500 transition"
+                                        title="Sửa"
+                                        whileHover={{ scale: 1.08 }}
+                                        whileTap={{ scale: 0.92 }}
+                                    >
+                                        <Edit3 size={14} />
+                                    </motion.button>
+                                )}
                                 {isOwn && onDelete && (
                                     <motion.button
                                         onClick={() => {
