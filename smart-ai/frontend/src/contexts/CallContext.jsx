@@ -626,8 +626,16 @@ export function CallProvider({ children }) {
         };
 
         // ── Group: I just joined → server tells me about existing participants ──
-        const handleExistingParticipants = async ({ participants: existingIds }) => {
+        const handleExistingParticipants = async ({ participants: existingIds, callType: srvCallType, roomName: srvRoomName }) => {
             console.log('[GroupCall] Existing participants:', existingIds);
+            // If joined proactively, sync callType/roomName from server
+            if (srvCallType || srvRoomName) {
+                setCallState(prev => ({
+                    ...prev,
+                    callType: prev.callType || srvCallType || 'video',
+                    roomName: prev.roomName || srvRoomName || '',
+                }));
+            }
             // I am the non-initiator for all existing participants
             // They will send me offers, so I create non-initiator peers
             const stream = localStreamRef.current;
@@ -870,6 +878,52 @@ export function CallProvider({ children }) {
         }
     }, [emit, getMediaStream, cleanup, callState]);
 
+    // ── Proactively join an ongoing group call (from "Tham gia" system message) ──
+    const joinGroupCall = useCallback(async ({ roomId, callType = 'video', roomName = '' }) => {
+        if (!roomId) return;
+        if (callState.active && callState.roomId === roomId) {
+            console.log('[Call] joinGroupCall: already in this call');
+            return;
+        }
+
+        console.log('[Call] joinGroupCall', { roomId, callType });
+        isGroupRef.current = true;
+        setCallState({
+            active: true,
+            incoming: false,
+            outgoing: false,
+            roomId,
+            callType,
+            caller: null,
+            callee: null,
+            isGroup: true,
+            roomName,
+        });
+        setCallError(null);
+
+        try {
+            if (!localStreamRef.current) {
+                if (callType === 'video') {
+                    try {
+                        await getMediaStream('video');
+                    } catch (videoErr) {
+                        console.warn('[Call] Camera failed, falling back to audio-only:', videoErr.message);
+                        setCallError('Không thể truy cập camera, chuyển sang gọi thoại');
+                        await getMediaStream('audio');
+                        setCallState((prev) => ({ ...prev, callType: 'audio' }));
+                    }
+                } else {
+                    await getMediaStream(callType);
+                }
+            }
+            emit('call:join', { roomId });
+        } catch (err) {
+            console.error('[Call] joinGroupCall failed:', err);
+            setCallError('Không thể truy cập thiết bị');
+            cleanup();
+        }
+    }, [emit, getMediaStream, cleanup, callState.active, callState.roomId]);
+
     const rejectCall = useCallback(() => {
         const { roomId, caller } = callState;
         emit('call:reject', { roomId, callerId: caller?._id });
@@ -1047,6 +1101,7 @@ export function CallProvider({ children }) {
                 setPipMode,
                 initiateCall,
                 acceptCall,
+                joinGroupCall,
                 rejectCall,
                 cancelCall,
                 endCall,

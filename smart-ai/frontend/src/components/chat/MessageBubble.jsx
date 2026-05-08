@@ -1,6 +1,7 @@
 import { useAuth } from '../../hooks/useAuth';
 import { format } from 'date-fns';
-import { Bot, Trash2, Globe, ChevronDown, ChevronUp, FileText, FileArchive, FileSpreadsheet, FileImage, FileVideo, FileAudio, File, Download, SmilePlus, Forward, Pin, Copy, Check, ExternalLink, Smile, MoreHorizontal, Edit3, X } from 'lucide-react';
+import { Bot, Trash2, Globe, ChevronDown, ChevronUp, FileText, FileArchive, FileSpreadsheet, FileImage, FileVideo, FileAudio, File, Download, SmilePlus, Forward, Pin, Copy, Check, ExternalLink, Smile, MoreHorizontal, Edit3, X, Phone, Video as VideoIconLucide } from 'lucide-react';
+import { useCall } from '../../hooks/useCall';
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'; // eslint-disable-line no-unused-vars
@@ -92,6 +93,7 @@ export default function MessageBubble({
     isClusterEnd = true,
 }) {
     const { user } = useAuth();
+    const { joinGroupCall, callState } = useCall();
     const { themeId, bubbleFrameId } = useTheme();
     const navigate = useNavigate();
     const reduceMotion = useReducedMotion();
@@ -390,6 +392,51 @@ export default function MessageBubble({
 
     // System message
     if (message.type === 'system') {
+        const callEvt = message.callEvent;
+        // Special call card (started/ended)
+        if (callEvt?.kind) {
+            const isVideo = callEvt.callType === 'video';
+            const isStarted = callEvt.kind === 'started';
+            const callRoomId = message.room?._id || message.room;
+            const isAlreadyInThisCall = callState?.active && callState?.roomId === callRoomId;
+            const Icon = isVideo ? VideoIconLucide : Phone;
+            return (
+                <div className="flex justify-center mb-2">
+                    <div className={`flex items-center gap-3 px-4 py-2.5 rounded-2xl border shadow-sm ${
+                        isStarted
+                            ? 'bg-blue-50 border-blue-200 text-blue-700'
+                            : 'bg-gray-50 border-gray-200 text-gray-600'
+                    }`}>
+                        <div className={`p-2 rounded-full ${isStarted ? 'bg-blue-500' : 'bg-gray-400'} text-white`}>
+                            <Icon size={16} />
+                        </div>
+                        <div className="text-sm">
+                            <div className="font-medium">{message.content}</div>
+                            {isStarted && callEvt.isGroup && !isAlreadyInThisCall && (
+                                <div className="text-xs opacity-80">Cuộc gọi đang diễn ra · nhấn để tham gia</div>
+                            )}
+                        </div>
+                        {isStarted && callEvt.isGroup && callRoomId && (
+                            isAlreadyInThisCall ? (
+                                <span className="px-3 py-1.5 bg-green-100 text-green-700 text-xs font-semibold rounded-full">
+                                    Đang tham gia
+                                </span>
+                            ) : (
+                                <button
+                                    onClick={() => joinGroupCall({
+                                        roomId: callRoomId,
+                                        callType: callEvt.callType || 'video',
+                                    })}
+                                    className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-full shadow transition flex items-center gap-1.5"
+                                >
+                                    <Icon size={13} /> Tham gia
+                                </button>
+                            )
+                        )}
+                    </div>
+                </div>
+            );
+        }
         return (
             <div className="flex justify-center mb-2">
                 <div className="bg-gray-100 text-gray-500 text-xs px-4 py-1.5 rounded-full">

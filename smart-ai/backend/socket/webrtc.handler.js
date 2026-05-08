@@ -78,6 +78,7 @@ module.exports = (io, socket) => {
                 startTime: Date.now(),
                 isGroup,
                 roomName: room?.name || '',
+                systemMessageId: null,
             });
 
             // Timeout: tự hủy nếu không ai nhận sau 30s (only for 1-1)
@@ -110,15 +111,25 @@ module.exports = (io, socket) => {
                 }
             }
 
-            // Tạo system message
+            // Tạo system message kèm callEvent metadata
             const callLabel = callType === 'video' ? 'video' : 'thoại';
             const prefix = isGroup ? `nhóm ${callLabel}` : callLabel;
-            await Message.create({
+            const sysMsg = await Message.create({
                 room: roomId,
                 sender: socket.user._id,
                 type: 'system',
                 content: `📞 ${socket.user.username} đã bắt đầu cuộc gọi ${prefix}`,
+                callEvent: { kind: 'started', callType, isGroup },
             });
+            // Track for later update on call:end
+            const tracked = activeCalls.get(roomId);
+            if (tracked) tracked.systemMessageId = sysMsg._id.toString();
+
+            // Broadcast to room so all members see the call card immediately
+            const populated = await Message.findById(sysMsg._id)
+                .populate('sender', 'username avatar googlePicture preferredLanguage preferredBubbleFrame')
+                .lean();
+            io.to(roomId).emit('message:received', { message: populated });
 
         } catch (error) {
             console.error('call:initiate error:', error.message);
@@ -187,6 +198,64 @@ module.exports = (io, socket) => {
             }
         } catch (error) {
             console.error('call:accept error:', error.message);
+        }
+    });
+
+    // ─── call:join (user proactively joins an ongoing group call) ──────
+    socket.on('call:join', async ({ roomId }) => {
+        try {
+            const call = activeCalls.get(roomId);
+            if (!call || !call.isGroup) {
+                return socket.emit('call:error', { roomId, error: 'Cuộc gọi không còn diễn ra' });
+            }
+
+            // Verify the joiner is a member of the room
+            const room = await Room.findById(roomId).lean();
+            if (!room) {
+                return socket.emit('call:error', { roomId, error: 'Phòng không tồn tại' });
+            }
+            const isMember = room.members?.some(m => m.user.toString() === userId);
+            if (!isMember) {
+                return socket.emit('call:error', { roomId, error: 'Bạn không phải thành viên của phòng' });
+            }
+
+            if (call.participants.includes(userId)) {
+                // Already in call — just resync participant list
+                return socket.emit('call:existing-participants', {
+                    roomId,
+                    participants: call.participants.filter(id => id !== userId),
+                });
+            }
+
+            console.log(`✅ ${socket.user.username} joining ongoing call in room ${roomId}`);
+
+            const existingParticipants = [...call.participants];
+            call.participants.push(userId);
+
+            // Notify existing participants of the new joiner
+            for (const pid of existingParticipants) {
+                const pSocketId = await getSocketId(pid);
+                if (pSocketId) {
+                    io.to(pSocketId).emit('call:participant-joined', {
+                        roomId,
+                        userId,
+                        username: socket.user.username,
+                        avatar: socket.user.avatar || socket.user.googlePicture || '',
+                        existingParticipants: call.participants,
+                    });
+                }
+            }
+
+            // Tell joiner who's already there + call meta (so they create peers as initiator)
+            socket.emit('call:existing-participants', {
+                roomId,
+                participants: existingParticipants,
+                callType: call.callType,
+                roomName: call.roomName,
+            });
+        } catch (error) {
+            console.error('call:join error:', error.message);
+            socket.emit('call:error', { roomId, error: 'Không thể tham gia cuộc gọi' });
         }
     });
 
@@ -271,17 +340,44 @@ module.exports = (io, socket) => {
                 }
             }
 
-            // System message kết thúc cuộc gọi
+            // Update the original "started" system message to "ended" (so Join button disappears)
             const durationStr = duration > 60
                 ? `${Math.floor(duration / 60)} phút ${duration % 60} giây`
                 : `${duration} giây`;
+            const endedContent = `📞 Cuộc gọi ${callType === 'video' ? 'video' : 'thoại'} đã kết thúc (${durationStr})`;
 
-            await Message.create({
-                room: roomId,
-                sender: socket.user._id,
-                type: 'system',
-                content: `📞 Cuộc gọi ${callType === 'video' ? 'video' : 'thoại'} đã kết thúc (${durationStr})`,
-            });
+            if (call?.systemMessageId) {
+                const updated = await Message.findByIdAndUpdate(
+                    call.systemMessageId,
+                    {
+                        content: endedContent,
+                        'callEvent.kind': 'ended',
+                        'callEvent.durationSec': duration,
+                    },
+                    { new: true }
+                );
+                if (updated) {
+                    io.to(roomId).emit('message:edited', {
+                        messageId: updated._id.toString(),
+                        content: endedContent,
+                        editedAt: null,
+                        callEvent: updated.callEvent,
+                    });
+                }
+            } else {
+                // Fallback (no tracked id): create a fresh ended message
+                const sysMsg = await Message.create({
+                    room: roomId,
+                    sender: socket.user._id,
+                    type: 'system',
+                    content: endedContent,
+                    callEvent: { kind: 'ended', callType, isGroup, durationSec: duration },
+                });
+                const populated = await Message.findById(sysMsg._id)
+                    .populate('sender', 'username avatar googlePicture preferredLanguage preferredBubbleFrame')
+                    .lean();
+                io.to(roomId).emit('message:received', { message: populated });
+            }
 
             console.log(`📞 Call ended in room ${roomId} - Duration: ${durationStr}`);
         } catch (error) {

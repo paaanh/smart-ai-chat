@@ -159,9 +159,14 @@ export function useChat(roomId) {
             );
         };
 
-        const handleEdited = ({ messageId, content, editedAt }) => {
+        const handleEdited = ({ messageId, content, editedAt, callEvent }) => {
             setMessages((prev) =>
-                prev.map((m) => (m._id === messageId ? { ...m, content, editedAt, translations: [] } : m))
+                prev.map((m) => {
+                    if (m._id !== messageId) return m;
+                    const next = { ...m, content, editedAt, translations: [] };
+                    if (callEvent !== undefined) next.callEvent = callEvent;
+                    return next;
+                })
             );
         };
 
