@@ -1,11 +1,14 @@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { counselingAPI } from '../services/api';
-import { ArrowLeft, HeartHandshake, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, HeartHandshake, ShieldAlert, Stethoscope } from 'lucide-react';
 import SkeletonBlock from '../components/ui/SkeletonBlock';
+import { useAuth } from '../hooks/useAuth';
 
 export default function CounselingPage() {
     const navigate = useNavigate();
+    const { user } = useAuth();
+    const isExpert = ['expert', 'sub_admin', 'super_admin'].includes(user?.role);
 
     const [categories, setCategories] = useState([]);
     const [disclaimer, setDisclaimer] = useState('');
@@ -71,7 +74,16 @@ export default function CounselingPage() {
                     <HeartHandshake size={18} />
                     Tư vấn AI & Chuyên gia
                 </div>
-                <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Ẩn danh mặc định</div>
+                {isExpert ? (
+                    <button
+                        onClick={() => navigate('/counseling/expert')}
+                        className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-blue-600 text-white hover:bg-blue-700 transition shadow"
+                    >
+                        <Stethoscope size={13} /> Bảng chuyên gia
+                    </button>
+                ) : (
+                    <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Ẩn danh mặc định</div>
+                )}
             </div>
 
             <div className="flex-1 min-h-0 overflow-y-auto p-4 md:p-8">

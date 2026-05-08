@@ -278,6 +278,8 @@ export const counselingAPI = {
     closeSession: (id) => api.put(`/counseling/sessions/${id}/close`),
     joinExpert: (id) => api.post(`/counseling/sessions/${id}/join`),
     toggleAI: (id, active) => api.put(`/counseling/sessions/${id}/ai`, { active }),
+    expertPending: () => api.get('/counseling/expert/pending'),
+    expertMine: () => api.get('/counseling/expert/mine'),
 };
 
 // ── Topic endpoints ───────────────────────────────────────────

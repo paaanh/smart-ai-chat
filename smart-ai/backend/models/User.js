@@ -195,8 +195,14 @@ const userSchema = new mongoose.Schema({
     // ===== PHÂN QUYỀN =====
     role: {
         type: String,
-        enum: ['user', 'sub_admin', 'super_admin'],
+        enum: ['user', 'expert', 'sub_admin', 'super_admin'],
         default: 'user',
+    },
+    // Chuyên môn của expert (chỉ áp dụng khi role='expert')
+    expertCategories: {
+        type: [String],
+        enum: ['tam_ly', 'phap_luat', 'bao_luc_gia_dinh', 'suc_khoe', 'giao_duc'],
+        default: [],
     },
 }, {
     timestamps: true,

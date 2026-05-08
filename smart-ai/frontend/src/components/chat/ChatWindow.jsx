@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { roomAPI, userActionsAPI, friendAPI, resolveMediaUrl } from '../../services/api';
+import { roomAPI, userActionsAPI, friendAPI, counselingAPI, resolveMediaUrl } from '../../services/api';
 import { useAuth } from '../../hooks/useAuth';
 import { useSocket } from '../../hooks/useSocket';
 import { useCall } from '../../hooks/useCall';
@@ -73,6 +73,7 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
     const [copiedSelection, setCopiedSelection] = useState(false);
     const [startSuggestions, setStartSuggestions] = useState([]);
     const [startSuggestionLoading, setStartSuggestionLoading] = useState(false);
+    const [counselingSession, setCounselingSession] = useState(null);
     const [startSuggestionActionId, setStartSuggestionActionId] = useState(null);
 
     const loadStartSuggestions = useCallback(async () => {
@@ -159,6 +160,44 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
         };
         loadRoom();
     }, [roomId, user, onAIToggle]);
+
+    // Counseling: fetch session info + listen expert-joined / ai-toggled
+    useEffect(() => {
+        if (!roomId || !room || room.type !== 'counseling') {
+            setCounselingSession(null);
+            return;
+        }
+        let cancelled = false;
+        (async () => {
+            try {
+                const { data } = await counselingAPI.getSessions();
+                const found = (data.sessions || []).find(s => (s.room?._id || s.room) === roomId);
+                if (!cancelled && found) setCounselingSession(found);
+            } catch (err) {
+                console.warn('[Counseling] load session failed:', err.message);
+            }
+        })();
+
+        const handleExpertJoined = ({ roomId: rId, expert, expertId }) => {
+            if (rId !== roomId) return;
+            setCounselingSession(prev => prev ? {
+                ...prev,
+                expert: expert || { _id: expertId },
+                aiActive: false,
+            } : prev);
+        };
+        const handleAIToggled = ({ roomId: rId, aiActive }) => {
+            if (rId !== roomId) return;
+            setCounselingSession(prev => prev ? { ...prev, aiActive } : prev);
+        };
+        on('counseling:expert-joined', handleExpertJoined);
+        on('counseling:ai-toggled', handleAIToggled);
+        return () => {
+            cancelled = true;
+            off('counseling:expert-joined', handleExpertJoined);
+            off('counseling:ai-toggled', handleAIToggled);
+        };
+    }, [roomId, room, on, off]);
 
     // Listen for real-time group settings updates
     useEffect(() => {
@@ -794,7 +833,20 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
 
                 {/* Info */}
                 <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-gray-900 truncate">{display.name}</h3>
+                    <h3 className="font-semibold text-gray-900 truncate flex items-center gap-2">
+                        {display.name}
+                        {room?.type === 'counseling' && counselingSession && (
+                            counselingSession.expert ? (
+                                <span className="px-2 py-0.5 text-[10px] rounded-full bg-green-100 text-green-700 border border-green-200 font-medium">
+                                    🩺 Chuyên gia: {counselingSession.expert.username || 'đã phụ trách'}
+                                </span>
+                            ) : (
+                                <span className="px-2 py-0.5 text-[10px] rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-medium animate-pulse">
+                                    ⏳ Đang chờ chuyên gia
+                                </span>
+                            )
+                        )}
+                    </h3>
                     <p className={`text-xs ${display.isOnline ? 'text-green-500' : 'text-gray-400'}`}>
                         {typingUsers.length > 0
                             ? `${typingUsers.map((u) => u.username).join(', ')} đang nhập...`

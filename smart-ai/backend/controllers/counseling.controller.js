@@ -98,6 +98,16 @@ exports.createSession = async (req, res, next) => {
             aiMetadata: { isAIResponse: true },
         });
 
+        // Broadcast to experts so their dashboard updates in realtime
+        const io = req.app.get('io');
+        if (io) {
+            const populated = await CounselingSession.findById(session._id)
+                .populate('user', 'username avatar googlePicture')
+                .populate('room', 'name updatedAt')
+                .lean();
+            io.emit('counseling:pending-added', { session: populated });
+        }
+
         res.status(201).json({ session, room, roomId: room._id, welcomeMessage });
     } catch (error) {
         next(error);
@@ -159,6 +169,10 @@ exports.closeSession = async (req, res, next) => {
 // Expert joins the counseling session
 exports.joinExpert = async (req, res, next) => {
     try {
+        if (!['expert', 'sub_admin', 'super_admin'].includes(req.user.role)) {
+            return res.status(403).json({ error: 'Chỉ chuyên gia mới có quyền nhận phiên tư vấn' });
+        }
+
         const session = await CounselingSession.findById(req.params.id);
         if (!session) return res.status(404).json({ error: 'Phiên tư vấn không tồn tại' });
 
@@ -173,27 +187,97 @@ exports.joinExpert = async (req, res, next) => {
         const room = await Room.findById(session.room);
         if (!room) return res.status(404).json({ error: 'Room không tồn tại' });
 
-        // Add expert to room
-        room.members.push({ user: req.user._id, role: 'admin' });
-        await room.save();
+        // Add expert to room (idempotent)
+        const alreadyMember = room.members.some(m => m.user.toString() === req.user._id.toString());
+        if (!alreadyMember) {
+            room.members.push({ user: req.user._id, role: 'admin' });
+            await room.save();
+        }
 
         // Update session
         session.expert = req.user._id;
-        session.aiActive = false; // Turn off AI when expert joins
+        session.aiActive = false;
         await session.save();
+
+        // Re-populate expert info for client
+        const populated = await CounselingSession.findById(session._id)
+            .populate('expert', 'username avatar googlePicture')
+            .populate('user', 'username avatar googlePicture')
+            .lean();
 
         const io = req.app.get('io');
         if (io) {
+            // Notify everyone in the counseling room (user + AI listeners)
             io.to(room._id.toString()).emit('counseling:expert-joined', {
                 expertId: req.user._id,
+                expert: populated.expert,
                 sessionId: session._id,
-                roomId: room._id
+                roomId: room._id,
             });
+            // Notify all other experts to remove this session from pending lists
+            io.emit('counseling:pending-removed', { sessionId: session._id });
+
+            // System message vào chat counseling
+            try {
+                const sysMsg = await Message.create({
+                    room: room._id,
+                    sender: req.user._id,
+                    type: 'system',
+                    content: `🩺 ${req.user.username} (chuyên gia) đã tham gia phiên tư vấn. AI tự động đã tạm dừng.`,
+                });
+                const populatedMsg = await Message.findById(sysMsg._id)
+                    .populate('sender', 'username avatar googlePicture preferredLanguage preferredBubbleFrame')
+                    .lean();
+                io.to(room._id.toString()).emit('message:received', { message: populatedMsg });
+            } catch (e) { /* non-fatal */ }
         }
 
-        res.json({ message: 'Đã tham gia tư vấn', session, roomId: room._id });
+        res.json({ message: 'Đã tham gia tư vấn', session: populated, roomId: room._id });
     } catch (error) {
         next(error);
+    }
+};
+
+// ── Middleware: chỉ cho phép user role 'expert' hoặc admin ──
+exports.requireExpert = (req, res, next) => {
+    if (!req.user) return res.status(401).json({ error: 'Chưa đăng nhập' });
+    if (!['expert', 'sub_admin', 'super_admin'].includes(req.user.role)) {
+        return res.status(403).json({ error: 'Chỉ chuyên gia mới có quyền truy cập' });
+    }
+    next();
+};
+
+// Expert dashboard: list sessions chưa có expert phụ trách
+exports.listPendingForExpert = async (req, res, next) => {
+    try {
+        const filter = { expert: null, status: 'active' };
+        // Lọc theo chuyên môn nếu user expert có khai báo expertCategories
+        const me = req.user;
+        if (me.role === 'expert' && Array.isArray(me.expertCategories) && me.expertCategories.length > 0) {
+            filter.category = { $in: me.expertCategories };
+        }
+        const sessions = await CounselingSession.find(filter)
+            .populate('user', 'username avatar googlePicture')
+            .populate('room', 'name updatedAt')
+            .sort({ createdAt: -1 })
+            .lean();
+        res.json({ sessions });
+    } catch (err) {
+        next(err);
+    }
+};
+
+// Expert dashboard: list sessions mà chuyên gia đang phụ trách
+exports.listMineForExpert = async (req, res, next) => {
+    try {
+        const sessions = await CounselingSession.find({ expert: req.user._id })
+            .populate('user', 'username avatar googlePicture')
+            .populate('room', 'name updatedAt')
+            .sort({ updatedAt: -1 })
+            .lean();
+        res.json({ sessions });
+    } catch (err) {
+        next(err);
     }
 };
 
