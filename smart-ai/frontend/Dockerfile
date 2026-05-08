@@ -12,6 +12,9 @@ COPY . .
 ARG VITE_GOOGLE_CLIENT_ID
 ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
 
+ARG VITE_SKYOFFICE_URL
+ENV VITE_SKYOFFICE_URL=$VITE_SKYOFFICE_URL
+
 RUN npm run build
 
 # ─── Stage 2: Serve with Nginx ────────────────────────────────────
