@@ -496,7 +496,7 @@ export default function MessageInput({ onSend, onSendLocation, onTyping, disable
                         </button>
                     ) : (
                         <div className="relative flex items-center gap-1 shrink-0" ref={framePickerRef}>
-                            <button
+                            {/* <button
                                 type="button"
                                 onClick={() => setShowFramePicker((prev) => !prev)}
                                 disabled={disabled}
@@ -504,7 +504,7 @@ export default function MessageInput({ onSend, onSendLocation, onTyping, disable
                                 title="Đổi khung chat"
                             >
                                 <Smile size={22} />
-                            </button>
+                            </button> */}
 
                             <AnimatePresence>
                                 {showFramePicker && (
