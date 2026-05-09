@@ -26,10 +26,23 @@ import { useDraggable } from '../../hooks/useDraggable';
 // ── Smart grid: returns inline style for CSS Grid ──
 // Even counts → perfectly symmetric. Odd counts → last item centered.
 function getGridStyle(count) {
-    if (count <= 1) return { display: 'grid', gridTemplateColumns: '1fr', gap: '4px' };
-    if (count === 2) return { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px' };
-    const cols = count <= 4 ? 2 : count <= 9 ? 3 : 4;
-    return { display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: '4px' };
+    let cols;
+
+    if (count === 1) cols = 1;
+    else if (count === 2) cols = 2;
+    else if (count <= 4) cols = 2;
+    else if (count <= 9) cols = 3;
+    else cols = 4;
+
+    return {
+        display: "grid",
+        gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+        gap: "8px",
+        width: "100%",
+        height: "100%",
+        justifyContent: "center",
+        alignContent: "center",
+    };
 }
 // Should the last tile be centered? (odd count with cols >= 2)
 function shouldCenterLast(count) {

@@ -477,6 +477,13 @@ html[data-theme='neon-night'] {
     scroll-behavior: auto !important;
   }
 
+  .video-item {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  
   .typing-dot {
     animation: none !important;
     opacity: 0.65;
