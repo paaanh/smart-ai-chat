@@ -198,6 +198,32 @@ html[data-theme] .bg-\[var\(--bg-card\)\] {
   border-right: 1px solid rgba(148, 163, 184, 0.24);
 }
 
+/* Call grid layout tuning */
+.video-item {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* 3 people: center the last tile */
+.video-grid:has(.video-item:nth-child(3):last-child) .video-item:last-child {
+  grid-column: span 2;
+  max-width: 50%;
+  justify-self: center;
+}
+
+/* 5 people: center the last two tiles */
+.video-grid:has(.video-item:nth-child(5):last-child) .video-item:nth-last-child(-n + 2) {
+  grid-column: span 1;
+  justify-self: center;
+}
+
+/* 7 people: center the last tile */
+.video-grid:has(.video-item:nth-child(7):last-child) .video-item:nth-last-child(-n + 1) {
+  grid-column: 2;
+}
+
 .pixel-card {
   border: 2px solid color-mix(in srgb, var(--color-primary) 60%, #503015 40%);
   box-shadow:

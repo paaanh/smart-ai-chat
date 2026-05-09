@@ -103,7 +103,7 @@ function VideoTile({ stream, label, muted = false, mirror = false, isAudioOnly =
 
     return (
         <div
-            className={`group/tile relative bg-gray-800 rounded-xl overflow-hidden min-h-0 transition-shadow duration-300 ${isSpeaking ? 'ring-2 ring-green-400 shadow-[0_0_18px_rgba(74,222,128,0.45)]' : ''
+            className={`video-item group/tile relative bg-gray-800 rounded-xl overflow-hidden min-h-0 transition-shadow duration-300 ${isSpeaking ? 'ring-2 ring-green-400 shadow-[0_0_18px_rgba(74,222,128,0.45)]' : ''
                 } ${isPinned ? 'ring-2 ring-yellow-400' : ''}`}
             style={style}
         >
@@ -567,7 +567,7 @@ export default function CallModal() {
                             </div>
                         ) : (
                             /* Normal group video grid — even: symmetric, odd: last centered */
-                            <div className="absolute inset-0 p-1" style={getGridStyle(groupTiles.length)}>
+                            <div className="absolute inset-0 p-1 video-grid" style={getGridStyle(groupTiles.length)}>
                                 {groupTiles.map((tile, i) => (
                                     <VideoTile
                                         key={tile.id}
