@@ -25,6 +25,7 @@ const GroupProfilePage = lazy(() => import('../pages/GroupProfilePage'));
 const AdminPage = lazy(() => import('../pages/AdminPage'));
 const CounselingPage = lazy(() => import('../pages/CounselingPage'));
 const ExpertCounselingPage = lazy(() => import('../pages/ExpertCounselingPage'));
+const OfficePage = lazy(() => import('../pages/OfficePage'));
 
 // ── Loading fallback ───────────────────────────────────────────
 function LoadingScreen() {
@@ -186,6 +187,14 @@ export default function AppRoutes() {
                             element={
                                 <PrivateRoute>
                                     <ExpertCounselingPage />
+                                </PrivateRoute>
+                            }
+                        />
+                        <Route
+                            path="/office"
+                            element={
+                                <PrivateRoute>
+                                    <OfficePage />
                                 </PrivateRoute>
                             }
                         />

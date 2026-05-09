@@ -911,7 +911,7 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                         <BarChart3 size={18} />
                     </button>
                     <button
-                        onClick={() => window.open(import.meta.env.VITE_SKYOFFICE_URL || 'http://localhost:3000', '_blank', 'noopener,noreferrer')}
+                        onClick={() => navigate('/office')}
                         className="p-2 hover:bg-gray-100 rounded-full transition text-gray-600 shrink-0"
                         title="SkyOffice"
                     >
