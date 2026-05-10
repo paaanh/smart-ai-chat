@@ -38,6 +38,7 @@ function getGridStyle(count) {
     return {
         display: "grid",
         gridTemplateColumns: `repeat(${cols}, 1fr)`,
+        gridAutoRows: "minmax(0, 1fr)",
         gap: "8px",
         width: "100%",
         height: "100%",
@@ -599,6 +600,8 @@ export default function CallModal() {
                                             style={{
                                                 aspectRatio: "16 / 9",
                                                 width: "100%",
+                                                maxWidth: "100%",
+                                                maxHeight: "100%",
                                                 minWidth: 0,
                                                 overflow: "hidden",
                                                 borderRadius: "16px",
