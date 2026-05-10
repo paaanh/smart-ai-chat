@@ -23,8 +23,7 @@ import {
 import { resolveMediaUrl } from '../../services/api';
 import { useDraggable } from '../../hooks/useDraggable';
 
-// ── Smart grid: returns inline style for CSS Grid ──
-// Even counts → perfectly symmetric. Odd counts → last item centered.
+// ── Smart responsive grid for video call ──
 function getGridStyle(count) {
     let cols;
 
@@ -36,27 +35,52 @@ function getGridStyle(count) {
 
     return {
         display: "grid",
-        gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+        gridTemplateColumns: `repeat(${cols}, 1fr)`,
         gap: "8px",
         width: "100%",
         height: "100%",
-        justifyContent: "center",
-        alignContent: "center",
     };
 }
-// Should the last tile be centered? (odd count with cols >= 2)
+
+// Kiểm tra item cuối có cần căn giữa không
 function shouldCenterLast(count) {
     if (count <= 2) return false;
-    const cols = count <= 4 ? 2 : count <= 9 ? 3 : 4;
-    return count % cols !== 0;
+
+    const cols =
+        count <= 4 ? 2 :
+        count <= 9 ? 3 : 4;
+
+    return count % cols === 1;
 }
+
+// Style cho item cuối
 function getLastItemStyle(count) {
-    const cols = count <= 4 ? 2 : count <= 9 ? 3 : 4;
-    const remainder = count % cols;
-    // Center the last item by spanning the remaining empty columns
-    // gridColumn: start at column that centers, span 1
-    const startCol = Math.floor((cols - remainder) / 2) + 1;
-    return { gridColumn: `${startCol} / span 1` };
+    const cols =
+        count <= 4 ? 2 :
+        count <= 9 ? 3 : 4;
+
+    // 3 người → item cuối span full hàng
+    if (cols === 2) {
+        return {
+            gridColumn: "1 / span 2",
+            justifySelf: "center",
+            width: "50%",
+        };
+    }
+
+    // 4 cột mà dư 1 item
+    if (cols === 4) {
+        return {
+            gridColumn: "2 / span 2",
+            justifySelf: "center",
+            width: "50%",
+        };
+    }
+
+    // 3 cột mà dư 1 item
+    return {
+        gridColumn: "2 / span 1",
+    };
 }
 
 // ── Single video tile component with speaking glow ──
