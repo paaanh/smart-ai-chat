@@ -530,7 +530,7 @@ export default function CallModal() {
                     groupTiles.length > 1 && isVideoCall ? (
                         groupScreenShare ? (
                             /* Screen share in group (self or remote) — main + thumbnails (sidebar on md+, bottom row on mobile) */
-                            <div className="absolute inset-0 flex flex-col md:flex-row">
+                            <div className="relative inset-0 flex flex-col md:flex-row">
                                 <div className="flex-1 relative bg-black flex items-center justify-center min-h-0">
                                     <video
                                         ref={groupScreenVideoRef}
