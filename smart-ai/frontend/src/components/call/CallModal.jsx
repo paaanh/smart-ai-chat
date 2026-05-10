@@ -24,62 +24,56 @@ import { resolveMediaUrl } from '../../services/api';
 import { useDraggable } from '../../hooks/useDraggable';
 
 // ── Smart responsive grid for video call ──
-function getGridStyle(count) {
-    let cols;
+function getCols(count) {
+    if (count === 1) return 1;
+    if (count === 2) return 2;
+    if (count <= 4) return 2;
+    if (count <= 9) return 3;
+    return 4;
+}
 
-    if (count === 1) cols = 1;
-    else if (count === 2) cols = 2;
-    else if (count <= 4) cols = 2;
-    else if (count <= 9) cols = 3;
-    else cols = 4;
+function getGridStyle(count) {
+    const cols = getCols(count);
 
     return {
         display: "grid",
         gridTemplateColumns: `repeat(${cols}, 1fr)`,
+        gridAutoRows: "1fr",
         gap: "8px",
         width: "100%",
         height: "100%",
     };
 }
 
-// Kiểm tra item cuối có cần căn giữa không
 function shouldCenterLast(count) {
-    if (count <= 2) return false;
+    const cols = getCols(count);
 
-    const cols =
-        count <= 4 ? 2 :
-        count <= 9 ? 3 : 4;
-
-    return count % cols === 1;
+    return count > cols && count % cols === 1;
 }
 
-// Style cho item cuối
 function getLastItemStyle(count) {
-    const cols =
-        count <= 4 ? 2 :
-        count <= 9 ? 3 : 4;
+    const cols = getCols(count);
 
-    // 3 người → item cuối span full hàng
+    // 3 người
     if (cols === 2) {
         return {
-            gridColumn: "1 / span 2",
+            gridColumn: "1 / 3",
             justifySelf: "center",
             width: "50%",
         };
     }
 
-    // 4 cột mà dư 1 item
+    // 7 người
     if (cols === 4) {
         return {
-            gridColumn: "2 / span 2",
+            gridColumn: "2 / 4",
             justifySelf: "center",
             width: "50%",
         };
     }
 
-    // 3 cột mà dư 1 item
     return {
-        gridColumn: "2 / span 1",
+        gridColumn: "2 / 3",
     };
 }
 
@@ -592,20 +586,32 @@ export default function CallModal() {
                         ) : (
                             /* Normal group video grid — even: symmetric, odd: last centered */
                             <div className="absolute inset-0 p-1 video-grid" style={getGridStyle(groupTiles.length)}>
-                                {groupTiles.map((tile, i) => (
-                                    <VideoTile
-                                        key={tile.id}
-                                        stream={tile.stream}
-                                        label={tile.label}
-                                        muted={tile.muted}
-                                        mirror={tile.mirror}
-                                        avatar={tile.avatar}
-                                        pinnable
-                                        onPin={() => setPinnedTileId(tile.id)}
-                                        style={shouldCenterLast(groupTiles.length) && i === groupTiles.length - 1
-                                            ? getLastItemStyle(groupTiles.length) : undefined}
-                                    />
-                                ))}
+                                {groupTiles.map((tile, i) => {
+                                    const isLast =
+                                        i === groupTiles.length - 1 &&
+                                        shouldCenterLast(groupTiles.length);
+
+                                    return (
+                                        <div
+                                            key={tile.id}
+                                            style={{
+                                                minWidth: 0,
+                                                minHeight: 0,
+                                                ...(isLast ? getLastItemStyle(groupTiles.length) : {}),
+                                            }}
+                                        >
+                                            <VideoTile
+                                                stream={tile.stream}
+                                                label={tile.label}
+                                                muted={tile.muted}
+                                                mirror={tile.mirror}
+                                                avatar={tile.avatar}
+                                                pinnable
+                                                onPin={() => setPinnedTileId(tile.id)}
+                                            />
+                                        </div>
+                                    );
+                                })}
                             </div>
                         )
                     ) : (
