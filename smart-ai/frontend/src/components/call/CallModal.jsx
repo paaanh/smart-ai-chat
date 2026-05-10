@@ -38,10 +38,12 @@ function getGridStyle(count) {
     return {
         display: "grid",
         gridTemplateColumns: `repeat(${cols}, 1fr)`,
-        gridAutoRows: "1fr",
         gap: "8px",
         width: "100%",
         height: "100%",
+        padding: "8px",
+        boxSizing: "border-box",
+        alignContent: "center",
     };
 }
 
@@ -57,23 +59,23 @@ function getLastItemStyle(count) {
     // 3 người
     if (cols === 2) {
         return {
-            gridColumn: "1 / 3",
+            gridColumn: "1 / span 2",
+            maxWidth: "50%",
             justifySelf: "center",
-            width: "50%",
         };
     }
 
     // 7 người
     if (cols === 4) {
         return {
-            gridColumn: "2 / 4",
+            gridColumn: "2 / span 2",
+            maxWidth: "50%",
             justifySelf: "center",
-            width: "50%",
         };
     }
 
     return {
-        gridColumn: "2 / 3",
+        gridColumn: "2 / span 1",
     };
 }
 
@@ -585,7 +587,7 @@ export default function CallModal() {
                             </div>
                         ) : (
                             /* Normal group video grid — even: symmetric, odd: last centered */
-                            <div className="absolute inset-0 p-1 video-grid" style={getGridStyle(groupTiles.length)}>
+                            <div className="absolute inset-0 video-grid" style={getGridStyle(groupTiles.length)}>
                                 {groupTiles.map((tile, i) => {
                                     const isLast =
                                         i === groupTiles.length - 1 &&
@@ -595,8 +597,12 @@ export default function CallModal() {
                                         <div
                                             key={tile.id}
                                             style={{
+                                                aspectRatio: "16 / 9",
+                                                width: "100%",
                                                 minWidth: 0,
-                                                minHeight: 0,
+                                                overflow: "hidden",
+                                                borderRadius: "16px",
+                                                background: "#111",
                                                 ...(isLast ? getLastItemStyle(groupTiles.length) : {}),
                                             }}
                                         >
