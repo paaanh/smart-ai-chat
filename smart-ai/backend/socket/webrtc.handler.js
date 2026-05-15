@@ -510,7 +510,7 @@ module.exports = (io, socket) => {
     });
 
     // ─── screen-share:status ─────────────────────────────────────────
-    socket.on('screen-share:status', async ({ targetUserId, sharing, roomId }) => {
+    socket.on('screen-share:status', async ({ targetUserId, sharing, roomId, streamId }) => {
         if (roomId) {
             // Group call: broadcast to all participants
             const call = activeCalls.get(roomId);
@@ -522,6 +522,7 @@ module.exports = (io, socket) => {
                         io.to(pSocketId).emit('screen-share:status', {
                             fromUserId: userId,
                             sharing,
+                            streamId,
                         });
                     }
                 }
@@ -532,6 +533,7 @@ module.exports = (io, socket) => {
                 io.to(targetSocketId).emit('screen-share:status', {
                     fromUserId: userId,
                     sharing,
+                    streamId,
                 });
             }
         }

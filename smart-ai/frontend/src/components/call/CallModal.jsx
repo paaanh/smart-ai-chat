@@ -715,7 +715,7 @@ export default function CallModal() {
                                         </div>
                                     </div>
                                 </div>
-                            ) : remoteScreenSharing ? (
+                            ) : remoteScreenSharing && remoteScreenStream ? (
                                 /* 1-1: Remote is sharing screen — screen dominant, remote webcam + your webcam in sidebar */
                                 <div className="absolute inset-0 flex">
                                     <div className="flex-1 relative bg-black flex items-center justify-center">

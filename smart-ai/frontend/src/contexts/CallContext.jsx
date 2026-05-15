@@ -70,7 +70,7 @@ export function CallProvider({ children }) {
     const acceptingRef = useRef(false);
     const callDurationRef = useRef(0);
     const screenStreamRef = useRef(null);
-    const originalVideoTrackRef = useRef(null);
+    const remoteScreenStreamIdsRef = useRef({}); // userId -> screen MediaStream id
 
     // ── State ──
     const [localStream, setLocalStream] = useState(null);
@@ -219,7 +219,7 @@ export function CallProvider({ children }) {
             screenStreamRef.current.getTracks().forEach((t) => t.stop());
             screenStreamRef.current = null;
         }
-        originalVideoTrackRef.current = null;
+        remoteScreenStreamIdsRef.current = {};
         if (localStreamRef.current) {
             localStreamRef.current.getTracks().forEach((t) => t.stop());
             localStreamRef.current = null;
@@ -369,6 +369,68 @@ export function CallProvider({ children }) {
         }
     }, []);
 
+    const emitPeerSignal = useCallback((targetUserId, data) => {
+        if (!targetUserId || !data) return;
+
+        if (data.candidate) {
+            emit('webrtc:ice-candidate', { targetUserId, candidate: data });
+            return;
+        }
+
+        if (data.type === 'answer') {
+            emit('webrtc:answer', { targetUserId, sdp: data });
+            return;
+        }
+
+        if (data.type === 'offer' || data.renegotiate || data.transceiverRequest) {
+            emit('webrtc:offer', { targetUserId, sdp: data });
+        }
+    }, [emit]);
+
+    const isExpectedScreenStream = useCallback((userId, stream) => {
+        if (!userId || !stream) return false;
+        return remoteScreenStreamIdsRef.current[userId] === stream.id;
+    }, []);
+
+    const registerRemoteOneToOneStream = useCallback((remoteStr) => {
+        const remoteUserId = targetUserIdRef.current;
+        const isScreenStream =
+            isExpectedScreenStream(remoteUserId, remoteStr) ||
+            (!!remoteStreamRef.current && remoteStreamRef.current.id !== remoteStr.id && remoteStr.getVideoTracks().length > 0);
+
+        if (isScreenStream) {
+            console.log('[Peer] Remote screen stream received');
+            setRemoteScreenStream(remoteStr);
+        } else {
+            console.log('[Peer] Remote camera stream received');
+            remoteStreamRef.current = remoteStr;
+            setRemoteStream(remoteStr);
+        }
+
+        setCallState((prev) => ({ ...prev, active: true, incoming: false }));
+    }, [isExpectedScreenStream]);
+
+    const registerRemoteGroupStream = useCallback((targetId, remoteStr) => {
+        const peer = peersRef.current[targetId];
+        const isScreenStream =
+            isExpectedScreenStream(targetId, remoteStr) ||
+            (!!peer?._cameraStreamId && peer._cameraStreamId !== remoteStr.id && remoteStr.getVideoTracks().length > 0);
+
+        if (isScreenStream) {
+            console.log(`[GroupCall] Screen stream from ${targetId}`);
+            setRemoteScreenStreams(prev => ({ ...prev, [targetId]: remoteStr }));
+        } else {
+            console.log(`[GroupCall] Camera stream from ${targetId}`);
+            if (peer) {
+                peer._cameraStreamReceived = true;
+                peer._cameraStreamId = remoteStr.id;
+            }
+            setRemoteStreams(prev => ({ ...prev, [targetId]: remoteStr }));
+        }
+
+        setCallState(prev => ({ ...prev, active: true, incoming: false }));
+    }, [isExpectedScreenStream]);
+
     // ── Create peer for 1-1 calls (backward compat) ──
     const createPeer = useCallback(async (initiator, stream) => {
         if (peerRef.current) {
@@ -387,28 +449,11 @@ export function CallProvider({ children }) {
         });
 
         peer.on('signal', (data) => {
-            const target = targetUserIdRef.current;
-            if (!target) return;
-            if (data.type === 'offer') {
-                emit('webrtc:offer', { targetUserId: target, sdp: data });
-            } else if (data.type === 'answer') {
-                emit('webrtc:answer', { targetUserId: target, sdp: data });
-            } else if (data.candidate) {
-                emit('webrtc:ice-candidate', { targetUserId: target, candidate: data });
-            }
+            emitPeerSignal(targetUserIdRef.current, data);
         });
 
         peer.on('stream', (remoteStr) => {
-            // First stream = camera; any subsequent stream is treated as screen share.
-            if (!remoteStreamRef.current) {
-                console.log('[Peer] Remote camera stream received');
-                remoteStreamRef.current = remoteStr;
-                setRemoteStream(remoteStr);
-            } else {
-                console.log('[Peer] Remote screen stream received');
-                setRemoteScreenStream(remoteStr);
-            }
-            setCallState((prev) => ({ ...prev, active: true, incoming: false }));
+            registerRemoteOneToOneStream(remoteStr);
         });
 
         peer.on('error', (err) => console.error('[Peer] Error:', err.message || err));
@@ -441,7 +486,7 @@ export function CallProvider({ children }) {
         // Start monitoring stats for this peer
         startStatsMonitoring(peer);
         return peer;
-    }, [emit, startStatsMonitoring, safePeerSignal]);
+    }, [emitPeerSignal, startStatsMonitoring, safePeerSignal, registerRemoteOneToOneStream]);
 
     // ── Create peer for group calls (mesh: one peer per participant) ──
     const createPeerForUser = useCallback(async (targetId, initiator, stream) => {
@@ -462,27 +507,11 @@ export function CallProvider({ children }) {
         });
 
         peer.on('signal', (data) => {
-            if (data.type === 'offer') {
-                emit('webrtc:offer', { targetUserId: targetId, sdp: data });
-            } else if (data.type === 'answer') {
-                emit('webrtc:answer', { targetUserId: targetId, sdp: data });
-            } else if (data.candidate) {
-                emit('webrtc:ice-candidate', { targetUserId: targetId, candidate: data });
-            }
+            emitPeerSignal(targetId, data);
         });
 
         peer.on('stream', (remoteStr) => {
-            // First stream from this peer = camera; subsequent = screen share.
-            const hasCamera = !!peersRef.current[targetId]?._cameraStreamReceived;
-            if (!hasCamera) {
-                console.log(`[GroupCall] Camera stream from ${targetId}`);
-                if (peersRef.current[targetId]) peersRef.current[targetId]._cameraStreamReceived = true;
-                setRemoteStreams(prev => ({ ...prev, [targetId]: remoteStr }));
-            } else {
-                console.log(`[GroupCall] Screen stream from ${targetId}`);
-                setRemoteScreenStreams(prev => ({ ...prev, [targetId]: remoteStr }));
-            }
-            setCallState(prev => ({ ...prev, active: true, incoming: false }));
+            registerRemoteGroupStream(targetId, remoteStr);
         });
 
         peer.on('error', (err) => console.error(`[GroupCall] Peer error (${targetId}):`, err.message));
@@ -522,7 +551,7 @@ export function CallProvider({ children }) {
         // Start monitoring stats for this peer
         startStatsMonitoring(peer);
         return peer;
-    }, [emit, safePeerSignal, startStatsMonitoring]);
+    }, [emitPeerSignal, safePeerSignal, startStatsMonitoring, registerRemoteGroupStream]);
 
     // ---- Socket listeners ----
     useEffect(() => {
@@ -729,6 +758,10 @@ export function CallProvider({ children }) {
 
             // 1-1 call flow
             targetUserIdRef.current = fromUserId;
+            if (peerRef.current) {
+                safePeerSignal(peerRef.current, sdp, 'one-to-one-offer-existing-peer');
+                return;
+            }
             try {
                 const stream = localStreamRef.current;
                 if (!stream) { cleanup(); return; }
@@ -783,13 +816,17 @@ export function CallProvider({ children }) {
             }
         };
 
-        const handleRemoteScreenShare = ({ fromUserId, sharing }) => {
+        const handleRemoteScreenShare = ({ fromUserId, sharing, streamId }) => {
             console.log('[Call] Remote screen-share status:', sharing, 'from:', fromUserId);
             setRemoteScreenSharing(!!sharing);
+            if (sharing && fromUserId && streamId) {
+                remoteScreenStreamIdsRef.current[fromUserId] = streamId;
+            }
             if (!sharing) {
                 // Clear cached screen stream so the UI returns to camera-only.
                 setRemoteScreenStream(null);
                 if (fromUserId) {
+                    delete remoteScreenStreamIdsRef.current[fromUserId];
                     setRemoteScreenStreams(prev => {
                         if (!prev[fromUserId]) return prev;
                         const next = { ...prev };
@@ -1067,7 +1104,6 @@ export function CallProvider({ children }) {
             stream.getTracks().forEach((t) => t.stop());
             screenStreamRef.current = null;
         }
-        originalVideoTrackRef.current = null;
         setScreenSharing(false);
         setScreenStream(null);
         if (isGroup) {
@@ -1112,9 +1148,9 @@ export function CallProvider({ children }) {
                 setScreenSharing(true);
                 setScreenStream(newScreenStream);
                 if (isGroup) {
-                    emit('screen-share:status', { roomId: callState.roomId, sharing: true });
+                    emit('screen-share:status', { roomId: callState.roomId, sharing: true, streamId: newScreenStream.id });
                 } else {
-                    emit('screen-share:status', { targetUserId: targetUserIdRef.current, sharing: true });
+                    emit('screen-share:status', { targetUserId: targetUserIdRef.current, sharing: true, streamId: newScreenStream.id });
                 }
             } catch (err) {
                 console.warn('[Call] Screen share cancelled or failed:', err.message);
