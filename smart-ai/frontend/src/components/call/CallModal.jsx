@@ -324,21 +324,23 @@ export default function CallModal() {
         else { el.srcObject = null; }
     }, [remoteStream, pipMode]);
 
-    // Attach remote screen share stream (1-1)
+    // Attach remote screen share stream (1-1).
+    // pipMode is in deps because the screen <video> is unmounted in PiP — when restoring,
+    // the new element mounts with srcObject=null and we must re-attach.
     useEffect(() => {
         const el = remoteScreenVideoRef.current;
         if (!el) return;
         if (remoteScreenStream) { el.srcObject = remoteScreenStream; el.play().catch(() => { }); }
         else { el.srcObject = null; }
-    }, [remoteScreenStream, remoteScreenSharing, callState.active]);
+    }, [remoteScreenStream, remoteScreenSharing, callState.active, pipMode]);
 
-    // Attach screen share stream
+    // Attach local screen share stream
     useEffect(() => {
         const el = screenVideoRef.current;
         if (!el) return;
         if (screenStream) { el.srcObject = screenStream; el.play().catch(() => { }); }
         else { el.srcObject = null; }
-    }, [screenStream, screenSharing]);
+    }, [screenStream, screenSharing, pipMode]);
 
     // Determine if we have any remote connection
     const hasRemote = isGroup
@@ -444,13 +446,13 @@ export default function CallModal() {
     const pinnedTile = pinnedTileId ? groupTiles.find(t => t.id === pinnedTileId) : null;
     const otherTiles = pinnedTile ? groupTiles.filter(t => t.id !== pinnedTileId) : groupTiles;
 
-    // Attach group screen video element
+    // Attach group screen video element (re-attach on PiP restore — element is unmounted in PiP)
     useEffect(() => {
         const el = groupScreenVideoRef.current;
         if (!el) return;
         if (groupScreenShare?.stream) { el.srcObject = groupScreenShare.stream; el.play().catch(() => { }); }
         else { el.srcObject = null; }
-    }, [groupScreenShare]);
+    }, [groupScreenShare, pipMode]);
 
     if (!callState.active && !callState.outgoing) return null;
 
