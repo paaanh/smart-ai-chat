@@ -163,13 +163,16 @@ export function CallProvider({ children }) {
                 const audioDevices = devices.filter(d => d.kind === 'audioinput');
                 const videoDevices = devices.filter(d => d.kind === 'videoinput');
                 setAvailableDevices({ audio: audioDevices, video: videoDevices });
-                // Auto-select first available if not set
-                if (!selectedDevices.audioId && audioDevices.length > 0) {
-                    setSelectedDevices(prev => ({ ...prev, audioId: audioDevices[0].deviceId }));
-                }
-                if (!selectedDevices.videoId && videoDevices.length > 0) {
-                    setSelectedDevices(prev => ({ ...prev, videoId: videoDevices[0].deviceId }));
-                }
+                // Auto-select first available if not set. Use functional setState so
+                // a devicechange event (e.g. plugging in a headset) cannot overwrite
+                // a device the user already chose manually — the stale closure would
+                // otherwise read selectedDevices === { audioId: '', videoId: '' } forever.
+                setSelectedDevices(prev => {
+                    const audioId = prev.audioId || audioDevices[0]?.deviceId || '';
+                    const videoId = prev.videoId || videoDevices[0]?.deviceId || '';
+                    if (audioId === prev.audioId && videoId === prev.videoId) return prev;
+                    return { audioId, videoId };
+                });
             } catch (err) {
                 console.warn('[Call] enumerateDevices failed:', err.message);
             }
@@ -321,6 +324,15 @@ export function CallProvider({ children }) {
         if (statsIntervalRef.current) clearInterval(statsIntervalRef.current);
 
         statsIntervalRef.current = setInterval(async () => {
+            // Auto-clear interval once the peer is gone so the console doesn't
+            // get flooded with "Cannot read properties of null (reading 'getStats')".
+            if (!peer || peer.destroyed || !peer._pc) {
+                if (statsIntervalRef.current) {
+                    clearInterval(statsIntervalRef.current);
+                    statsIntervalRef.current = null;
+                }
+                return;
+            }
             try {
                 const stats = await peer._pc.getStats();
                 let bandwidth = 0, latency = 0, packetLoss = 0, videoResolution = '0x0', connectionState = 'new';
@@ -413,10 +425,23 @@ export function CallProvider({ children }) {
         }
 
         peerRef.current = peer;
+
+        // Flush any signals buffered for this target before the peer existed.
+        // handleICE buffers candidates keyed by fromUserId into pendingSignalsGroupRef
+        // when peerRef is still null — without this flush, 1-1 calls would silently
+        // drop those early candidates and ICE could fail to connect.
+        const bufferedTargetId = targetUserIdRef.current;
+        if (bufferedTargetId && pendingSignalsGroupRef.current[bufferedTargetId]?.length) {
+            const buffered = pendingSignalsGroupRef.current[bufferedTargetId];
+            delete pendingSignalsGroupRef.current[bufferedTargetId];
+            console.log(`[Call] Flushing ${buffered.length} buffered signals for ${bufferedTargetId} (1-1)`);
+            buffered.forEach(sig => safePeerSignal(peer, sig, 'pending-1to1-signal'));
+        }
+
         // Start monitoring stats for this peer
         startStatsMonitoring(peer);
         return peer;
-    }, [emit, startStatsMonitoring]);
+    }, [emit, startStatsMonitoring, safePeerSignal]);
 
     // ── Create peer for group calls (mesh: one peer per participant) ──
     const createPeerForUser = useCallback(async (targetId, initiator, stream) => {
@@ -465,6 +490,12 @@ export function CallProvider({ children }) {
             console.log(`[GroupCall] Peer closed (${targetId})`);
             delete peersRef.current[targetId];
             setRemoteStreams(prev => {
+                const next = { ...prev };
+                delete next[targetId];
+                return next;
+            });
+            setRemoteScreenStreams(prev => {
+                if (!prev[targetId]) return prev;
                 const next = { ...prev };
                 delete next[targetId];
                 return next;
@@ -657,6 +688,12 @@ export function CallProvider({ children }) {
                 delete peersRef.current[leftUserId];
             }
             setRemoteStreams(prev => {
+                const next = { ...prev };
+                delete next[leftUserId];
+                return next;
+            });
+            setRemoteScreenStreams(prev => {
+                if (!prev[leftUserId]) return prev;
                 const next = { ...prev };
                 delete next[leftUserId];
                 return next;
@@ -1022,6 +1059,7 @@ export function CallProvider({ children }) {
         const stream = screenStreamRef.current;
         if (stream && peers.length > 0) {
             for (const peer of peers) {
+                if (!peer || peer.destroyed) continue;
                 try { peer.removeStream(stream); } catch (e) { console.warn('[Call] removeStream failed:', e.message); }
             }
         }
@@ -1063,6 +1101,7 @@ export function CallProvider({ children }) {
                 // and the remote peer receives both streams. simple-peer triggers
                 // its own renegotiation when addStream is called.
                 for (const peer of peers) {
+                    if (!peer || peer.destroyed) continue;
                     try { peer.addStream(newScreenStream); } catch (e) { console.warn('[Call] addStream failed:', e.message); }
                 }
 
