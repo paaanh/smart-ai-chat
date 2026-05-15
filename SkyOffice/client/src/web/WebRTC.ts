@@ -7,10 +7,13 @@ export default class WebRTC {
   private myPeer: Peer
   private peers = new Map<string, { call: MediaConnection; video: HTMLVideoElement }>()
   private onCalledPeers = new Map<string, { call: MediaConnection; video: HTMLVideoElement }>()
+  private pendingPeerIds = new Set<string>()
   private videoGrid = document.querySelector('.video-grid')
   private buttonGrid = document.querySelector('.button-grid')
   private myVideo = document.createElement('video')
   private myStream?: MediaStream
+  private mediaRequest?: Promise<MediaStream | undefined>
+  private peerOpen = false
   private buttonsSetUp = false
   private network: Network
 
@@ -20,6 +23,10 @@ export default class WebRTC {
     this.network = network
     console.log('userId:', userId)
     console.log('sanitizedId:', sanitizedId)
+    this.myPeer.on('open', () => {
+      this.peerOpen = true
+      this.flushPendingCalls()
+    })
     this.myPeer.on('error', (err) => {
       console.log(err.type)
       console.error(err)
@@ -41,12 +48,24 @@ export default class WebRTC {
   initialize() {
     this.myPeer.on('call', (call) => {
       if (!this.onCalledPeers.has(call.peer)) {
-        call.answer(this.myStream)
         const video = document.createElement('video')
         this.onCalledPeers.set(call.peer, { call, video })
 
         call.on('stream', (userVideoStream) => {
           this.addVideoStream(video, userVideoStream)
+        })
+        call.on('close', () => {
+          video.remove()
+          this.onCalledPeers.delete(call.peer)
+        })
+        call.on('error', () => {
+          video.remove()
+          this.onCalledPeers.delete(call.peer)
+        })
+
+        this.getUserMedia(false).then((stream) => {
+          if (stream) call.answer(stream)
+          else call.close()
         })
       }
       // on close is triggered manually with deleteOnCalledVideoStream()
@@ -61,12 +80,17 @@ export default class WebRTC {
     })
   }
 
-  getUserMedia(alertOnError = true) {
-    if (this.myStream) return
+  getUserMedia(alertOnError = true): Promise<MediaStream | undefined> {
+    if (this.myStream) return Promise.resolve(this.myStream)
+    if (this.mediaRequest) return this.mediaRequest
+    if (!navigator.mediaDevices?.getUserMedia) {
+      if (alertOnError) window.alert('No webcam or microphone found, or permission is blocked')
+      return Promise.resolve(undefined)
+    }
 
     // ask the browser to get user media
-    navigator.mediaDevices
-      ?.getUserMedia({
+    this.mediaRequest = navigator.mediaDevices
+      .getUserMedia({
         video: true,
         audio: true,
       })
@@ -79,29 +103,57 @@ export default class WebRTC {
         }
         store.dispatch(setVideoConnected(true))
         this.network.videoConnected()
+        this.flushPendingCalls()
+        return stream
       })
       .catch((error) => {
+        console.error('[WebRTC] getUserMedia failed:', error)
         if (alertOnError) window.alert('No webcam or microphone found, or permission is blocked')
+        return undefined
       })
+      .finally(() => {
+        this.mediaRequest = undefined
+      })
+
+    return this.mediaRequest || Promise.resolve(undefined)
   }
 
   // method to call a peer
-  connectToNewUser(userId: string) {
-    if (this.myStream) {
-      const sanitizedId = this.replaceInvalidId(userId)
-      if (!this.peers.has(sanitizedId)) {
-        console.log('calling', sanitizedId)
-        const call = this.myPeer.call(sanitizedId, this.myStream)
-        const video = document.createElement('video')
-        this.peers.set(sanitizedId, { call, video })
+  connectToNewUser(userId: string): boolean {
+    const sanitizedId = this.replaceInvalidId(userId)
+    if (this.peers.has(sanitizedId) || this.onCalledPeers.has(sanitizedId)) return true
 
-        call.on('stream', (userVideoStream) => {
-          this.addVideoStream(video, userVideoStream)
-        })
-
-        // on close is triggered manually with deleteVideoStream()
-      }
+    if (!this.myStream || !this.peerOpen) {
+      this.pendingPeerIds.add(userId)
+      this.getUserMedia(false)
+      return true
     }
+
+    console.log('calling', sanitizedId)
+    const call = this.myPeer.call(sanitizedId, this.myStream)
+    const video = document.createElement('video')
+    this.peers.set(sanitizedId, { call, video })
+
+    call.on('stream', (userVideoStream) => {
+      this.addVideoStream(video, userVideoStream)
+    })
+    call.on('close', () => {
+      video.remove()
+      this.peers.delete(sanitizedId)
+    })
+    call.on('error', () => {
+      video.remove()
+      this.peers.delete(sanitizedId)
+    })
+
+    return true
+  }
+
+  private flushPendingCalls() {
+    if (!this.peerOpen || !this.myStream || this.pendingPeerIds.size === 0) return
+    const ids = [...this.pendingPeerIds]
+    this.pendingPeerIds.clear()
+    ids.forEach((id) => this.connectToNewUser(id))
   }
 
   // method to add new video stream to videoGrid div
@@ -120,6 +172,8 @@ export default class WebRTC {
   // method to remove video stream (when we are the host of the call)
   deleteVideoStream(userId: string) {
     const sanitizedId = this.replaceInvalidId(userId)
+    this.pendingPeerIds.delete(userId)
+    this.pendingPeerIds.delete(sanitizedId)
     if (this.peers.has(sanitizedId)) {
       const peer = this.peers.get(sanitizedId)
       peer?.call.close()
@@ -131,6 +185,8 @@ export default class WebRTC {
   // method to remove video stream (when we are the guest of the call)
   deleteOnCalledVideoStream(userId: string) {
     const sanitizedId = this.replaceInvalidId(userId)
+    this.pendingPeerIds.delete(userId)
+    this.pendingPeerIds.delete(sanitizedId)
     if (this.onCalledPeers.has(sanitizedId)) {
       const onCalledPeer = this.onCalledPeers.get(sanitizedId)
       onCalledPeer?.call.close()

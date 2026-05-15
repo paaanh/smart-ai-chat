@@ -56,6 +56,14 @@ export default class Computer extends Item {
   openDialog(playerId: string, network: Network) {
     if (!this.id) return
     store.dispatch(openComputerDialog({ computerId: this.id, myUserId: playerId }))
-    network.connectToComputer(this.id)
+    const computerId = this.id
+    const shareScreenManager = store.getState().computer.shareScreenManager
+    if (!shareScreenManager) {
+      network.connectToComputer(computerId)
+      return
+    }
+    shareScreenManager.waitUntilOpen().finally(() => {
+      network.connectToComputer(computerId)
+    })
   }
 }

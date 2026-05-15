@@ -184,6 +184,7 @@ export default function LoginDialog() {
       game.registerKeys()
       game.myPlayer.setPlayerName(name)
       game.myPlayer.setPlayerTexture(randomAvatar.name)
+      game.network.webRTC?.getUserMedia(false)
       game.network.readyToConnect()
       dispatch(setLoggedIn(true))
     }
@@ -199,6 +200,7 @@ export default function LoginDialog() {
       game.registerKeys()
       game.myPlayer.setPlayerName(name)
       game.myPlayer.setPlayerTexture(avatars[avatarIndex].name)
+      game.network.webRTC?.getUserMedia(false)
       game.network.readyToConnect()
       dispatch(setLoggedIn(true))
     }
