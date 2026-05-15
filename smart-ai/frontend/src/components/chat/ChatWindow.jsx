@@ -431,12 +431,16 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
     }, [autoTranslate, messages, user, emit, localTranslations]);
 
     // Mark incoming messages as read when this room is open.
+    // In counseling rooms, suppress read receipts until a human expert has claimed the session —
+    // AI-only periods should keep messages as "Đã gửi" because no real reader has seen them.
     useEffect(() => {
         if (!roomId || !user?._id || !messages.length) return;
+        if (room?.type === 'counseling' && !counselingSession?.expert) return;
 
         messages.forEach((msg) => {
             const senderId = msg.sender?._id || msg.sender;
             if (!senderId || String(senderId) === String(user._id)) return;
+            if (msg.type === 'ai-response' || msg.aiMetadata?.isAIResponse) return;
 
             const alreadyRead = (msg.readBy || []).some((entry) => {
                 const reader = entry?.user?._id || entry?.user;
@@ -448,7 +452,7 @@ export default function ChatWindow({ roomId, onBack, onToggleInfo, aiBotEnabled,
                 markRead(msg._id);
             }
         });
-    }, [roomId, user?._id, messages, markRead]);
+    }, [roomId, user?._id, messages, markRead, room?.type, counselingSession?.expert]);
 
     // Detect scroll position
     const handleScroll = useCallback(() => {
