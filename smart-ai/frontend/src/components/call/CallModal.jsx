@@ -532,21 +532,21 @@ export default function CallModal() {
                     groupTiles.length > 1 && isVideoCall ? (
                         groupScreenShare ? (
                             /* Screen share in group (self or remote) — main + thumbnails (sidebar on md+, bottom row on mobile) */
-                            <div className="relative inset-0 flex flex-col md:flex-row">
-                                <div className="flex-1 relative bg-black flex items-center justify-center min-h-0">
+                            <div className="absolute inset-0 flex flex-col md:flex-row min-h-0">
+                                <div className="flex-1 min-w-0 min-h-0 relative bg-black flex items-center justify-center">
                                     <video
                                         ref={groupScreenVideoRef}
                                         autoPlay playsInline muted={groupScreenShare.isLocal}
-                                        style={{ objectFit: 'contain', maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto' }}
+                                        className="w-full h-full object-contain"
                                     />
                                     <div className={`absolute top-3 left-3 ${groupScreenShare.isLocal ? 'bg-blue-600/80' : 'bg-green-600/80'} text-white text-xs px-2.5 py-1 rounded-full flex items-center gap-1.5 backdrop-blur-sm z-10`}>
                                         <ScreenShare size={12} />
                                         {groupScreenShare.isLocal ? 'Bạn đang chia sẻ màn hình' : `${groupScreenShare.label} đang chia sẻ màn hình`}
                                     </div>
                                 </div>
-                                <div className="md:w-52 md:h-auto h-28 bg-gray-900/80 flex md:flex-col flex-row md:items-start items-stretch p-2 gap-2 shrink-0 md:overflow-y-auto overflow-x-auto">
+                                <div className="md:w-60 w-full md:h-full h-32 bg-gray-950/90 flex md:flex-col flex-row md:items-start items-stretch p-2 gap-2 shrink-0 md:overflow-y-auto overflow-x-auto border-l border-white/10">
                                     {groupTiles.map(tile => (
-                                        <div key={tile.id} className="md:w-full w-32 shrink-0 rounded-xl overflow-hidden border border-white/10" style={{ aspectRatio: '4/3' }}>
+                                        <div key={tile.id} className="md:w-full w-36 shrink-0 rounded-lg overflow-hidden border border-white/10 bg-gray-900" style={{ aspectRatio: '4/3' }}>
                                             <VideoTile stream={tile.stream} label={tile.label} muted={tile.muted} mirror={tile.mirror} avatar={tile.avatar} />
                                         </div>
                                     ))}

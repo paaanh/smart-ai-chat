@@ -431,6 +431,24 @@ export function CallProvider({ children }) {
         setCallState(prev => ({ ...prev, active: true, incoming: false }));
     }, [isExpectedScreenStream]);
 
+    const addActiveScreenShareToPeer = useCallback((peer, targetId) => {
+        const activeScreenStream = screenStreamRef.current;
+        if (!peer || peer.destroyed || !targetId || !activeScreenStream) return;
+        if (peer._screenStreamId === activeScreenStream.id) return;
+
+        try {
+            peer.addStream(activeScreenStream);
+            peer._screenStreamId = activeScreenStream.id;
+            emit('screen-share:status', {
+                targetUserId: targetId,
+                sharing: true,
+                streamId: activeScreenStream.id,
+            });
+        } catch (e) {
+            console.warn('[Call] add active screen stream to new peer failed:', e.message);
+        }
+    }, [emit]);
+
     // ── Create peer for 1-1 calls (backward compat) ──
     const createPeer = useCallback(async (initiator, stream) => {
         if (peerRef.current) {
@@ -539,6 +557,7 @@ export function CallProvider({ children }) {
         }
 
         peersRef.current[targetId] = peer;
+        addActiveScreenShareToPeer(peer, targetId);
 
         // Flush any pending signals for this user
         const pending = pendingSignalsGroupRef.current[targetId];
@@ -551,7 +570,7 @@ export function CallProvider({ children }) {
         // Start monitoring stats for this peer
         startStatsMonitoring(peer);
         return peer;
-    }, [emitPeerSignal, safePeerSignal, startStatsMonitoring, registerRemoteGroupStream]);
+    }, [emitPeerSignal, safePeerSignal, startStatsMonitoring, registerRemoteGroupStream, addActiveScreenShareToPeer]);
 
     // ---- Socket listeners ----
     useEffect(() => {
@@ -686,8 +705,18 @@ export function CallProvider({ children }) {
         };
 
         // ── Group: I just joined → server tells me about existing participants ──
-        const handleExistingParticipants = async ({ participants: existingIds, callType: srvCallType, roomName: srvRoomName }) => {
+        const handleExistingParticipants = async ({ participants: existingIds, callType: srvCallType, roomName: srvRoomName, activeScreenShares }) => {
             console.log('[GroupCall] Existing participants:', existingIds);
+            if (activeScreenShares && typeof activeScreenShares === 'object') {
+                for (const [sharerId, streamId] of Object.entries(activeScreenShares)) {
+                    if (sharerId !== user?._id && streamId) {
+                        remoteScreenStreamIdsRef.current[sharerId] = streamId;
+                    }
+                }
+                if (Object.keys(activeScreenShares).some(id => id !== user?._id)) {
+                    setRemoteScreenSharing(true);
+                }
+            }
             // If joined proactively, sync callType/roomName from server
             if (srvCallType || srvRoomName) {
                 setCallState(prev => ({
@@ -1098,6 +1127,7 @@ export function CallProvider({ children }) {
             for (const peer of peers) {
                 if (!peer || peer.destroyed) continue;
                 try { peer.removeStream(stream); } catch (e) { console.warn('[Call] removeStream failed:', e.message); }
+                if (peer._screenStreamId === stream.id) peer._screenStreamId = null;
             }
         }
         if (stream) {
@@ -1138,7 +1168,12 @@ export function CallProvider({ children }) {
                 // its own renegotiation when addStream is called.
                 for (const peer of peers) {
                     if (!peer || peer.destroyed) continue;
-                    try { peer.addStream(newScreenStream); } catch (e) { console.warn('[Call] addStream failed:', e.message); }
+                    try {
+                        peer.addStream(newScreenStream);
+                        peer._screenStreamId = newScreenStream.id;
+                    } catch (e) {
+                        console.warn('[Call] addStream failed:', e.message);
+                    }
                 }
 
                 // Listen for browser "Stop sharing" button — uses stopScreenShareDirect

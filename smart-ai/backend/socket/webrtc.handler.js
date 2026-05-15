@@ -78,6 +78,7 @@ module.exports = (io, socket) => {
                 startTime: Date.now(),
                 isGroup,
                 roomName: room?.name || '',
+                screenShares: {},
                 systemMessageId: null,
             });
 
@@ -183,6 +184,7 @@ module.exports = (io, socket) => {
                 socket.emit('call:existing-participants', {
                     roomId,
                     participants: existingParticipants,
+                    activeScreenShares: call.screenShares || {},
                 });
             } else {
                 // 1-1 call: notify only the caller
@@ -224,6 +226,7 @@ module.exports = (io, socket) => {
                 return socket.emit('call:existing-participants', {
                     roomId,
                     participants: call.participants.filter(id => id !== userId),
+                    activeScreenShares: call.screenShares || {},
                 });
             }
 
@@ -252,6 +255,7 @@ module.exports = (io, socket) => {
                 participants: existingParticipants,
                 callType: call.callType,
                 roomName: call.roomName,
+                activeScreenShares: call.screenShares || {},
             });
         } catch (error) {
             console.error('call:join error:', error.message);
@@ -314,6 +318,7 @@ module.exports = (io, socket) => {
             // Group call: participant leaving, not ending entire call
             if (isGroup && call && call.participants.length > 2) {
                 call.participants = call.participants.filter(id => id !== userId);
+                if (call.screenShares) delete call.screenShares[userId];
                 for (const pid of call.participants) {
                     const pSocketId = await getSocketId(pid);
                     if (pSocketId) {
@@ -515,6 +520,12 @@ module.exports = (io, socket) => {
             // Group call: broadcast to all participants
             const call = activeCalls.get(roomId);
             if (call) {
+                call.screenShares = call.screenShares || {};
+                if (sharing && streamId) {
+                    call.screenShares[userId] = streamId;
+                } else {
+                    delete call.screenShares[userId];
+                }
                 for (const pid of call.participants) {
                     if (pid === userId) continue;
                     const pSocketId = await getSocketId(pid);
@@ -544,6 +555,7 @@ module.exports = (io, socket) => {
         for (const [roomId, call] of activeCalls.entries()) {
             if (call.participants.includes(userId)) {
                 call.participants = call.participants.filter(id => id !== userId);
+                if (call.screenShares) delete call.screenShares[userId];
                 if (call.participants.length === 0) {
                     activeCalls.delete(roomId);
                 } else if (call.isGroup) {
