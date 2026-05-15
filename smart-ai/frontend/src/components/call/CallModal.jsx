@@ -300,21 +300,21 @@ export default function CallModal() {
     const remoteVideoRef = useRef(null);
     const remoteScreenVideoRef = useRef(null);
 
-    // Attach local stream (1-1) — re-run when layout changes (hasRemote/pipMode/screenSharing)
+    // Attach local stream (1-1) — re-run when screen-share layouts remount webcam elements.
     useEffect(() => {
         const el = localVideoRef.current;
         if (!el) return;
         if (localStream) { el.srcObject = localStream; el.play().catch(() => { }); }
         else { el.srcObject = null; }
-    }, [localStream, remoteStream, callState.active, pipMode, screenSharing, remoteScreenSharing]);
+    }, [localStream, remoteStream, callState.active, pipMode, screenSharing, screenStream, remoteScreenSharing, remoteScreenStream]);
 
-    // Attach remote stream (1-1) — re-run when layout changes
+    // Attach remote stream (1-1) — re-run when screen-share layouts remount webcam elements.
     useEffect(() => {
         const el = remoteVideoRef.current;
         if (!el) return;
         if (remoteStream) { el.srcObject = remoteStream; el.play().catch(() => { }); }
         else { el.srcObject = null; }
-    }, [remoteStream, callState.active, pipMode, screenSharing, remoteScreenSharing]);
+    }, [remoteStream, callState.active, pipMode, screenSharing, screenStream, remoteScreenSharing, remoteScreenStream]);
 
     // Attach remote audio (1-1)
     useEffect(() => {
