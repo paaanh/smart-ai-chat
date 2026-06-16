@@ -102,7 +102,6 @@ module.exports = (io, socket) => {
                         {
                             $setOnInsert: {
                                 participants,
-                                roomId: room._id,
                             },
                             $set: {
                                 roomId: room._id,
